@@ -1,0 +1,120 @@
+Objetivo:
+Criar um MVP funcional de uma aplicação web multi-tenant para gerenciamento de pequenos consultórios odontológicos, com backend, frontend e banco de dados prontos para rodar no Replit.
+
+Stack recomendada:
+
+Backend: Node.js (Express)
+
+Frontend: React.js (Vite ou CRA)
+
+Banco de dados: PostgreSQL (usando Prisma ORM)
+
+Autenticação: JWT
+
+Upload de imagens: armazenamento local no MVP (com opção para trocar por AWS S3)
+
+Integração com WhatsApp (simulada no MVP com envio de log; endpoint pronto para integrar API real como Twilio ou Zenvia)
+
+Requisitos de Multi-tenancy:
+
+Cada clínica é um "tenant" identificado por clinic_id
+
+Dados de cada clínica isolados no banco
+
+Perfis de acesso:
+
+Administrador da clínica → gerencia usuários, configurações, tem acesso a todos os módulos e relatórios
+
+Dentista → gerencia seus atendimentos e prontuários
+
+Secretária → gerencia pacientes, anamneses e agendamentos
+
+Funcionalidades mínimas no MVP:
+
+1. Autenticação e Gestão de Usuários
+
+Cadastro de clínica (cria usuário administrador automaticamente)
+
+Login com JWT
+
+CRUD de usuários (Administrador pode criar dentistas e secretárias)
+
+Middleware para verificar permissão por perfil
+
+2. Módulo da Secretária
+
+CRUD de pacientes
+
+Cadastro de perguntas da anamnese (ligadas à clínica)
+
+CRUD de agendamentos (data, hora, dentista, paciente, status)
+
+Lista de aniversariantes do dia
+
+Endpoint para envio de mensagens simuladas via WhatsApp
+
+3. Módulo do Dentista
+
+CRUD de prontuários (ligados a paciente e atendimento)
+
+Aplicar anamnese no atendimento
+
+Registrar exame inicial com fotos
+
+Criar orçamentos simples
+
+Adicionar histórico de tratamento com fotos
+
+4. Módulo do Administrador da Clínica
+
+Dashboard básico:
+
+Total de atendimentos por dentista
+
+Horários mais movimentados
+
+Pacientes que mais faltam
+
+5. Estrutura de pastas sugerida:
+
+bash
+Copiar
+Editar
+/backend
+  /src
+    /controllers
+    /models
+    /routes
+    /middlewares
+    /services
+/frontend
+  /src
+    /pages
+    /components
+    /services (para API calls)
+6. Considerações para o MVP:
+
+Backend com rotas RESTful (/api/...)
+
+Frontend com React Router para navegação
+
+Banco de dados inicial com seed de perfis e usuários de teste
+
+Upload de imagens usando multer (armazenamento local na pasta /uploads)
+
+Comunicação via WhatsApp simulada (logs no console)
+
+Código limpo, comentado e pronto para expansão
+
+Resultado esperado no Replit:
+Um projeto full-stack já configurado, com backend e frontend rodando juntos, login funcional, controle de permissões e telas mínimas para:
+
+Cadastro/login
+
+Lista de pacientes
+
+Agendamentos
+
+Prontuário
+
+Dashboard do administrador
