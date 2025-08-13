@@ -1,0 +1,62 @@
+import { Switch, Route } from "wouter";
+import { queryClient } from "./lib/queryClient";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import NotFound from "@/pages/not-found";
+import Login from "@/pages/login";
+import Dashboard from "@/pages/dashboard";
+import Patients from "@/pages/patients";
+import Appointments from "@/pages/appointments";
+import MedicalRecords from "@/pages/medical-records";
+import Anamnesis from "@/pages/anamnesis";
+import Budgets from "@/pages/budgets";
+import Settings from "@/pages/settings";
+
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isAuthenticated } = useAuth();
+  
+  if (!isAuthenticated) {
+    return <Login />;
+  }
+  
+  return <Component />;
+}
+
+function Router() {
+  const { isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Login />;
+  }
+
+  return (
+    <Switch>
+      <Route path="/" component={() => <Dashboard />} />
+      <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/patients" component={() => <ProtectedRoute component={Patients} />} />
+      <Route path="/appointments" component={() => <ProtectedRoute component={Appointments} />} />
+      <Route path="/medical-records" component={() => <ProtectedRoute component={MedicalRecords} />} />
+      <Route path="/anamnesis" component={() => <ProtectedRoute component={Anamnesis} />} />
+      <Route path="/budgets" component={() => <ProtectedRoute component={Budgets} />} />
+      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;
