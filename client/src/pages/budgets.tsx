@@ -48,8 +48,8 @@ export default function Budgets() {
     mutationFn: async (data: typeof formData) => {
       const response = await apiRequest("POST", "/api/budgets", {
         ...data,
-        procedures: JSON.stringify([{ name: data.procedures, cost: parseFloat(data.totalCost) }]),
-        totalCost: parseFloat(data.totalCost),
+        procedures: JSON.stringify([{ name: data.procedures, cost: data.totalCost }]),
+        totalCost: data.totalCost,
       });
       return response.json();
     },
