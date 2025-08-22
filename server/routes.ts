@@ -57,6 +57,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Password reset request route
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+      
+      // For security, always return success even if user doesn't exist
+      // In a real implementation, you would send an email with reset link
+      console.log(`Password reset requested for: ${email}${user ? ' (user found)' : ' (user not found)'}`);
+      
+      // Simulate email sending
+      if (user) {
+        console.log(`Simulated password reset email sent to ${email}`);
+        console.log(`Reset link: http://localhost:5000/reset-password?token=simulated-token-${user.id}`);
+      }
+
+      res.json({ 
+        message: "If the email is registered, you will receive password reset instructions." 
+      });
+    } catch (error) {
+      console.error("Password reset error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/auth/register-clinic", async (req, res) => {
     try {
       const { clinicName, clinicEmail, adminName, adminEmail, password } = req.body;

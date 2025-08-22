@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/api";
 import { Stethoscope } from "lucide-react";
 
 export default function Login() {
@@ -28,6 +30,12 @@ export default function Login() {
     password: "",
     confirmPassword: "",
   });
+
+  const [resetForm, setResetForm] = useState({
+    email: "",
+  });
+
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +88,33 @@ export default function Login() {
       toast({
         title: "Erro no cadastro",
         description: "Verifique os dados e tente novamente",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      await apiRequest('POST', '/api/auth/reset-password', {
+        email: resetForm.email,
+      });
+      
+      toast({
+        title: "Email enviado!",
+        description: "Se o email estiver cadastrado, você receberá instruções para redefinir sua senha.",
+      });
+      
+      setIsResetModalOpen(false);
+      setResetForm({ email: "" });
+    } catch (error) {
+      toast({
+        title: "Erro ao enviar email",
+        description: "Tente novamente em alguns momentos",
         variant: "destructive",
       });
     } finally {
@@ -149,9 +184,50 @@ export default function Login() {
                       />
                       <Label htmlFor="remember" className="text-sm">Lembrar-me</Label>
                     </div>
-                    <a href="#" className="text-sm font-medium text-primary hover:text-primary/80">
-                      Esqueceu a senha?
-                    </a>
+                    <Dialog open={isResetModalOpen} onOpenChange={setIsResetModalOpen}>
+                      <DialogTrigger asChild>
+                        <button type="button" className="text-sm font-medium text-primary hover:text-primary/80">
+                          Esqueceu a senha?
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Redefinir Senha</DialogTitle>
+                        </DialogHeader>
+                        <form onSubmit={handlePasswordReset} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="reset-email">Email</Label>
+                            <Input
+                              id="reset-email"
+                              type="email"
+                              value={resetForm.email}
+                              onChange={(e) => setResetForm({ email: e.target.value })}
+                              placeholder="seu@email.com"
+                              required
+                              data-testid="input-reset-email"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setIsResetModalOpen(false)}
+                              className="flex-1"
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              type="submit"
+                              disabled={isLoading}
+                              className="flex-1"
+                              data-testid="button-reset-password"
+                            >
+                              {isLoading ? "Enviando..." : "Enviar"}
+                            </Button>
+                          </div>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
                   </div>
 
                   <Button
