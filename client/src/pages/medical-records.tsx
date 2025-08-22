@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -63,6 +63,13 @@ export default function MedicalRecords() {
     queryKey: ["/api/anamnesis/responses/treatment", selectedTreatment?.id],
     enabled: !!selectedTreatment,
   });
+
+  // Debug anamnesis responses
+  useEffect(() => {
+    if (selectedTreatment) {
+      console.log("Anamnesis responses for treatment:", selectedTreatment.id, anamnesisResponses.length, anamnesisResponses);
+    }
+  }, [anamnesisResponses, selectedTreatment]);
 
   const filteredPatients = patients.filter(patient =>
     patient.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -339,13 +346,8 @@ export default function MedicalRecords() {
                                   <div className="space-y-2">
                                     <h5 className="font-medium text-sm">Pergunta {response.questionId.slice(-4)}</h5>
                                     <div className="text-sm">
-                                      <span className="font-medium">Resposta:</span> {response.resposta || "Não respondido"}
+                                      <span className="font-medium">Resposta:</span> {response.response || "Não respondido"}
                                     </div>
-                                    {response.observacoes && (
-                                      <div className="text-sm text-gray-600">
-                                        <span className="font-medium">Observações:</span> {response.observacoes}
-                                      </div>
-                                    )}
                                     <div className="text-xs text-gray-400">
                                       Respondido em: {formatDate(response.createdAt)}
                                     </div>

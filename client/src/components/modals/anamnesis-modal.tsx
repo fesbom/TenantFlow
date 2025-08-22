@@ -57,8 +57,7 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
         treatmentId: treatment.id,
         patientId: treatment.patientId,
         questionId,
-        resposta: data.response,
-        observacoes: data.observations,
+        response: data.response,
       }));
 
       // Send all responses in a single request
