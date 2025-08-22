@@ -357,6 +357,8 @@ export const insertBudgetSchema = createInsertSchema(budgets).omit({
 
 export const insertTreatmentSchema = createInsertSchema(treatments).omit({
   id: true,
+  dentistId: true,
+  clinicId: true,
   createdAt: true,
   updatedAt: true,
 });
