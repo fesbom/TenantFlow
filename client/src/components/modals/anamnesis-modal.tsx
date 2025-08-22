@@ -27,6 +27,9 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
     queryKey: ["/api/anamnesis/questions"],
     enabled: isOpen,
     staleTime: 0, // Always fetch fresh data
+    onSuccess: (data) => {
+      console.log("Questions loaded:", data.length, data);
+    }
   });
 
   // Fetch existing responses for this treatment
@@ -59,11 +62,8 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
         observacoes: data.observations,
       }));
 
-      const promises = responsesToSave.map(responseData =>
-        apiRequest("POST", "/api/anamnesis/responses", responseData)
-      );
-
-      await Promise.all(promises);
+      // Send all responses in a single request
+      await apiRequest("POST", "/api/anamnesis/responses", { responses: responsesToSave });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/anamnesis/responses/treatment", treatment?.id] });
@@ -119,40 +119,46 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
         <form onSubmit={handleSubmit} className="space-y-6">
           <ScrollArea className="max-h-[50vh] pr-4">
             <div className="space-y-6">
-              {questions.map((question) => (
-                <div key={question.id} className="space-y-3 p-4 border rounded-lg">
-                  <h3 className="font-medium text-sm">{question.question}</h3>
-                  
-                  <RadioGroup
-                    value={responses[question.id]?.response || ""}
-                    onValueChange={(value) => handleResponseChange(question.id, value)}
-                    className="flex space-x-6"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Sim" id={`${question.id}-sim`} />
-                      <Label htmlFor={`${question.id}-sim`} className="text-sm">Sim</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Não" id={`${question.id}-nao`} />
-                      <Label htmlFor={`${question.id}-nao`} className="text-sm">Não</Label>
-                    </div>
-                  </RadioGroup>
+              {questions.length > 0 ? (
+                questions.map((question) => (
+                  <div key={question.id} className="space-y-3 p-4 border rounded-lg">
+                    <h3 className="font-medium text-sm">{question.question}</h3>
+                    
+                    <RadioGroup
+                      value={responses[question.id]?.response || ""}
+                      onValueChange={(value) => handleResponseChange(question.id, value)}
+                      className="flex space-x-6"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Sim" id={`${question.id}-sim`} />
+                        <Label htmlFor={`${question.id}-sim`} className="text-sm">Sim</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Não" id={`${question.id}-nao`} />
+                        <Label htmlFor={`${question.id}-nao`} className="text-sm">Não</Label>
+                      </div>
+                    </RadioGroup>
 
-                  <div className="space-y-2">
-                    <Label htmlFor={`obs-${question.id}`} className="text-sm">
-                      Observações (opcional)
-                    </Label>
-                    <Textarea
-                      id={`obs-${question.id}`}
-                      value={responses[question.id]?.observations || ""}
-                      onChange={(e) => handleObservationChange(question.id, e.target.value)}
-                      placeholder="Adicione observações sobre esta pergunta..."
-                      rows={2}
-                      className="text-sm"
-                    />
+                    <div className="space-y-2">
+                      <Label htmlFor={`obs-${question.id}`} className="text-sm">
+                        Observações (opcional)
+                      </Label>
+                      <Textarea
+                        id={`obs-${question.id}`}
+                        value={responses[question.id]?.observations || ""}
+                        onChange={(e) => handleObservationChange(question.id, e.target.value)}
+                        placeholder="Adicione observações sobre esta pergunta..."
+                        rows={2}
+                        className="text-sm"
+                      />
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  <p>Nenhuma pergunta cadastrada</p>
                 </div>
-              ))}
+              )}
             </div>
           </ScrollArea>
 
