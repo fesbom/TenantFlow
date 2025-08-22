@@ -93,6 +93,13 @@ export interface IStorage {
 
   createAnamnesisResponse(response: InsertAnamnesisResponse): Promise<AnamnesisResponse>;
   getAnamnesisResponsesByPatient(patientId: string): Promise<AnamnesisResponse[]>;
+  deleteAnamnesisResponsesByTreatment(treatmentId: string): Promise<boolean>;
+  getAnamnesisWithResponsesByTreatment(treatmentId: string, clinicId: string): Promise<Array<{
+    questionId: string;
+    question: string;
+    response?: string;
+    createdAt?: string;
+  }>>;
 
   // Budget methods
   createBudget(budget: InsertBudget): Promise<Budget>;
@@ -371,6 +378,37 @@ export class DatabaseStorage implements IStorage {
       .from(anamnesisResponses)
       .where(eq(anamnesisResponses.patientId, patientId))
       .orderBy(desc(anamnesisResponses.createdAt));
+  }
+
+  async deleteAnamnesisResponsesByTreatment(treatmentId: string): Promise<boolean> {
+    const result = await db
+      .delete(anamnesisResponses)
+      .where(eq(anamnesisResponses.treatmentId, treatmentId));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async getAnamnesisWithResponsesByTreatment(treatmentId: string, clinicId: string): Promise<Array<{
+    questionId: string;
+    question: string;
+    response?: string;
+    createdAt?: string;
+  }>> {
+    const result = await db
+      .select({
+        questionId: anamnesisQuestions.id,
+        question: anamnesisQuestions.question,
+        response: anamnesisResponses.response,
+        createdAt: anamnesisResponses.createdAt,
+      })
+      .from(anamnesisQuestions)
+      .leftJoin(anamnesisResponses, and(
+        eq(anamnesisQuestions.id, anamnesisResponses.questionId),
+        eq(anamnesisResponses.treatmentId, treatmentId)
+      ))
+      .where(eq(anamnesisQuestions.clinicId, clinicId))
+      .orderBy(anamnesisQuestions.createdAt);
+
+    return result;
   }
 
   // Budget methods

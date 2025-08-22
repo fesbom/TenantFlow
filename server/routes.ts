@@ -505,17 +505,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/anamnesis/responses", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { responses } = req.body; // Array of { questionId, response, patientId, appointmentId }
+      const { responses } = req.body; // Array of { questionId, response, patientId, treatmentId }
+      
+      // First, delete existing responses for this treatment
+      if (responses.length > 0) {
+        const treatmentId = responses[0].treatmentId;
+        await storage.deleteAnamnesisResponsesByTreatment(treatmentId);
+      }
       
       const savedResponses = [];
       for (const responseData of responses) {
-        const response = await storage.createAnamnesisResponse(responseData);
-        savedResponses.push(response);
+        if (responseData.response && responseData.response.trim()) { // Only save non-empty responses
+          const response = await storage.createAnamnesisResponse(responseData);
+          savedResponses.push(response);
+        }
       }
 
       res.status(201).json(savedResponses);
     } catch (error) {
       console.error("Create anamnesis responses error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get anamnesis with responses for treatment
+  app.get("/api/anamnesis/treatment/:treatmentId", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { treatmentId } = req.params;
+      const anamnesis = await storage.getAnamnesisWithResponsesByTreatment(treatmentId, req.user!.clinicId);
+      res.json(anamnesis);
+    } catch (error) {
+      console.error("Get anamnesis for treatment error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

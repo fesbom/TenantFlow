@@ -58,18 +58,18 @@ export default function MedicalRecords() {
     enabled: !!selectedTreatment,
   });
 
-  // Fetch anamnesis responses
-  const { data: anamnesisResponses = [] } = useQuery<AnamnesisResponse[]>({
-    queryKey: ["/api/anamnesis/responses/treatment", selectedTreatment?.id],
+  // Fetch anamnesis with responses for treatment
+  const { data: anamnesisData = [] } = useQuery<Array<{
+    questionId: string;
+    question: string;
+    response?: string;
+    createdAt?: string;
+  }>>({
+    queryKey: ["/api/anamnesis/treatment", selectedTreatment?.id],
     enabled: !!selectedTreatment,
   });
 
-  // Debug anamnesis responses
-  useEffect(() => {
-    if (selectedTreatment) {
-      console.log("Anamnesis responses for treatment:", selectedTreatment.id, anamnesisResponses.length, anamnesisResponses);
-    }
-  }, [anamnesisResponses, selectedTreatment]);
+  const hasAnamnesisResponses = anamnesisData.some(item => item.response);
 
   const filteredPatients = patients.filter(patient =>
     patient.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -334,23 +334,25 @@ export default function MedicalRecords() {
                             <h3 className="text-lg font-medium">Questionário de Anamnese</h3>
                             <Button size="sm" onClick={handleOpenAnamnesis}>
                               <Plus className="h-4 w-4 mr-1" />
-                              {anamnesisResponses.length > 0 ? "Editar Anamnese" : "Preencher Anamnese"}
+                              {hasAnamnesisResponses ? "Editar Anamnese" : "Preencher Anamnese"}
                             </Button>
                           </div>
                           
-                          {anamnesisResponses.length > 0 ? (
+                          {hasAnamnesisResponses ? (
                             <div className="space-y-3">
                               <h4 className="font-medium text-sm text-green-600 mb-4">✓ Anamnese preenchida</h4>
-                              {anamnesisResponses.map((response) => (
-                                <Card key={response.id} className="p-4">
+                              {anamnesisData.map((item) => (
+                                <Card key={item.questionId} className="p-4">
                                   <div className="space-y-2">
-                                    <h5 className="font-medium text-sm">Pergunta {response.questionId.slice(-4)}</h5>
+                                    <h5 className="font-medium text-sm">{item.question}</h5>
                                     <div className="text-sm">
-                                      <span className="font-medium">Resposta:</span> {response.response || "Não respondido"}
+                                      <span className="font-medium">Resposta:</span> {item.response || "Não respondido"}
                                     </div>
-                                    <div className="text-xs text-gray-400">
-                                      Respondido em: {formatDate(response.createdAt)}
-                                    </div>
+                                    {item.createdAt && (
+                                      <div className="text-xs text-gray-400">
+                                        Respondido em: {formatDate(item.createdAt)}
+                                      </div>
+                                    )}
                                   </div>
                                 </Card>
                               ))}
