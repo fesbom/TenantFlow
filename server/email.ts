@@ -4,6 +4,10 @@ if (!process.env.SENDGRID_API_KEY) {
   throw new Error("SENDGRID_API_KEY environment variable must be set");
 }
 
+if (!process.env.SENDGRID_API_KEY.startsWith('SG.')) {
+  console.warn("SendGrid API key should start with 'SG.' - please verify your API key");
+}
+
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 interface EmailParams {
@@ -21,7 +25,7 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
       from: params.from,
       subject: params.subject,
       text: params.text,
-      html: params.html,
+      html: params.html || undefined,
     });
     console.log(`Email sent successfully to ${params.to}`);
     return true;

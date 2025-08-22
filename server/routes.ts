@@ -1,11 +1,13 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import express from "express";
 import path from "path";
 import { storage } from "./storage";
 import { authenticateToken, requireRole, generateToken, type AuthenticatedRequest } from "./middleware/auth";
 import { upload } from "./middleware/upload";
+import { sendEmail, generatePasswordResetEmail } from "./email";
 import {
   insertUserSchema,
   insertPatientSchema,
@@ -73,7 +75,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (user) {
         // Generate secure reset token
-        const resetToken = require('crypto').randomBytes(32).toString('hex');
+        const resetToken = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
         
         // Save token to database
@@ -85,17 +87,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         // Send email with reset link
-        const { sendEmail, generatePasswordResetEmail } = require('./email');
-        const protocol = req.secure ? 'https' : 'http';
-        const baseUrl = `${protocol}://${req.get('host') || 'localhost:5000'}`;
-        const emailData = generatePasswordResetEmail(user.email, resetToken, baseUrl);
-        
-        const emailSent = await sendEmail(emailData);
-        
-        if (emailSent) {
-          console.log(`Password reset email sent successfully to ${email}`);
-        } else {
-          console.error(`Failed to send password reset email to ${email}`);
+        try {
+          const protocol = req.secure ? 'https' : 'http';
+          const baseUrl = `${protocol}://${req.get('host') || 'localhost:5000'}`;
+          const emailData = generatePasswordResetEmail(user.email, resetToken, baseUrl);
+          
+          const emailSent = await sendEmail(emailData);
+          
+          if (emailSent) {
+            console.log(`Password reset email sent successfully to ${email}`);
+          } else {
+            console.error(`Failed to send password reset email to ${email}`);
+          }
+        } catch (emailError) {
+          console.error(`Email sending error:`, emailError);
+          // Continue - don't fail the request if email fails
         }
       }
 
