@@ -9,7 +9,7 @@ interface HeaderProps {
 
 export default function Header({ title, onMenuClick }: HeaderProps) {
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-4 lg:px-6">
+    <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 lg:px-6 sticky top-0 z-30">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button
