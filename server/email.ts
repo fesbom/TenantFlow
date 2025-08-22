@@ -39,9 +39,16 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
     return true;
   } catch (error: any) {
     console.error('SendGrid email error:', error);
-    if (error.response && error.response.body && error.response.body.errors) {
-      console.error('Detailed SendGrid errors:', JSON.stringify(error.response.body.errors, null, 2));
+    if (error.response && error.response.body) {
+      console.error('Full SendGrid response body:', JSON.stringify(error.response.body, null, 2));
+      if (error.response.body.errors) {
+        console.error('SendGrid error details:');
+        error.response.body.errors.forEach((err: any, index: number) => {
+          console.error(`Error ${index + 1}:`, err);
+        });
+      }
     }
+    console.error('Email data that failed:', JSON.stringify(emailData, null, 2));
     return false;
   }
 }
@@ -51,7 +58,7 @@ export function generatePasswordResetEmail(userEmail: string, resetToken: string
   
   return {
     to: userEmail,
-    from: 'test@example.com', // Using SendGrid sandbox sender
+    from: 'fesbom@gmail.com', // Using your verified email address
     subject: 'DentiCare - Redefinição de Senha',
     text: `
 Olá!
