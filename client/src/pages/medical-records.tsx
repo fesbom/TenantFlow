@@ -9,8 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import TreatmentModal from "@/components/modals/treatment-modal";
+import BudgetItemModal from "@/components/modals/budget-item-modal";
+import TreatmentMovementModal from "@/components/modals/treatment-movement-modal";
 import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement } from "@/types";
-import { Search, Plus, FileText, Calendar, DollarSign, Activity } from "lucide-react";
+import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit } from "lucide-react";
 
 export default function MedicalRecords() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -18,6 +20,10 @@ export default function MedicalRecords() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
   const [isTreatmentModalOpen, setIsTreatmentModalOpen] = useState(false);
+  const [isBudgetItemModalOpen, setIsBudgetItemModalOpen] = useState(false);
+  const [isTreatmentMovementModalOpen, setIsTreatmentMovementModalOpen] = useState(false);
+  const [selectedBudgetItem, setSelectedBudgetItem] = useState<BudgetItem | null>(null);
+  const [selectedMovement, setSelectedMovement] = useState<TreatmentMovement | null>(null);
 
   // Fetch patients
   const { data: patients = [] } = useQuery<Patient[]>({
@@ -61,6 +67,26 @@ export default function MedicalRecords() {
 
   const handleSelectTreatment = (treatment: Treatment) => {
     setSelectedTreatment(treatment);
+  };
+
+  const handleCreateBudgetItem = () => {
+    setSelectedBudgetItem(null);
+    setIsBudgetItemModalOpen(true);
+  };
+
+  const handleEditBudgetItem = (item: BudgetItem) => {
+    setSelectedBudgetItem(item);
+    setIsBudgetItemModalOpen(true);
+  };
+
+  const handleCreateMovement = () => {
+    setSelectedMovement(null);
+    setIsTreatmentMovementModalOpen(true);
+  };
+
+  const handleEditMovement = (movement: TreatmentMovement) => {
+    setSelectedMovement(movement);
+    setIsTreatmentMovementModalOpen(true);
   };
 
   const formatDate = (dateString: string) => {
@@ -297,7 +323,7 @@ export default function MedicalRecords() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
                             <h3 className="text-lg font-medium">Orçamento Detalhado</h3>
-                            <Button size="sm">
+                            <Button size="sm" onClick={handleCreateBudgetItem}>
                               <Plus className="h-4 w-4 mr-1" />
                               Adicionar Item
                             </Button>
@@ -321,8 +347,12 @@ export default function MedicalRecords() {
                                         {formatCurrency(item.valorOrcamento)}
                                       </TableCell>
                                       <TableCell>
-                                        <Button variant="ghost" size="sm">
-                                          Editar
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={() => handleEditBudgetItem(item)}
+                                        >
+                                          <Edit className="h-4 w-4" />
                                         </Button>
                                       </TableCell>
                                     </TableRow>
@@ -365,7 +395,7 @@ export default function MedicalRecords() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
                             <h3 className="text-lg font-medium">Histórico de Movimentações</h3>
-                            <Button size="sm">
+                            <Button size="sm" onClick={handleCreateMovement}>
                               <Plus className="h-4 w-4 mr-1" />
                               Nova Movimentação
                             </Button>
@@ -383,10 +413,17 @@ export default function MedicalRecords() {
                                           {formatDate(movement.dataMovimentacao)}
                                         </p>
                                       </div>
-                                      <div className="text-right">
+                                      <div className="text-right flex items-center space-x-2">
                                         <div className="font-medium">
                                           {formatCurrency(movement.valorServico)}
                                         </div>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={() => handleEditMovement(movement)}
+                                        >
+                                          <Edit className="h-4 w-4" />
+                                        </Button>
                                       </div>
                                     </div>
                                     {movement.fotoAtividade && (
@@ -442,6 +479,20 @@ export default function MedicalRecords() {
         onClose={() => setIsTreatmentModalOpen(false)}
         patient={selectedPatient}
         treatment={selectedTreatment}
+      />
+
+      <BudgetItemModal
+        isOpen={isBudgetItemModalOpen}
+        onClose={() => setIsBudgetItemModalOpen(false)}
+        treatment={selectedTreatment}
+        budgetItem={selectedBudgetItem}
+      />
+
+      <TreatmentMovementModal
+        isOpen={isTreatmentMovementModalOpen}
+        onClose={() => setIsTreatmentMovementModalOpen(false)}
+        treatment={selectedTreatment}
+        movement={selectedMovement}
       />
     </div>
   );
