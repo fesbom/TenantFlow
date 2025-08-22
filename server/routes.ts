@@ -69,13 +69,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUserByEmail(email);
       
       // For security, always return success even if user doesn't exist
-      // In a real implementation, you would send an email with reset link
       console.log(`Password reset requested for: ${email}${user ? ' (user found)' : ' (user not found)'}`);
       
-      // Simulate email sending
       if (user) {
-        console.log(`Simulated password reset email sent to ${email}`);
-        console.log(`Reset link: http://localhost:5000/reset-password?token=simulated-token-${user.id}`);
+        // Generate secure reset token
+        const resetToken = require('crypto').randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+        
+        // Save token to database
+        await storage.createPasswordResetToken({
+          userId: user.id,
+          token: resetToken,
+          expiresAt,
+          isUsed: false
+        });
+
+        // Send email with reset link
+        const { sendEmail, generatePasswordResetEmail } = require('./email');
+        const protocol = req.secure ? 'https' : 'http';
+        const baseUrl = `${protocol}://${req.get('host') || 'localhost:5000'}`;
+        const emailData = generatePasswordResetEmail(user.email, resetToken, baseUrl);
+        
+        const emailSent = await sendEmail(emailData);
+        
+        if (emailSent) {
+          console.log(`Password reset email sent successfully to ${email}`);
+        } else {
+          console.error(`Failed to send password reset email to ${email}`);
+        }
       }
 
       res.json({ 
@@ -83,6 +104,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Password reset error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Validate reset token route
+  app.post("/api/auth/validate-reset-token", async (req, res) => {
+    try {
+      const { token } = req.body;
+
+      if (!token) {
+        return res.status(400).json({ message: "Token is required" });
+      }
+
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.status(400).json({ message: "Invalid or expired token" });
+      }
+
+      res.json({ message: "Token is valid" });
+    } catch (error) {
+      console.error("Token validation error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Confirm password reset route
+  app.post("/api/auth/confirm-reset-password", async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return res.status(400).json({ message: "Token and new password are required" });
+      }
+
+      // Validate password strength
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters long" });
+      }
+
+      const resetToken = await storage.getPasswordResetToken(token);
+      
+      if (!resetToken) {
+        return res.status(400).json({ message: "Invalid or expired token" });
+      }
+
+      // Hash the new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      
+      // Update user password
+      const updatedUser = await storage.updateUserPassword(resetToken.userId, hashedPassword);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Mark token as used
+      await storage.markTokenAsUsed(token);
+      
+      // Clean up expired tokens
+      await storage.deleteExpiredTokens();
+
+      res.json({ message: "Password reset successfully" });
+    } catch (error) {
+      console.error("Password reset confirmation error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
