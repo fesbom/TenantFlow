@@ -588,8 +588,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Treatment routes
   app.post("/api/treatments", authenticateToken, async (req, res) => {
     try {
+      console.log("Received treatment data:", req.body);
       const result = insertTreatmentSchema.safeParse(req.body);
       if (!result.success) {
+        console.log("Validation errors:", result.error.errors);
         return res.status(400).json({ message: "Invalid treatment data", errors: result.error.errors });
       }
 
