@@ -51,7 +51,7 @@ export function generatePasswordResetEmail(userEmail: string, resetToken: string
   
   return {
     to: userEmail,
-    from: 'fesbom@gmail.com', // Using your verified email address
+    from: 'test@example.com', // Using SendGrid sandbox sender
     subject: 'DentiCare - Redefinição de Senha',
     text: `
 Olá!
