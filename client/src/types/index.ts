@@ -96,12 +96,22 @@ export interface TreatmentMovement {
 
 export interface AnamnesisQuestion {
   id: string;
-  question: string;
+  pergunta: string;
   type: 'text' | 'boolean' | 'multiple_choice';
   options?: string;
   isRequired: boolean;
   clinicId: string;
   createdAt: string;
+}
+
+export interface AnamnesisResponse {
+  id: string;
+  treatmentId: string;
+  questionId: string;
+  resposta: string;
+  observacoes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Budget {

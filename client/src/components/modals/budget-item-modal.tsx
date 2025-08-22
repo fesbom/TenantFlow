@@ -31,6 +31,8 @@ export default function BudgetItemModal({ isOpen, onClose, treatment, budgetItem
     valorOrcamento: "",
   });
 
+  const [discountValue, setDiscountValue] = useState<string>("0");
+
   useEffect(() => {
     if (budgetItem) {
       setFormData({
@@ -106,7 +108,7 @@ export default function BudgetItemModal({ isOpen, onClose, treatment, budgetItem
         sum + parseFloat(item.valorOrcamento), 0
       );
       
-      const discount = 0; // Default discount
+      const discount = parseFloat(discountValue) || 0;
       const total = subtotal - discount;
       
       // Update or create budget summary

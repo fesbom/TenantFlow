@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import TreatmentModal from "@/components/modals/treatment-modal";
 import BudgetItemModal from "@/components/modals/budget-item-modal";
 import TreatmentMovementModal from "@/components/modals/treatment-movement-modal";
+import AnamnesisModal from "@/components/modals/anamnesis-modal";
+import BudgetDiscountModal from "@/components/modals/budget-discount-modal";
 import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement } from "@/types";
 import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit } from "lucide-react";
 
@@ -22,6 +24,8 @@ export default function MedicalRecords() {
   const [isTreatmentModalOpen, setIsTreatmentModalOpen] = useState(false);
   const [isBudgetItemModalOpen, setIsBudgetItemModalOpen] = useState(false);
   const [isTreatmentMovementModalOpen, setIsTreatmentMovementModalOpen] = useState(false);
+  const [isAnamnesisModalOpen, setIsAnamnesisModalOpen] = useState(false);
+  const [isBudgetDiscountModalOpen, setIsBudgetDiscountModalOpen] = useState(false);
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<BudgetItem | null>(null);
   const [selectedMovement, setSelectedMovement] = useState<TreatmentMovement | null>(null);
 
@@ -87,6 +91,14 @@ export default function MedicalRecords() {
   const handleEditMovement = (movement: TreatmentMovement) => {
     setSelectedMovement(movement);
     setIsTreatmentMovementModalOpen(true);
+  };
+
+  const handleOpenAnamnesis = () => {
+    setIsAnamnesisModalOpen(true);
+  };
+
+  const handleEditDiscount = () => {
+    setIsBudgetDiscountModalOpen(true);
   };
 
   const formatDate = (dateString: string) => {
@@ -307,7 +319,7 @@ export default function MedicalRecords() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
                             <h3 className="text-lg font-medium">Questionário de Anamnese</h3>
-                            <Button size="sm">
+                            <Button size="sm" onClick={handleOpenAnamnesis}>
                               <Plus className="h-4 w-4 mr-1" />
                               Preencher Anamnese
                             </Button>
@@ -368,7 +380,16 @@ export default function MedicalRecords() {
                                   </div>
                                   <div className="flex justify-between items-center text-sm mb-2">
                                     <span>Desconto:</span>
-                                    <span className="text-red-600">-{formatCurrency(budgetSummary.descontoOrcamento)}</span>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-red-600">-{formatCurrency(budgetSummary.descontoOrcamento)}</span>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={handleEditDiscount}
+                                      >
+                                        <Edit className="h-4 w-4" />
+                                      </Button>
+                                    </div>
                                   </div>
                                   <div className="flex justify-between items-center text-lg font-bold pt-2 border-t">
                                     <span>Total:</span>
@@ -402,21 +423,41 @@ export default function MedicalRecords() {
                           </div>
                           
                           {treatmentMovements.length > 0 ? (
-                            <div className="space-y-3">
-                              {treatmentMovements.map((movement) => (
-                                <Card key={movement.id}>
-                                  <CardContent className="p-4">
-                                    <div className="flex justify-between items-start mb-2">
-                                      <div className="flex-1">
-                                        <h4 className="font-medium">{movement.descricaoAtividade}</h4>
-                                        <p className="text-sm text-gray-600">
-                                          {formatDate(movement.dataMovimentacao)}
-                                        </p>
-                                      </div>
-                                      <div className="text-right flex items-center space-x-2">
-                                        <div className="font-medium">
-                                          {formatCurrency(movement.valorServico)}
+                            <>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Data</TableHead>
+                                    <TableHead>Descrição</TableHead>
+                                    <TableHead className="text-right">Valor</TableHead>
+                                    <TableHead className="w-20">Ações</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {treatmentMovements.map((movement) => (
+                                    <TableRow key={movement.id}>
+                                      <TableCell className="text-sm">
+                                        {formatDate(movement.dataMovimentacao)}
+                                      </TableCell>
+                                      <TableCell>
+                                        <div>
+                                          <div className="font-medium">{movement.descricaoAtividade}</div>
+                                          {movement.fotoAtividade && (
+                                            <div className="mt-2">
+                                              <img 
+                                                src={movement.fotoAtividade} 
+                                                alt="Foto da atividade" 
+                                                className="w-16 h-16 object-cover rounded border cursor-pointer"
+                                                onClick={() => window.open(movement.fotoAtividade, '_blank')}
+                                              />
+                                            </div>
+                                          )}
                                         </div>
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        {formatCurrency(movement.valorServico)}
+                                      </TableCell>
+                                      <TableCell>
                                         <Button 
                                           variant="ghost" 
                                           size="sm"
@@ -424,21 +465,30 @@ export default function MedicalRecords() {
                                         >
                                           <Edit className="h-4 w-4" />
                                         </Button>
-                                      </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                              
+                              {/* Totalizador das Movimentações */}
+                              <div className="border-t pt-4 mt-4">
+                                <div className="flex justify-end">
+                                  <div className="w-80 space-y-2">
+                                    <div className="flex justify-between text-lg font-bold">
+                                      <span>Total das Movimentações:</span>
+                                      <span>
+                                        {formatCurrency(
+                                          treatmentMovements.reduce((sum, movement) => 
+                                            sum + parseFloat(movement.valorServico), 0
+                                          ).toString()
+                                        )}
+                                      </span>
                                     </div>
-                                    {movement.fotoAtividade && (
-                                      <div className="mt-3">
-                                        <img 
-                                          src={movement.fotoAtividade} 
-                                          alt="Foto da atividade"
-                                          className="max-w-full h-32 object-cover rounded"
-                                        />
-                                      </div>
-                                    )}
-                                  </CardContent>
-                                </Card>
-                              ))}
-                            </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
                           ) : (
                             <div className="text-center text-gray-500 py-8">
                               <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -493,6 +543,19 @@ export default function MedicalRecords() {
         onClose={() => setIsTreatmentMovementModalOpen(false)}
         treatment={selectedTreatment}
         movement={selectedMovement}
+      />
+
+      <AnamnesisModal
+        isOpen={isAnamnesisModalOpen}
+        onClose={() => setIsAnamnesisModalOpen(false)}
+        treatment={selectedTreatment}
+      />
+
+      <BudgetDiscountModal
+        isOpen={isBudgetDiscountModalOpen}
+        onClose={() => setIsBudgetDiscountModalOpen(false)}
+        treatment={selectedTreatment}
+        budgetSummary={budgetSummary || null}
       />
     </div>
   );
