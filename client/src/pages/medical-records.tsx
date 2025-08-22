@@ -13,7 +13,7 @@ import BudgetItemModal from "@/components/modals/budget-item-modal";
 import TreatmentMovementModal from "@/components/modals/treatment-movement-modal";
 import AnamnesisModal from "@/components/modals/anamnesis-modal";
 import BudgetDiscountModal from "@/components/modals/budget-discount-modal";
-import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement } from "@/types";
+import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement, AnamnesisResponse } from "@/types";
 import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit } from "lucide-react";
 
 export default function MedicalRecords() {
@@ -55,6 +55,12 @@ export default function MedicalRecords() {
   // Fetch treatment movements for selected treatment
   const { data: treatmentMovements = [] } = useQuery<TreatmentMovement[]>({
     queryKey: ["/api/treatment-movements/treatment", selectedTreatment?.id],
+    enabled: !!selectedTreatment,
+  });
+
+  // Fetch anamnesis responses
+  const { data: anamnesisResponses = [] } = useQuery<AnamnesisResponse[]>({
+    queryKey: ["/api/anamnesis/responses/treatment", selectedTreatment?.id],
     enabled: !!selectedTreatment,
   });
 
@@ -321,13 +327,38 @@ export default function MedicalRecords() {
                             <h3 className="text-lg font-medium">Questionário de Anamnese</h3>
                             <Button size="sm" onClick={handleOpenAnamnesis}>
                               <Plus className="h-4 w-4 mr-1" />
-                              Preencher Anamnese
+                              {anamnesisResponses.length > 0 ? "Editar Anamnese" : "Preencher Anamnese"}
                             </Button>
                           </div>
-                          <div className="text-center text-gray-500 py-8">
-                            <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                            <p>Anamnese não preenchida para este tratamento</p>
-                          </div>
+                          
+                          {anamnesisResponses.length > 0 ? (
+                            <div className="space-y-3">
+                              <h4 className="font-medium text-sm text-green-600 mb-4">✓ Anamnese preenchida</h4>
+                              {anamnesisResponses.map((response) => (
+                                <Card key={response.id} className="p-4">
+                                  <div className="space-y-2">
+                                    <h5 className="font-medium text-sm">Pergunta {response.questionId.slice(-4)}</h5>
+                                    <div className="text-sm">
+                                      <span className="font-medium">Resposta:</span> {response.resposta || "Não respondido"}
+                                    </div>
+                                    {response.observacoes && (
+                                      <div className="text-sm text-gray-600">
+                                        <span className="font-medium">Observações:</span> {response.observacoes}
+                                      </div>
+                                    )}
+                                    <div className="text-xs text-gray-400">
+                                      Respondido em: {formatDate(response.createdAt)}
+                                    </div>
+                                  </div>
+                                </Card>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-500 py-8">
+                              <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p>Anamnese não preenchida para este tratamento</p>
+                            </div>
+                          )}
                         </div>
                       </TabsContent>
 

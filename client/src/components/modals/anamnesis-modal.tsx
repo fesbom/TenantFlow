@@ -29,12 +29,6 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
     staleTime: 0, // Always fetch fresh data
   });
 
-  // Debug questions loading
-  useEffect(() => {
-    if (questions.length > 0) {
-      console.log("Questions loaded:", questions.length, questions);
-    }
-  }, [questions]);
 
   // Fetch existing responses for this treatment
   const { data: existingResponses = [] } = useQuery<AnamnesisResponse[]>({
@@ -122,7 +116,7 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <ScrollArea className="max-h-[50vh] pr-4">
+          <ScrollArea className="h-[60vh] pr-4">
             <div className="space-y-6">
               {questions.length > 0 ? (
                 questions.map((question) => (
