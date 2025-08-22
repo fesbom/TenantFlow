@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -27,10 +27,14 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
     queryKey: ["/api/anamnesis/questions"],
     enabled: isOpen,
     staleTime: 0, // Always fetch fresh data
-    onSuccess: (data) => {
-      console.log("Questions loaded:", data.length, data);
-    }
   });
+
+  // Debug questions loading
+  useEffect(() => {
+    if (questions.length > 0) {
+      console.log("Questions loaded:", questions.length, questions);
+    }
+  }, [questions]);
 
   // Fetch existing responses for this treatment
   const { data: existingResponses = [] } = useQuery<AnamnesisResponse[]>({
@@ -57,6 +61,7 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
 
       const responsesToSave = Object.entries(responses).map(([questionId, data]) => ({
         treatmentId: treatment.id,
+        patientId: treatment.patientId,
         questionId,
         resposta: data.response,
         observacoes: data.observations,
