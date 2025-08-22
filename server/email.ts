@@ -20,13 +20,21 @@ interface EmailParams {
 
 export async function sendEmail(params: EmailParams): Promise<boolean> {
   try {
-    await sgMail.send({
+    const emailData: any = {
       to: params.to,
       from: params.from,
       subject: params.subject,
-      text: params.text || undefined,
-      html: params.html || undefined,
-    });
+    };
+    
+    if (params.text) {
+      emailData.text = params.text;
+    }
+    
+    if (params.html) {
+      emailData.html = params.html;
+    }
+    
+    await sgMail.send(emailData);
     console.log(`Email sent successfully to ${params.to}`);
     return true;
   } catch (error) {
