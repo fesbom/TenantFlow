@@ -1,0 +1,126 @@
+Prompt para Desenvolvedor no Replit: Ajustes na Aplicação de Prontuário Odontológico/Médico
+Objetivo: Implementar melhorias conceituais e funcionais no módulo de prontuário da aplicação para garantir um registro mais completo e detalhado do tratamento do paciente.
+
+Contexto: A versão atual do prontuário é muito simplificada, contendo apenas o procedimento, uma observação, um plano de tratamento e o valor. A aplicação precisa evoluir para registrar a anamnese, um orçamento detalhado e a movimentação financeira e clínica do tratamento de forma estruturada.
+
+Parte 1: Ajustes na Estrutura Principal do Prontuário
+A tela principal do prontuário de um paciente precisa ser reestruturada. O registro de um "Tratamento" deve ser o elemento central e conter os seguintes campos:
+
+Data de Início do Tratamento:
+
+Campo: data_inicio
+
+Tipo: Data (ex: DD/MM/AAAA)
+
+Funcionalidade: Deve registrar a data em que o tratamento foi proposto ou iniciado.
+
+Situação do Tratamento:
+
+Campo: situacao_tratamento
+
+Tipo: Seleção (Dropdown/Select)
+
+Opções: "Em andamento", "Concluído", "Cancelado".
+
+Funcionalidade: Permitir a rápida identificação do status atual do tratamento. O status padrão deve ser "Em andamento".
+
+Título/Descrição Geral do Tratamento:
+
+Campo: titulo_tratamento
+
+Tipo: Texto (String)
+
+Funcionalidade: Um campo para dar um nome ao plano de tratamento (ex: "Reabilitação Oral com Implantes", "Tratamento Ortodôntico Completo").
+
+Parte 2: Integração da Anamnese no Prontuário
+Dentro de cada tratamento, é fundamental registrar a anamnese do paciente.
+
+Exibição das Perguntas:
+
+A aplicação já possui uma área de "Parametrização da Anamnese" onde as perguntas são cadastradas.
+
+Na tela do prontuário (dentro de um tratamento), o sistema deve carregar e exibir todas as perguntas cadastradas nesta parametrização.
+
+Registro das Respostas:
+
+Campo: Para cada pergunta exibida, deve haver um campo de texto (resposta_anamnese) para registrar a resposta do paciente.
+
+Funcionalidade: As respostas devem ser salvas e permanentemente associadas a este tratamento específico do paciente, permitindo consulta futura. A interface deve ser clara, mostrando a pergunta e o campo de resposta lado a lado ou de forma hierárquica.
+
+Parte 3: Reformulação do Módulo de Orçamento
+O orçamento precisa ser uma entidade detalhada e flexível dentro do prontuário do tratamento.
+
+Itens do Orçamento:
+
+Funcionalidade: Implementar uma lista dinâmica onde o usuário pode adicionar múltiplos itens.
+
+Campos por item:
+
+descricao_orcamento: Texto (String) - Descrição do serviço ou procedimento orçado (ex: "Coroa de Porcelana no dente 26", "Sessão de Clareamento").
+
+valor_orcamento: Numérico (Decimal/Float) - Valor do item.
+
+Totalização e Desconto:
+
+Campo (Cálculo Automático): subtotal_orcamento - Soma automática de todos os valor_orcamento dos itens da lista.
+
+Campo (Entrada): desconto_orcamento - Numérico (Decimal/Float) - Campo para inserir um valor de desconto.
+
+Campo (Cálculo Automático): total_orcamento - Campo que exibe o resultado de subtotal_orcamento - desconto_orcamento.
+
+Condição de Pagamento:
+
+Campo: condicao_pagamento
+
+Tipo: Área de Texto (Textarea)
+
+Funcionalidade: Um campo de texto livre para descrever a condição de pagamento negociada (ex: "50% de entrada e 3x no cartão de crédito", "Pagamento à vista com 5% de desconto já aplicado"). Não é necessário um cadastro prévio de condições.
+
+Parte 4: Criação da "Movimentação do Tratamento" (Evolução Clínica e Financeira)
+Esta é uma nova seção crucial dentro do prontuário de um tratamento. Ela registrará cada visita e interação do paciente.
+
+Estrutura da Movimentação:
+
+Funcionalidade: Criar uma lista dinâmica para adicionar registros de movimentação/evolução.
+
+Campos por registro:
+
+data_movimentacao: Data (ex: DD/MM/AAAA) - Data da visita/procedimento.
+
+descricao_atividade: Área de Texto (Textarea) - Descrição detalhada do que foi realizado no dia (ex: "Realizada a moldagem do dente 26", "Consulta de acompanhamento e ajuste do aparelho").
+
+valor_servico: Numérico (Decimal/Float) - Valor referente ao serviço prestado nesta data específica. Pode ser R$ 0,00 para consultas de retorno.
+
+foto_atividade: Upload de Arquivo (Imagem) - Campo opcional para anexar uma foto relacionada à atividade (ex: foto intraoral do procedimento, radiografia do dia).
+
+Totalizador da Movimentação:
+
+Funcionalidade: No final da lista de movimentações, exibir um campo total_movimentacao que soma automaticamente todos os valores do campo valor_servico. Este totalizador representa o valor total dos serviços efetivamente prestados até o momento.
+
+Resumo da Interface do Usuário (Sugestão de Layout):
+
+A tela de um Tratamento dentro do prontuário do paciente poderia ser organizada com abas ou seções, como:
+
+Visão Geral:
+
+Data de Início, Situação, Título do Tratamento.
+
+Anamnese:
+
+Lista de perguntas e campos para as respostas.
+
+Orçamento:
+
+Tabela de itens do orçamento com campos de descrição e valor.
+
+Campos para Subtotal, Desconto, Total e Condição de Pagamento.
+
+Movimentação/Evolução:
+
+Botão "Adicionar Nova Movimentação".
+
+Tabela/Lista com os registros de movimentação (Data, Descrição, Valor, Foto).
+
+Totalizador dos valores pagos/movimentados.
+
+Por favor, implemente estas funcionalidades garantindo que os dados sejam salvos corretamente no banco de dados e que a interface seja intuitiva para o usuário final.

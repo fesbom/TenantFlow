@@ -8,6 +8,10 @@ import {
   anamnesisResponses,
   budgets,
   passwordResetTokens,
+  treatments,
+  budgetItems,
+  budgetSummary,
+  treatmentMovements,
   type Clinic,
   type User,
   type Patient,
@@ -26,6 +30,14 @@ import {
   type InsertBudget,
   type PasswordResetToken,
   type InsertPasswordResetToken,
+  type Treatment,
+  type InsertTreatment,
+  type BudgetItem,
+  type InsertBudgetItem,
+  type BudgetSummary,
+  type InsertBudgetSummary,
+  type TreatmentMovement,
+  type InsertTreatmentMovement,
 } from "@shared/schema";
 
 import { db } from "./db";
@@ -88,6 +100,33 @@ export interface IStorage {
   getBudgetById(id: string, clinicId: string): Promise<Budget | undefined>;
   updateBudget(id: string, updates: Partial<InsertBudget>, clinicId: string): Promise<Budget | undefined>;
   deleteBudget(id: string, clinicId: string): Promise<boolean>;
+
+  // Treatment methods
+  createTreatment(treatment: InsertTreatment): Promise<Treatment>;
+  getTreatmentsByPatient(patientId: string, clinicId: string): Promise<Treatment[]>;
+  getTreatmentById(id: string, clinicId: string): Promise<Treatment | undefined>;
+  updateTreatment(id: string, updates: Partial<InsertTreatment>, clinicId: string): Promise<Treatment | undefined>;
+  deleteTreatment(id: string, clinicId: string): Promise<boolean>;
+
+  // Budget Item methods
+  createBudgetItem(budgetItem: InsertBudgetItem): Promise<BudgetItem>;
+  getBudgetItemsByTreatment(treatmentId: string): Promise<BudgetItem[]>;
+  updateBudgetItem(id: string, updates: Partial<InsertBudgetItem>): Promise<BudgetItem | undefined>;
+  deleteBudgetItem(id: string): Promise<boolean>;
+
+  // Budget Summary methods
+  createOrUpdateBudgetSummary(budgetSummary: InsertBudgetSummary): Promise<BudgetSummary>;
+  getBudgetSummaryByTreatment(treatmentId: string): Promise<BudgetSummary | undefined>;
+
+  // Treatment Movement methods
+  createTreatmentMovement(movement: InsertTreatmentMovement): Promise<TreatmentMovement>;
+  getTreatmentMovementsByTreatment(treatmentId: string): Promise<TreatmentMovement[]>;
+  updateTreatmentMovement(id: string, updates: Partial<InsertTreatmentMovement>): Promise<TreatmentMovement | undefined>;
+  deleteTreatmentMovement(id: string): Promise<boolean>;
+
+  // Anamnesis responses for treatments
+  getAnamnesisResponsesByTreatment(treatmentId: string): Promise<AnamnesisResponse[]>;
+  createOrUpdateAnamnesisResponse(response: InsertAnamnesisResponse): Promise<AnamnesisResponse>;
 
   // Dashboard stats
   getDashboardStats(clinicId: string): Promise<{
@@ -448,6 +487,171 @@ export class DatabaseStorage implements IStorage {
       monthlyRevenue,
       attendanceRate: Math.round(attendanceRate),
     };
+  }
+
+  // Treatment methods
+  async createTreatment(insertTreatment: InsertTreatment): Promise<Treatment> {
+    const [treatment] = await db.insert(treatments).values(insertTreatment).returning();
+    return treatment;
+  }
+
+  async getTreatmentsByPatient(patientId: string, clinicId: string): Promise<Treatment[]> {
+    return await db
+      .select()
+      .from(treatments)
+      .where(and(eq(treatments.patientId, patientId), eq(treatments.clinicId, clinicId)))
+      .orderBy(desc(treatments.createdAt));
+  }
+
+  async getTreatmentById(id: string, clinicId: string): Promise<Treatment | undefined> {
+    const [treatment] = await db
+      .select()
+      .from(treatments)
+      .where(and(eq(treatments.id, id), eq(treatments.clinicId, clinicId)));
+    return treatment || undefined;
+  }
+
+  async updateTreatment(id: string, updates: Partial<InsertTreatment>, clinicId: string): Promise<Treatment | undefined> {
+    const [treatment] = await db
+      .update(treatments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(treatments.id, id), eq(treatments.clinicId, clinicId)))
+      .returning();
+    return treatment || undefined;
+  }
+
+  async deleteTreatment(id: string, clinicId: string): Promise<boolean> {
+    const result = await db
+      .delete(treatments)
+      .where(and(eq(treatments.id, id), eq(treatments.clinicId, clinicId)));
+    return result.rowCount > 0;
+  }
+
+  // Budget Item methods
+  async createBudgetItem(insertBudgetItem: InsertBudgetItem): Promise<BudgetItem> {
+    const [budgetItem] = await db.insert(budgetItems).values(insertBudgetItem).returning();
+    return budgetItem;
+  }
+
+  async getBudgetItemsByTreatment(treatmentId: string): Promise<BudgetItem[]> {
+    return await db
+      .select()
+      .from(budgetItems)
+      .where(eq(budgetItems.treatmentId, treatmentId))
+      .orderBy(budgetItems.createdAt);
+  }
+
+  async updateBudgetItem(id: string, updates: Partial<InsertBudgetItem>): Promise<BudgetItem | undefined> {
+    const [budgetItem] = await db
+      .update(budgetItems)
+      .set(updates)
+      .where(eq(budgetItems.id, id))
+      .returning();
+    return budgetItem || undefined;
+  }
+
+  async deleteBudgetItem(id: string): Promise<boolean> {
+    const result = await db
+      .delete(budgetItems)
+      .where(eq(budgetItems.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Budget Summary methods
+  async createOrUpdateBudgetSummary(insertBudgetSummary: InsertBudgetSummary): Promise<BudgetSummary> {
+    // Check if summary already exists
+    const [existing] = await db
+      .select()
+      .from(budgetSummary)
+      .where(eq(budgetSummary.treatmentId, insertBudgetSummary.treatmentId));
+
+    if (existing) {
+      // Update existing
+      const [updated] = await db
+        .update(budgetSummary)
+        .set({ ...insertBudgetSummary, updatedAt: new Date() })
+        .where(eq(budgetSummary.treatmentId, insertBudgetSummary.treatmentId))
+        .returning();
+      return updated;
+    } else {
+      // Create new
+      const [created] = await db.insert(budgetSummary).values(insertBudgetSummary).returning();
+      return created;
+    }
+  }
+
+  async getBudgetSummaryByTreatment(treatmentId: string): Promise<BudgetSummary | undefined> {
+    const [summary] = await db
+      .select()
+      .from(budgetSummary)
+      .where(eq(budgetSummary.treatmentId, treatmentId));
+    return summary || undefined;
+  }
+
+  // Treatment Movement methods
+  async createTreatmentMovement(insertMovement: InsertTreatmentMovement): Promise<TreatmentMovement> {
+    const [movement] = await db.insert(treatmentMovements).values(insertMovement).returning();
+    return movement;
+  }
+
+  async getTreatmentMovementsByTreatment(treatmentId: string): Promise<TreatmentMovement[]> {
+    return await db
+      .select()
+      .from(treatmentMovements)
+      .where(eq(treatmentMovements.treatmentId, treatmentId))
+      .orderBy(desc(treatmentMovements.dataMovimentacao));
+  }
+
+  async updateTreatmentMovement(id: string, updates: Partial<InsertTreatmentMovement>): Promise<TreatmentMovement | undefined> {
+    const [movement] = await db
+      .update(treatmentMovements)
+      .set(updates)
+      .where(eq(treatmentMovements.id, id))
+      .returning();
+    return movement || undefined;
+  }
+
+  async deleteTreatmentMovement(id: string): Promise<boolean> {
+    const result = await db
+      .delete(treatmentMovements)
+      .where(eq(treatmentMovements.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Anamnesis responses for treatments
+  async getAnamnesisResponsesByTreatment(treatmentId: string): Promise<AnamnesisResponse[]> {
+    return await db
+      .select()
+      .from(anamnesisResponses)
+      .where(eq(anamnesisResponses.treatmentId, treatmentId))
+      .orderBy(anamnesisResponses.createdAt);
+  }
+
+  async createOrUpdateAnamnesisResponse(insertResponse: InsertAnamnesisResponse): Promise<AnamnesisResponse> {
+    // Check if response already exists for this question and treatment
+    const [existing] = await db
+      .select()
+      .from(anamnesisResponses)
+      .where(
+        and(
+          eq(anamnesisResponses.questionId, insertResponse.questionId),
+          eq(anamnesisResponses.treatmentId, insertResponse.treatmentId!)
+        )
+      );
+
+    if (existing) {
+      // Update existing response
+      const [updated] = await db
+        .update(anamnesisResponses)
+        .set({ response: insertResponse.response })
+        .where(eq(anamnesisResponses.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new response
+      const [created] = await db.insert(anamnesisResponses).values(insertResponse).returning();
+      return created;
+    }
   }
 
   // Password reset token methods

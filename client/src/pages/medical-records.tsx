@@ -5,28 +5,47 @@ import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import MedicalRecordModal from "@/components/modals/medical-record-modal";
-import { Patient, MedicalRecord } from "@/types";
-import { Search, Plus, FileText, Image, Eye } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import TreatmentModal from "@/components/modals/treatment-modal";
+import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement } from "@/types";
+import { Search, Plus, FileText, Calendar, DollarSign, Activity } from "lucide-react";
 
 export default function MedicalRecords() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
+  const [isTreatmentModalOpen, setIsTreatmentModalOpen] = useState(false);
 
   // Fetch patients
   const { data: patients = [] } = useQuery<Patient[]>({
     queryKey: ["/api/patients"],
   });
 
-  // Fetch medical records for selected patient
-  const { data: medicalRecords = [], isLoading } = useQuery<MedicalRecord[]>({
-    queryKey: ["/api/medical-records/patient", selectedPatient?.id],
+  // Fetch treatments for selected patient
+  const { data: treatments = [], isLoading: treatmentsLoading } = useQuery<Treatment[]>({
+    queryKey: ["/api/treatments/patient", selectedPatient?.id],
     enabled: !!selectedPatient,
+  });
+
+  // Fetch budget items for selected treatment
+  const { data: budgetItems = [] } = useQuery<BudgetItem[]>({
+    queryKey: ["/api/budget-items/treatment", selectedTreatment?.id],
+    enabled: !!selectedTreatment,
+  });
+
+  // Fetch budget summary for selected treatment
+  const { data: budgetSummary } = useQuery<BudgetSummary>({
+    queryKey: ["/api/budget-summary/treatment", selectedTreatment?.id],
+    enabled: !!selectedTreatment,
+  });
+
+  // Fetch treatment movements for selected treatment
+  const { data: treatmentMovements = [] } = useQuery<TreatmentMovement[]>({
+    queryKey: ["/api/treatment-movements/treatment", selectedTreatment?.id],
+    enabled: !!selectedTreatment,
   });
 
   const filteredPatients = patients.filter(patient =>
@@ -34,34 +53,36 @@ export default function MedicalRecords() {
     patient.phone.includes(searchTerm)
   );
 
-  const handleCreateRecord = (patient: Patient) => {
+  const handleCreateTreatment = (patient: Patient) => {
     setSelectedPatient(patient);
-    setSelectedRecord(null);
-    setIsModalOpen(true);
+    setSelectedTreatment(null);
+    setIsTreatmentModalOpen(true);
   };
 
-  const handleViewRecord = (record: MedicalRecord) => {
-    setSelectedRecord(record);
-    setIsModalOpen(true);
+  const handleSelectTreatment = (treatment: Treatment) => {
+    setSelectedTreatment(treatment);
   };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
-  const formatCurrency = (value: string | undefined) => {
-    if (!value) return "-";
-    return `R$ ${parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+  const formatCurrency = (value: string | number) => {
+    const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+    return `R$ ${numericValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
   };
 
-  const getImageCount = (images: string | undefined) => {
-    if (!images) return 0;
-    try {
-      const imageArray = JSON.parse(images);
-      return Array.isArray(imageArray) ? imageArray.length : 0;
-    } catch {
-      return 0;
-    }
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+      "Em andamento": "default",
+      "Concluído": "secondary",
+      "Cancelado": "destructive"
+    };
+    return (
+      <Badge variant={variants[status] || "outline"}>
+        {status}
+      </Badge>
+    );
   };
 
   return (
@@ -72,9 +93,9 @@ export default function MedicalRecords() {
         <Header title="Prontuários" onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="p-4 lg:p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Patients List */}
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-3">
               <Card>
                 <CardHeader>
                   <CardTitle>Pacientes</CardTitle>
@@ -116,94 +137,298 @@ export default function MedicalRecords() {
               </Card>
             </div>
 
-            {/* Medical Records */}
-            <div className="lg:col-span-2">
+            {/* Treatments List */}
+            <div className="lg:col-span-3">
               {selectedPatient ? (
                 <Card>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>Prontuários - {selectedPatient.fullName}</CardTitle>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Telefone: {selectedPatient.phone}
-                        </p>
-                      </div>
-                      <Button
-                        onClick={() => handleCreateRecord(selectedPatient)}
-                        data-testid="button-new-record"
+                      <CardTitle>Tratamentos</CardTitle>
+                      <Button 
+                        size="sm" 
+                        onClick={() => handleCreateTreatment(selectedPatient)}
+                        data-testid="button-create-treatment"
                       >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Novo Prontuário
+                        <Plus className="h-4 w-4 mr-1" />
+                        Novo
                       </Button>
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    {isLoading ? (
-                      <div className="text-center py-8 text-gray-500">
-                        Carregando prontuários...
-                      </div>
-                    ) : medicalRecords.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                        <p>Nenhum prontuário encontrado</p>
-                        <Button
-                          className="mt-4"
-                          onClick={() => handleCreateRecord(selectedPatient)}
-                          data-testid="button-first-record"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Criar Primeiro Prontuário
-                        </Button>
+                  <CardContent className="max-h-96 overflow-y-auto">
+                    {treatmentsLoading ? (
+                      <div className="text-center py-8">Carregando...</div>
+                    ) : treatments.length > 0 ? (
+                      <div className="space-y-3">
+                        {treatments.map((treatment) => (
+                          <div
+                            key={treatment.id}
+                            className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                              selectedTreatment?.id === treatment.id
+                                ? "bg-primary/10 border-primary"
+                                : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                            }`}
+                            onClick={() => handleSelectTreatment(treatment)}
+                            data-testid={`treatment-${treatment.id}`}
+                          >
+                            <div className="font-medium text-sm mb-1">{treatment.tituloTratamento}</div>
+                            <div className="text-xs text-gray-500 mb-2">Início: {formatDate(treatment.dataInicio)}</div>
+                            {getStatusBadge(treatment.situacaoTratamento)}
+                          </div>
+                        ))}
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Data</TableHead>
-                              <TableHead>Procedimento</TableHead>
-                              <TableHead>Valor</TableHead>
-                              <TableHead>Imagens</TableHead>
-                              <TableHead>Ações</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {medicalRecords.map((record) => (
-                              <TableRow key={record.id} data-testid={`record-${record.id}`}>
-                                <TableCell>{formatDate(record.createdAt)}</TableCell>
-                                <TableCell>{record.procedure}</TableCell>
-                                <TableCell>{formatCurrency(record.cost)}</TableCell>
-                                <TableCell>
-                                  {getImageCount(record.images) > 0 && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      <Image className="h-3 w-3 mr-1" />
-                                      {getImageCount(record.images)}
-                                    </Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleViewRecord(record)}
-                                    data-testid={`button-view-record-${record.id}`}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                      <div className="text-center text-gray-500 py-8">
+                        <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p className="text-sm">Nenhum tratamento encontrado</p>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="mt-3"
+                          onClick={() => handleCreateTreatment(selectedPatient)}
+                        >
+                          Criar primeiro tratamento
+                        </Button>
                       </div>
                     )}
                   </CardContent>
                 </Card>
               ) : (
                 <Card>
-                  <CardContent className="p-8 text-center text-gray-500">
-                    <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                    <p>Selecione um paciente para ver os prontuários</p>
+                  <CardContent className="flex items-center justify-center h-96">
+                    <div className="text-center text-gray-500">
+                      <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Selecione um paciente para ver os tratamentos</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Treatment Details */}
+            <div className="lg:col-span-6">
+              {selectedTreatment ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{selectedTreatment.tituloTratamento}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Tabs defaultValue="overview" className="w-full">
+                      <TabsList className="grid w-full grid-cols-4">
+                        <TabsTrigger value="overview" className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          Visão Geral
+                        </TabsTrigger>
+                        <TabsTrigger value="anamnesis" className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4" />
+                          Anamnese
+                        </TabsTrigger>
+                        <TabsTrigger value="budget" className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          Orçamento
+                        </TabsTrigger>
+                        <TabsTrigger value="movements" className="flex items-center gap-2">
+                          <Activity className="h-4 w-4" />
+                          Movimentação
+                        </TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="overview" className="mt-6">
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Data de Início</label>
+                              <p className="text-sm">{formatDate(selectedTreatment.dataInicio)}</p>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-gray-700">Situação</label>
+                              <div className="mt-1">
+                                {getStatusBadge(selectedTreatment.situacaoTratamento)}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                            <Card>
+                              <CardContent className="p-4 text-center">
+                                <DollarSign className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                                <div className="text-sm text-gray-600">Valor Total</div>
+                                <div className="text-lg font-bold">
+                                  {budgetSummary ? formatCurrency(budgetSummary.totalOrcamento) : "R$ 0,00"}
+                                </div>
+                              </CardContent>
+                            </Card>
+                            
+                            <Card>
+                              <CardContent className="p-4 text-center">
+                                <FileText className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+                                <div className="text-sm text-gray-600">Itens no Orçamento</div>
+                                <div className="text-lg font-bold">{budgetItems.length}</div>
+                              </CardContent>
+                            </Card>
+                            
+                            <Card>
+                              <CardContent className="p-4 text-center">
+                                <Activity className="h-8 w-8 mx-auto mb-2 text-purple-600" />
+                                <div className="text-sm text-gray-600">Movimentações</div>
+                                <div className="text-lg font-bold">{treatmentMovements.length}</div>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="anamnesis" className="mt-6">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">Questionário de Anamnese</h3>
+                            <Button size="sm">
+                              <Plus className="h-4 w-4 mr-1" />
+                              Preencher Anamnese
+                            </Button>
+                          </div>
+                          <div className="text-center text-gray-500 py-8">
+                            <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                            <p>Anamnese não preenchida para este tratamento</p>
+                          </div>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="budget" className="mt-6">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">Orçamento Detalhado</h3>
+                            <Button size="sm">
+                              <Plus className="h-4 w-4 mr-1" />
+                              Adicionar Item
+                            </Button>
+                          </div>
+                          
+                          {budgetItems.length > 0 ? (
+                            <>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Descrição</TableHead>
+                                    <TableHead className="text-right">Valor</TableHead>
+                                    <TableHead className="w-20">Ações</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {budgetItems.map((item) => (
+                                    <TableRow key={item.id}>
+                                      <TableCell>{item.descricaoOrcamento}</TableCell>
+                                      <TableCell className="text-right">
+                                        {formatCurrency(item.valorOrcamento)}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Button variant="ghost" size="sm">
+                                          Editar
+                                        </Button>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                              
+                              {budgetSummary && (
+                                <div className="bg-gray-50 p-4 rounded-lg">
+                                  <div className="flex justify-between items-center text-sm mb-2">
+                                    <span>Subtotal:</span>
+                                    <span>{formatCurrency(budgetSummary.subtotalOrcamento)}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-sm mb-2">
+                                    <span>Desconto:</span>
+                                    <span className="text-red-600">-{formatCurrency(budgetSummary.descontoOrcamento)}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-lg font-bold pt-2 border-t">
+                                    <span>Total:</span>
+                                    <span>{formatCurrency(budgetSummary.totalOrcamento)}</span>
+                                  </div>
+                                  {budgetSummary.condicaoPagamento && (
+                                    <div className="text-sm text-gray-600 mt-2">
+                                      Condições: {budgetSummary.condicaoPagamento}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="text-center text-gray-500 py-8">
+                              <DollarSign className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p>Nenhum item no orçamento</p>
+                            </div>
+                          )}
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="movements" className="mt-6">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">Histórico de Movimentações</h3>
+                            <Button size="sm">
+                              <Plus className="h-4 w-4 mr-1" />
+                              Nova Movimentação
+                            </Button>
+                          </div>
+                          
+                          {treatmentMovements.length > 0 ? (
+                            <div className="space-y-3">
+                              {treatmentMovements.map((movement) => (
+                                <Card key={movement.id}>
+                                  <CardContent className="p-4">
+                                    <div className="flex justify-between items-start mb-2">
+                                      <div className="flex-1">
+                                        <h4 className="font-medium">{movement.descricaoAtividade}</h4>
+                                        <p className="text-sm text-gray-600">
+                                          {formatDate(movement.dataMovimentacao)}
+                                        </p>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="font-medium">
+                                          {formatCurrency(movement.valorServico)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {movement.fotoAtividade && (
+                                      <div className="mt-3">
+                                        <img 
+                                          src={movement.fotoAtividade} 
+                                          alt="Foto da atividade"
+                                          className="max-w-full h-32 object-cover rounded"
+                                        />
+                                      </div>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-500 py-8">
+                              <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p>Nenhuma movimentação registrada</p>
+                            </div>
+                          )}
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+                  </CardContent>
+                </Card>
+              ) : selectedPatient ? (
+                <Card>
+                  <CardContent className="flex items-center justify-center h-96">
+                    <div className="text-center text-gray-500">
+                      <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Selecione um tratamento para ver os detalhes</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="flex items-center justify-center h-96">
+                    <div className="text-center text-gray-500">
+                      <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Selecione um paciente e tratamento para visualizar o prontuário</p>
+                    </div>
                   </CardContent>
                 </Card>
               )}
@@ -212,12 +437,11 @@ export default function MedicalRecords() {
         </main>
       </div>
 
-      {/* Medical Record Modal */}
-      <MedicalRecordModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+      <TreatmentModal
+        isOpen={isTreatmentModalOpen}
+        onClose={() => setIsTreatmentModalOpen(false)}
         patient={selectedPatient}
-        record={selectedRecord}
+        treatment={selectedTreatment}
       />
     </div>
   );

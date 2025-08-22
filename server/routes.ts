@@ -16,6 +16,10 @@ import {
   insertAnamnesisQuestionSchema,
   insertAnamnesisResponseSchema,
   insertBudgetSchema,
+  insertTreatmentSchema,
+  insertBudgetItemSchema,
+  insertBudgetSummarySchema,
+  insertTreatmentMovementSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -577,6 +581,295 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("WhatsApp send error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Treatment routes
+  app.post("/api/treatments", authenticateToken, async (req, res) => {
+    try {
+      const result = insertTreatmentSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid treatment data", errors: result.error.errors });
+      }
+
+      const authReq = req as AuthenticatedRequest;
+      const treatmentData = {
+        ...result.data,
+        clinicId: authReq.user!.clinicId,
+        dentistId: authReq.user!.id
+      };
+
+      const treatment = await storage.createTreatment(treatmentData);
+      res.status(201).json(treatment);
+    } catch (error) {
+      console.error("Create treatment error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/treatments/patient/:patientId", authenticateToken, async (req, res) => {
+    try {
+      const { patientId } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      
+      const treatments = await storage.getTreatmentsByPatient(patientId, authReq.user!.clinicId);
+      res.json(treatments);
+    } catch (error) {
+      console.error("Get treatments error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/treatments/:id", authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      
+      const treatment = await storage.getTreatmentById(id, authReq.user!.clinicId);
+      if (!treatment) {
+        return res.status(404).json({ message: "Treatment not found" });
+      }
+      
+      res.json(treatment);
+    } catch (error) {
+      console.error("Get treatment error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/treatments/:id", authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      
+      const result = insertTreatmentSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid treatment data", errors: result.error.errors });
+      }
+
+      const treatment = await storage.updateTreatment(id, result.data, authReq.user!.clinicId);
+      if (!treatment) {
+        return res.status(404).json({ message: "Treatment not found" });
+      }
+      
+      res.json(treatment);
+    } catch (error) {
+      console.error("Update treatment error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/treatments/:id", authenticateToken, requireRole(['admin', 'dentist']), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      
+      const deleted = await storage.deleteTreatment(id, authReq.user!.clinicId);
+      if (!deleted) {
+        return res.status(404).json({ message: "Treatment not found" });
+      }
+      
+      res.json({ message: "Treatment deleted successfully" });
+    } catch (error) {
+      console.error("Delete treatment error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Budget Items routes
+  app.post("/api/budget-items", authenticateToken, async (req, res) => {
+    try {
+      const result = insertBudgetItemSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid budget item data", errors: result.error.errors });
+      }
+
+      const budgetItem = await storage.createBudgetItem(result.data);
+      res.status(201).json(budgetItem);
+    } catch (error) {
+      console.error("Create budget item error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/budget-items/treatment/:treatmentId", authenticateToken, async (req, res) => {
+    try {
+      const { treatmentId } = req.params;
+      
+      const budgetItems = await storage.getBudgetItemsByTreatment(treatmentId);
+      res.json(budgetItems);
+    } catch (error) {
+      console.error("Get budget items error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/budget-items/:id", authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const result = insertBudgetItemSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid budget item data", errors: result.error.errors });
+      }
+
+      const budgetItem = await storage.updateBudgetItem(id, result.data);
+      if (!budgetItem) {
+        return res.status(404).json({ message: "Budget item not found" });
+      }
+      
+      res.json(budgetItem);
+    } catch (error) {
+      console.error("Update budget item error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/budget-items/:id", authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteBudgetItem(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Budget item not found" });
+      }
+      
+      res.json({ message: "Budget item deleted successfully" });
+    } catch (error) {
+      console.error("Delete budget item error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Budget Summary routes
+  app.post("/api/budget-summary", authenticateToken, async (req, res) => {
+    try {
+      const result = insertBudgetSummarySchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid budget summary data", errors: result.error.errors });
+      }
+
+      const budgetSummary = await storage.createOrUpdateBudgetSummary(result.data);
+      res.json(budgetSummary);
+    } catch (error) {
+      console.error("Create/Update budget summary error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/budget-summary/treatment/:treatmentId", authenticateToken, async (req, res) => {
+    try {
+      const { treatmentId } = req.params;
+      
+      const budgetSummary = await storage.getBudgetSummaryByTreatment(treatmentId);
+      res.json(budgetSummary);
+    } catch (error) {
+      console.error("Get budget summary error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Treatment Movements routes
+  app.post("/api/treatment-movements", authenticateToken, upload.single('photo'), async (req, res) => {
+    try {
+      const movementData = { ...req.body };
+      
+      if (req.file) {
+        movementData.fotoAtividade = `/uploads/${req.file.filename}`;
+      }
+      
+      const result = insertTreatmentMovementSchema.safeParse(movementData);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid treatment movement data", errors: result.error.errors });
+      }
+
+      const movement = await storage.createTreatmentMovement(result.data);
+      res.status(201).json(movement);
+    } catch (error) {
+      console.error("Create treatment movement error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/treatment-movements/treatment/:treatmentId", authenticateToken, async (req, res) => {
+    try {
+      const { treatmentId } = req.params;
+      
+      const movements = await storage.getTreatmentMovementsByTreatment(treatmentId);
+      res.json(movements);
+    } catch (error) {
+      console.error("Get treatment movements error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/treatment-movements/:id", authenticateToken, upload.single('photo'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const movementData = { ...req.body };
+      
+      if (req.file) {
+        movementData.fotoAtividade = `/uploads/${req.file.filename}`;
+      }
+      
+      const result = insertTreatmentMovementSchema.partial().safeParse(movementData);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid treatment movement data", errors: result.error.errors });
+      }
+
+      const movement = await storage.updateTreatmentMovement(id, result.data);
+      if (!movement) {
+        return res.status(404).json({ message: "Treatment movement not found" });
+      }
+      
+      res.json(movement);
+    } catch (error) {
+      console.error("Update treatment movement error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/treatment-movements/:id", authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteTreatmentMovement(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Treatment movement not found" });
+      }
+      
+      res.json({ message: "Treatment movement deleted successfully" });
+    } catch (error) {
+      console.error("Delete treatment movement error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Anamnesis responses for treatments
+  app.get("/api/anamnesis-responses/treatment/:treatmentId", authenticateToken, async (req, res) => {
+    try {
+      const { treatmentId } = req.params;
+      
+      const responses = await storage.getAnamnesisResponsesByTreatment(treatmentId);
+      res.json(responses);
+    } catch (error) {
+      console.error("Get anamnesis responses error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/anamnesis-responses/treatment", authenticateToken, async (req, res) => {
+    try {
+      const result = insertAnamnesisResponseSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid anamnesis response data", errors: result.error.errors });
+      }
+
+      const response = await storage.createOrUpdateAnamnesisResponse(result.data);
+      res.json(response);
+    } catch (error) {
+      console.error("Create/Update anamnesis response error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

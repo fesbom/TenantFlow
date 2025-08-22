@@ -93,17 +93,62 @@ export const medicalRecords = pgTable("medical_records", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Anamnesis responses
+// Anamnesis responses - agora ligadas ao tratamento
 export const anamnesisResponses = pgTable("anamnesis_responses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   patientId: varchar("patient_id").notNull().references(() => patients.id),
   questionId: varchar("question_id").notNull().references(() => anamnesisQuestions.id),
+  treatmentId: varchar("treatment_id").references(() => treatments.id),
   appointmentId: varchar("appointment_id").references(() => appointments.id),
   response: text("response"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Budgets/Orçamentos
+// Treatments - elemento central do prontuário
+export const treatments = pgTable("treatments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  patientId: varchar("patient_id").notNull().references(() => patients.id),
+  dentistId: varchar("dentist_id").notNull().references(() => users.id),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+  dataInicio: date("data_inicio").notNull(),
+  situacaoTratamento: text("situacao_tratamento").default('Em andamento').notNull(), // 'Em andamento', 'Concluído', 'Cancelado'
+  tituloTratamento: text("titulo_tratamento").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Budget Items - itens detalhados do orçamento
+export const budgetItems = pgTable("budget_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  treatmentId: varchar("treatment_id").notNull().references(() => treatments.id),
+  descricaoOrcamento: text("descricao_orcamento").notNull(),
+  valorOrcamento: decimal("valor_orcamento", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Budget Summary - resumo do orçamento por tratamento
+export const budgetSummary = pgTable("budget_summary", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  treatmentId: varchar("treatment_id").notNull().references(() => treatments.id),
+  subtotalOrcamento: decimal("subtotal_orcamento", { precision: 10, scale: 2 }).notNull(),
+  descontoOrcamento: decimal("desconto_orcamento", { precision: 10, scale: 2 }).default('0').notNull(),
+  totalOrcamento: decimal("total_orcamento", { precision: 10, scale: 2 }).notNull(),
+  condicaoPagamento: text("condicao_pagamento"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Treatment Movements - movimentações/evolução do tratamento
+export const treatmentMovements = pgTable("treatment_movements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  treatmentId: varchar("treatment_id").notNull().references(() => treatments.id),
+  dataMovimentacao: date("data_movimentacao").notNull(),
+  descricaoAtividade: text("descricao_atividade").notNull(),
+  valorServico: decimal("valor_servico", { precision: 10, scale: 2 }).notNull(),
+  fotoAtividade: text("foto_atividade"), // path para imagem
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Budgets/Orçamentos (mantido para compatibilidade)
 export const budgets = pgTable("budgets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   patientId: varchar("patient_id").notNull().references(() => patients.id),
@@ -146,6 +191,7 @@ export const patientsRelations = relations(patients, ({ one, many }) => ({
   medicalRecords: many(medicalRecords),
   anamnesisResponses: many(anamnesisResponses),
   budgets: many(budgets),
+  treatments: many(treatments),
 }));
 
 export const appointmentsRelations = relations(appointments, ({ one, many }) => ({
@@ -200,9 +246,53 @@ export const anamnesisResponsesRelations = relations(anamnesisResponses, ({ one 
     fields: [anamnesisResponses.questionId],
     references: [anamnesisQuestions.id],
   }),
+  treatment: one(treatments, {
+    fields: [anamnesisResponses.treatmentId],
+    references: [treatments.id],
+  }),
   appointment: one(appointments, {
     fields: [anamnesisResponses.appointmentId],
     references: [appointments.id],
+  }),
+}));
+
+export const treatmentsRelations = relations(treatments, ({ one, many }) => ({
+  patient: one(patients, {
+    fields: [treatments.patientId],
+    references: [patients.id],
+  }),
+  dentist: one(users, {
+    fields: [treatments.dentistId],
+    references: [users.id],
+  }),
+  clinic: one(clinics, {
+    fields: [treatments.clinicId],
+    references: [clinics.id],
+  }),
+  budgetItems: many(budgetItems),
+  budgetSummary: one(budgetSummary),
+  treatmentMovements: many(treatmentMovements),
+  anamnesisResponses: many(anamnesisResponses),
+}));
+
+export const budgetItemsRelations = relations(budgetItems, ({ one }) => ({
+  treatment: one(treatments, {
+    fields: [budgetItems.treatmentId],
+    references: [treatments.id],
+  }),
+}));
+
+export const budgetSummaryRelations = relations(budgetSummary, ({ one }) => ({
+  treatment: one(treatments, {
+    fields: [budgetSummary.treatmentId],
+    references: [treatments.id],
+  }),
+}));
+
+export const treatmentMovementsRelations = relations(treatmentMovements, ({ one }) => ({
+  treatment: one(treatments, {
+    fields: [treatmentMovements.treatmentId],
+    references: [treatments.id],
   }),
 }));
 
@@ -265,6 +355,27 @@ export const insertBudgetSchema = createInsertSchema(budgets).omit({
   updatedAt: true,
 });
 
+export const insertTreatmentSchema = createInsertSchema(treatments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBudgetItemSchema = createInsertSchema(budgetItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertBudgetSummarySchema = createInsertSchema(budgetSummary).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export const insertTreatmentMovementSchema = createInsertSchema(treatmentMovements).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Clinic = typeof clinics.$inferSelect;
 export type InsertClinic = z.infer<typeof insertClinicSchema>;
@@ -289,6 +400,18 @@ export type InsertAnamnesisResponse = z.infer<typeof insertAnamnesisResponseSche
 
 export type Budget = typeof budgets.$inferSelect;
 export type InsertBudget = z.infer<typeof insertBudgetSchema>;
+
+export type Treatment = typeof treatments.$inferSelect;
+export type InsertTreatment = z.infer<typeof insertTreatmentSchema>;
+
+export type BudgetItem = typeof budgetItems.$inferSelect;
+export type InsertBudgetItem = z.infer<typeof insertBudgetItemSchema>;
+
+export type BudgetSummary = typeof budgetSummary.$inferSelect;
+export type InsertBudgetSummary = z.infer<typeof insertBudgetSummarySchema>;
+
+export type TreatmentMovement = typeof treatmentMovements.$inferSelect;
+export type InsertTreatmentMovement = z.infer<typeof insertTreatmentMovementSchema>;
 
 // Password reset token types
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

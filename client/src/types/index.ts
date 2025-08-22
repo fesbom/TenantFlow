@@ -54,6 +54,46 @@ export interface MedicalRecord {
   createdAt: string;
 }
 
+export interface Treatment {
+  id: string;
+  patientId: string;
+  dentistId: string;
+  clinicId: string;
+  dataInicio: string;
+  situacaoTratamento: 'Em andamento' | 'Concluído' | 'Cancelado';
+  tituloTratamento: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BudgetItem {
+  id: string;
+  treatmentId: string;
+  descricaoOrcamento: string;
+  valorOrcamento: string;
+  createdAt: string;
+}
+
+export interface BudgetSummary {
+  id: string;
+  treatmentId: string;
+  subtotalOrcamento: string;
+  descontoOrcamento: string;
+  totalOrcamento: string;
+  condicaoPagamento?: string;
+  updatedAt: string;
+}
+
+export interface TreatmentMovement {
+  id: string;
+  treatmentId: string;
+  dataMovimentacao: string;
+  descricaoAtividade: string;
+  valorServico: string;
+  fotoAtividade?: string;
+  createdAt: string;
+}
+
 export interface AnamnesisQuestion {
   id: string;
   question: string;
