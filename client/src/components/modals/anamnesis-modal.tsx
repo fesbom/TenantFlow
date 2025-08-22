@@ -26,6 +26,7 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
   const { data: questions = [] } = useQuery<AnamnesisQuestion[]>({
     queryKey: ["/api/anamnesis/questions"],
     enabled: isOpen,
+    staleTime: 0, // Always fetch fresh data
   });
 
   // Fetch existing responses for this treatment
@@ -120,7 +121,7 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
             <div className="space-y-6">
               {questions.map((question) => (
                 <div key={question.id} className="space-y-3 p-4 border rounded-lg">
-                  <h3 className="font-medium text-sm">{question.pergunta}</h3>
+                  <h3 className="font-medium text-sm">{question.question}</h3>
                   
                   <RadioGroup
                     value={responses[question.id]?.response || ""}

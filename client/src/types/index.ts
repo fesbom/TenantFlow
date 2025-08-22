@@ -96,7 +96,7 @@ export interface TreatmentMovement {
 
 export interface AnamnesisQuestion {
   id: string;
-  pergunta: string;
+  question: string;
   type: 'text' | 'boolean' | 'multiple_choice';
   options?: string;
   isRequired: boolean;
