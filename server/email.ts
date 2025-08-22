@@ -37,8 +37,11 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
     await sgMail.send(emailData);
     console.log(`Email sent successfully to ${params.to}`);
     return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error('SendGrid email error:', error);
+    if (error.response && error.response.body && error.response.body.errors) {
+      console.error('Detailed SendGrid errors:', JSON.stringify(error.response.body.errors, null, 2));
+    }
     return false;
   }
 }
@@ -48,7 +51,7 @@ export function generatePasswordResetEmail(userEmail: string, resetToken: string
   
   return {
     to: userEmail,
-    from: 'noreply@denticare.com', // Use a verified sender email from your SendGrid account
+    from: 'fesbom@gmail.com', // Using your verified email address
     subject: 'DentiCare - Redefinição de Senha',
     text: `
 Olá!
