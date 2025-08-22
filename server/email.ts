@@ -24,7 +24,7 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
       to: params.to,
       from: params.from,
       subject: params.subject,
-      text: params.text,
+      text: params.text || undefined,
       html: params.html || undefined,
     });
     console.log(`Email sent successfully to ${params.to}`);
@@ -40,7 +40,7 @@ export function generatePasswordResetEmail(userEmail: string, resetToken: string
   
   return {
     to: userEmail,
-    from: 'noreply@denticare.com', // You should use a verified sender email
+    from: 'noreply@denticare.com', // Use a verified sender email from your SendGrid account
     subject: 'DentiCare - Redefinição de Senha',
     text: `
 Olá!
