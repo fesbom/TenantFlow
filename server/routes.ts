@@ -317,9 +317,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { password, ...sanitizedUser } = user;
       res.status(201).json(sanitizedUser);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Create user error:", error);
-      res.status(500).json({ message: "Internal server error" });
+      
+      // Handle specific database errors
+      if (error.code === '23505') {
+        if (error.constraint?.includes('username')) {
+          return res.status(400).json({ message: "Este nome de usuário já está em uso. Escolha outro." });
+        }
+        if (error.constraint?.includes('email')) {
+          return res.status(400).json({ message: "Este email já está cadastrado. Use outro email." });
+        }
+        return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
+      }
+      
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
+      }
+      
+      res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
 
@@ -338,9 +356,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let requestData = { ...req.body, clinicId: req.user!.clinicId };
       
-      // Clean up empty date fields - convert empty strings to null
-      const dateFields = ['birthDate', 'lastVisitDate', 'lastContactDate'];
-      dateFields.forEach(field => {
+      // Clean up empty fields - convert empty strings to null
+      const nullableFields = ['birthDate', 'lastVisitDate', 'lastContactDate', 'responsibleDentistId', 'cpf', 'email', 'birthCity', 'maritalStatus', 'cep', 'address', 'number', 'complement', 'neighborhood', 'city', 'state', 'responsibleName', 'responsibleCpf', 'howDidYouKnowUs', 'howDidYouKnowUsOther'];
+      nullableFields.forEach(field => {
         if (requestData[field] === "" || requestData[field] === undefined) {
           requestData[field] = null;
         }
@@ -349,9 +367,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const patientData = insertPatientSchema.parse(requestData);
       const patient = await storage.createPatient(patientData);
       res.status(201).json(patient);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Create patient error:", error);
-      res.status(500).json({ message: "Internal server error" });
+      
+      // Handle specific database errors
+      if (error.code === '23503') {
+        if (error.constraint?.includes('responsible_dentist_id')) {
+          return res.status(400).json({ message: "Dentista responsável inválido. Selecione um dentista válido." });
+        }
+        return res.status(400).json({ message: "Referência inválida. Verifique os dados preenchidos." });
+      }
+      
+      if (error.code === '23505') {
+        if (error.constraint?.includes('cpf')) {
+          return res.status(400).json({ message: "Este CPF já está cadastrado no sistema." });
+        }
+        if (error.constraint?.includes('email')) {
+          return res.status(400).json({ message: "Este email já está cadastrado no sistema." });
+        }
+        return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
+      }
+      
+      if (error.code === '22007') {
+        return res.status(400).json({ message: "Data inválida. Verifique o formato das datas preenchidas." });
+      }
+      
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
+      }
+      
+      res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
 
@@ -372,9 +419,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let updateData = insertPatientSchema.partial().parse(req.body);
       
-      // Clean up empty date fields - convert empty strings to null
-      const dateFields = ['birthDate', 'lastVisitDate', 'lastContactDate'];
-      dateFields.forEach(field => {
+      // Clean up empty fields - convert empty strings to null
+      const nullableFields = ['birthDate', 'lastVisitDate', 'lastContactDate', 'responsibleDentistId', 'cpf', 'email', 'birthCity', 'maritalStatus', 'cep', 'address', 'number', 'complement', 'neighborhood', 'city', 'state', 'responsibleName', 'responsibleCpf', 'howDidYouKnowUs', 'howDidYouKnowUsOther'];
+      nullableFields.forEach(field => {
         if (updateData[field] === "" || updateData[field] === undefined) {
           updateData[field] = null;
         }
@@ -387,9 +434,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(patient);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Update patient error:", error);
-      res.status(500).json({ message: "Internal server error" });
+      
+      // Handle specific database errors
+      if (error.code === '23503') {
+        if (error.constraint?.includes('responsible_dentist_id')) {
+          return res.status(400).json({ message: "Dentista responsável inválido. Selecione um dentista válido." });
+        }
+        return res.status(400).json({ message: "Referência inválida. Verifique os dados preenchidos." });
+      }
+      
+      if (error.code === '23505') {
+        if (error.constraint?.includes('cpf')) {
+          return res.status(400).json({ message: "Este CPF já está cadastrado no sistema." });
+        }
+        if (error.constraint?.includes('email')) {
+          return res.status(400).json({ message: "Este email já está cadastrado no sistema." });
+        }
+        return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
+      }
+      
+      if (error.code === '22007') {
+        return res.status(400).json({ message: "Data inválida. Verifique o formato das datas preenchidas." });
+      }
+      
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
+      }
+      
+      res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
 
@@ -426,9 +502,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const appointment = await storage.createAppointment(appointmentData);
       res.status(201).json(appointment);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Create appointment error:", error);
-      res.status(500).json({ message: "Internal server error" });
+      
+      // Handle specific database errors
+      if (error.code === '23503') {
+        if (error.constraint?.includes('patient_id')) {
+          return res.status(400).json({ message: "Paciente inválido. Selecione um paciente válido." });
+        }
+        if (error.constraint?.includes('dentist_id')) {
+          return res.status(400).json({ message: "Dentista inválido. Selecione um dentista válido." });
+        }
+        return res.status(400).json({ message: "Referência inválida. Verifique os dados preenchidos." });
+      }
+      
+      if (error.code === '22007') {
+        return res.status(400).json({ message: "Data/hora inválida. Verifique o horário do agendamento." });
+      }
+      
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
+      }
+      
+      res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
 
@@ -442,9 +540,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(appointment);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Update appointment error:", error);
-      res.status(500).json({ message: "Internal server error" });
+      
+      // Handle specific database errors
+      if (error.code === '23503') {
+        if (error.constraint?.includes('patient_id')) {
+          return res.status(400).json({ message: "Paciente inválido. Selecione um paciente válido." });
+        }
+        if (error.constraint?.includes('dentist_id')) {
+          return res.status(400).json({ message: "Dentista inválido. Selecione um dentista válido." });
+        }
+        return res.status(400).json({ message: "Referência inválida. Verifique os dados preenchidos." });
+      }
+      
+      if (error.code === '22007') {
+        return res.status(400).json({ message: "Data/hora inválida. Verifique o horário do agendamento." });
+      }
+      
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
+      }
+      
+      res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
 
