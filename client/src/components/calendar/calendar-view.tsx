@@ -101,9 +101,20 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   // Convert appointments to calendar events
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     return filteredAppointments.map(appointment => {
-      // NO TIMEZONE CONVERSION - Use date as literal value
-      // Database has "16:00" → display exactly "16:00"  
-      const start = new Date(appointment.scheduledDate);
+      // NO TIMEZONE CONVERSION - Create date as if it's already local
+      // Database has "2025-08-25T16:00:00.000Z" → force it to be treated as "16:00" local
+      const appointmentDate = new Date(appointment.scheduledDate);
+      
+      // Force the calendar to interpret this as local time by creating a new Date 
+      // with the UTC values used as if they were local values
+      const start = new Date(
+        appointmentDate.getUTCFullYear(),
+        appointmentDate.getUTCMonth(), 
+        appointmentDate.getUTCDate(),
+        appointmentDate.getUTCHours(),
+        appointmentDate.getUTCMinutes(),
+        appointmentDate.getUTCSeconds()
+      );
       const end = new Date(start.getTime() + (appointment.duration || 60) * 60000); // duration in minutes
       
       return {
@@ -339,6 +350,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                 timeslots={2}
                 min={new Date(2024, 0, 1, 8, 0)} // 8:00 AM
                 max={new Date(2024, 0, 1, 18, 0)} // 6:00 PM
+                timezone="local"
                 components={{
                   event: EventComponent,
                 }}
