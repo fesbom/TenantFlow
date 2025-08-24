@@ -1,0 +1,24 @@
+Objetivo: Corrigir o bug onde a tela de edição de um agendamento exibe o horário com 3 horas a mais do que o horário correto do evento.
+
+Contexto: Olá. A correção anterior resolveu o problema de gravação no banco de dados. Agora, o horário salvo está correto e a visualização na grade principal do calendário também está correta. No entanto, o bug de fuso horário ressurgiu em um local específico: a janela de edição.
+
+Descrição Exata do Bug (Passos para Reproduzir):
+Criação/Visualização: Eu crio um agendamento para as 09:00. Ele aparece corretamente às 09:00 na grade do calendário.
+
+Ação de Editar: Eu clico neste agendamento de 09:00 para abrir a tela de edição.
+
+O BUG: Dentro da tela (modal) de edição, o campo de horário está preenchido com 12:00, e não com as 09:00 originais do agendamento.
+
+Hipótese Técnica do Problema:
+A lógica de exibição da grade do calendário principal está correta: ela está pegando o horário em UTC do banco de dados e convertendo-o para o fuso horário local (America/Sao_Paulo) antes de exibir.
+
+O componente do modal de edição, no entanto, está falhando nesta conversão. Ele está lendo o horário em UTC do banco de dados e exibindo-o diretamente no campo de horário, sem convertê-lo para a hora local. Por isso a diferença de 3 horas.
+
+Solicitação de Correção (Ação Necessária):
+A solução é garantir que o modal de edição trate a data da mesma forma que a visualização principal do calendário.
+
+Replicar a Lógica Correta: Localize o código que popula os campos do formulário quando o modal de edição é aberto.
+
+Aplicar a Conversão: Antes de exibir a data/hora nos campos de input do formulário, aplique a mesma função de conversão de UTC para o fuso horário local que já está sendo usada com sucesso para exibir os eventos na grade principal do calendário.
+
+Em resumo: O modal de edição precisa "traduzir" a hora do banco de dados para a hora local, exatamente como o calendário já faz. Por favor, aplique essa conversão para que a experiência do usuário seja consistente.

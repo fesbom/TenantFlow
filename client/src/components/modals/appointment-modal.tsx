@@ -53,24 +53,50 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   useEffect(() => {
     if (appointment) {
-      // Convert UTC to BRT for display: UTC - 3 hours = BRT
-      // Database has 13:00 UTC → should display as 10:00 BRT
+      // Convert UTC to BRT for display
+      // Example: Database has "2025-08-25T19:00:00.000Z" (UTC) → should display as "16:00" (BRT)
       const utcDate = new Date(appointment.scheduledDate);
-      const brtDate = new Date(utcDate.getTime() - (3 * 60 * 60 * 1000)); // Subtract 3 hours for UTC→BRT
+      console.log('UTC date from DB:', utcDate.toISOString());
+      
+      // Create BRT date by subtracting 3 hours
+      const brtHours = utcDate.getUTCHours() - 3;
+      const brtDate = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), brtHours, utcDate.getUTCMinutes());
+      console.log('BRT date for display:', brtDate.toISOString());
+      
+      // Format for datetime-local input (YYYY-MM-DDTHH:MM)
+      const year = brtDate.getFullYear();
+      const month = String(brtDate.getMonth() + 1).padStart(2, '0');
+      const day = String(brtDate.getDate()).padStart(2, '0');
+      const hours = String(brtDate.getHours()).padStart(2, '0');
+      const minutes = String(brtDate.getMinutes()).padStart(2, '0');
+      const formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      
+      console.log('Formatted for input:', formattedDateTime);
       
       setFormData({
         patientId: appointment.patientId,
         dentistId: appointment.dentistId,
-        scheduledDate: brtDate.toISOString().slice(0, 16),
+        scheduledDate: formattedDateTime,
         duration: appointment.duration || 60,
         procedure: appointment.procedure || "",
         notes: appointment.notes || "",
       });
     } else {
+      // For new appointments created by clicking on calendar
+      let formattedDateTime = "";
+      if (initialDateTime) {
+        const year = initialDateTime.getFullYear();
+        const month = String(initialDateTime.getMonth() + 1).padStart(2, '0');
+        const day = String(initialDateTime.getDate()).padStart(2, '0');
+        const hours = String(initialDateTime.getHours()).padStart(2, '0');
+        const minutes = String(initialDateTime.getMinutes()).padStart(2, '0');
+        formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      }
+      
       setFormData({
         patientId: "",
         dentistId: "",
-        scheduledDate: initialDateTime ? new Date(initialDateTime.getTime() - (3 * 60 * 60 * 1000)).toISOString().slice(0, 16) : "",
+        scheduledDate: formattedDateTime,
         duration: 60,
         procedure: "",
         notes: "",
