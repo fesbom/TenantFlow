@@ -257,7 +257,7 @@ export default function Dashboard() {
           </div>
 
           {/* Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {/* Appointments Chart */}
             <Card>
               <CardHeader>
@@ -268,22 +268,6 @@ export default function Dashboard() {
                   <div className="text-center text-gray-500">
                     <TrendingUp className="h-12 w-12 mx-auto mb-2" />
                     <p>Gráfico de Atendimentos</p>
-                    <p className="text-sm">(Em desenvolvimento)</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Revenue Chart */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold">Receita Mensal</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                  <div className="text-center text-gray-500">
-                    <DollarSign className="h-12 w-12 mx-auto mb-2" />
-                    <p>Gráfico de Receita</p>
                     <p className="text-sm">(Em desenvolvimento)</p>
                   </div>
                 </div>

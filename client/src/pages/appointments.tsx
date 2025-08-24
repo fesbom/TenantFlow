@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Plus, Clock, User } from "lucide-react";
 import { Appointment, Patient } from "@/types";
+import AppointmentModal from "@/components/modals/appointment-modal";
 
 export default function Appointments() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
   // Fetch appointments
   const { data: appointments = [], isLoading } = useQuery<Appointment[]>({
@@ -66,7 +69,13 @@ export default function Appointments() {
         <main className="p-4 lg:p-6">
           {/* Actions */}
           <div className="flex justify-end mb-6">
-            <Button data-testid="button-new-appointment">
+            <Button 
+              onClick={() => {
+                setSelectedAppointment(null);
+                setIsAppointmentModalOpen(true);
+              }}
+              data-testid="button-new-appointment"
+            >
               <Plus className="h-4 w-4 mr-2" />
               Novo Agendamento
             </Button>
@@ -84,7 +93,14 @@ export default function Appointments() {
               <CardContent className="p-8 text-center text-gray-500">
                 <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                 <p>Nenhum agendamento encontrado</p>
-                <Button className="mt-4" data-testid="button-first-appointment">
+                <Button 
+                  onClick={() => {
+                    setSelectedAppointment(null);
+                    setIsAppointmentModalOpen(true);
+                  }}
+                  className="mt-4" 
+                  data-testid="button-first-appointment"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Criar Primeiro Agendamento
                 </Button>
@@ -150,7 +166,15 @@ export default function Appointments() {
                                   {getStatusBadge(appointment.status)}
                                   
                                   <div className="flex space-x-1">
-                                    <Button variant="ghost" size="sm" data-testid={`button-edit-appointment-${appointment.id}`}>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      onClick={() => {
+                                        setSelectedAppointment(appointment);
+                                        setIsAppointmentModalOpen(true);
+                                      }}
+                                      data-testid={`button-edit-appointment-${appointment.id}`}
+                                    >
                                       Editar
                                     </Button>
                                     {appointment.status === 'scheduled' && (
@@ -171,6 +195,16 @@ export default function Appointments() {
           )}
         </main>
       </div>
+
+      {/* Appointment Modal */}
+      <AppointmentModal
+        isOpen={isAppointmentModalOpen}
+        onClose={() => {
+          setIsAppointmentModalOpen(false);
+          setSelectedAppointment(null);
+        }}
+        appointment={selectedAppointment}
+      />
     </div>
   );
 }
