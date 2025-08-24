@@ -535,8 +535,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/appointments/:id", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const updateData = insertAppointmentSchema.partial().parse(req.body);
-      const appointment = await storage.updateAppointment(req.params.id, updateData, req.user!.clinicId);
+      let updateData = { ...req.body };
+      
+      // Convert scheduledDate string to Date object
+      if (updateData.scheduledDate) {
+        updateData.scheduledDate = new Date(updateData.scheduledDate);
+      }
+      
+      const parsedData = insertAppointmentSchema.partial().parse(updateData);
+      const appointment = await storage.updateAppointment(req.params.id, parsedData, req.user!.clinicId);
       
       if (!appointment) {
         return res.status(404).json({ message: "Appointment not found" });
