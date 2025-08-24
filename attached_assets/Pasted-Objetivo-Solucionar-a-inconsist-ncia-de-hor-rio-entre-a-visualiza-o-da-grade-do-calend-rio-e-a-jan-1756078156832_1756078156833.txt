@@ -1,0 +1,30 @@
+Objetivo: Solucionar a inconsistência de horário entre a visualização da grade do calendário e a janela de edição de um agendamento, garantindo que a mesma hora seja exibida em ambos os locais.
+
+Contexto: Olá! Agradeço pelas correções anteriores. O salvamento no banco de dados e a tradução do calendário estão funcionando. No entanto, o bug de fuso horário persiste de uma nova forma. Conforme meu último teste, a hora exibida na grade do calendário é diferente da hora que aparece no modal de edição para o mesmo evento.
+
+Descrição Exata do Bug (Passos para Reproduzir):
+Agendamento: Crio um novo agendamento para as 15:00.
+
+Visualização na Grade: O agendamento aparece corretamente na grade do calendário, no bloco das 15:00.
+
+Ação de Editar: Clico neste mesmo agendamento de 15:00 para abrir a tela de edição.
+
+O BUG: Dentro do modal de edição, o campo de horário não mostra 15:00. Ele está mostrando 12:00 (uma diferença de 3 horas, correspondente ao fuso horário de Brasília UTC-3).
+
+Hipótese Técnica do Problema:
+A causa é que a grade do calendário (provavelmente a biblioteca FullCalendar) e o componente do modal de edição estão tratando a data/hora de forma diferente.
+
+O calendário parece estar recebendo a data do banco de dados (que deve estar em UTC, por exemplo, ...T18:00:00.000Z) e está convertendo-a corretamente para o fuso horário local do usuário (exibindo 15:00). Isso está correto.
+
+O modal de edição, no entanto, parece estar recebendo o mesmo dado UTC do banco de dados, mas está exibindo a hora UTC sem convertê-la para o fuso horário local. Por isso a diferença de 3 horas.
+
+Solicitação de Correção (O que precisa ser feito):
+É preciso padronizar o comportamento. A experiência do usuário deve ser consistente.
+
+Ajuste o Modal de Edição: Modifique o código do formulário/modal de edição para que ele também converta a data/hora vinda do banco de dados (UTC) para o fuso horário local do navegador (America/Sao_Paulo) antes de exibi-la nos campos de data e hora.
+
+Consistência no Salvamento: Ao salvar uma edição, o processo inverso deve ocorrer: o horário local informado no modal (ex: 15:00) deve ser convertido para UTC antes de ser enviado para o backend e salvo no banco de dados.
+
+Regra Final: O usuário deve ver sempre a hora local (horário de Brasília) em todas as partes da interface. A conversão para UTC deve ser uma responsabilidade da aplicação ao se comunicar com o banco de dados, de forma transparente para o usuário.
+
+Por favor, aplique esta correção no componente do modal de edição para resolver a divergência.

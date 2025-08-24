@@ -53,10 +53,14 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   useEffect(() => {
     if (appointment) {
+      // Convert UTC to local time for display
+      const utcDate = new Date(appointment.scheduledDate);
+      const localDate = new Date(utcDate.getTime() - (utcDate.getTimezoneOffset() * 60000));
+      
       setFormData({
         patientId: appointment.patientId,
         dentistId: appointment.dentistId,
-        scheduledDate: new Date(appointment.scheduledDate).toISOString().slice(0, 16),
+        scheduledDate: localDate.toISOString().slice(0, 16),
         duration: appointment.duration || 60,
         procedure: appointment.procedure || "",
         notes: appointment.notes || "",
@@ -65,7 +69,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
       setFormData({
         patientId: "",
         dentistId: "",
-        scheduledDate: initialDateTime ? initialDateTime.toISOString().slice(0, 16) : "",
+        scheduledDate: initialDateTime ? new Date(initialDateTime.getTime() - (initialDateTime.getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : "",
         duration: 60,
         procedure: "",
         notes: "",
@@ -75,7 +79,16 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
-      const response = await apiRequest("POST", "/api/appointments", data);
+      // Convert local time to UTC for backend
+      const localDate = new Date(data.scheduledDate);
+      const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+      
+      const requestData = {
+        ...data,
+        scheduledDate: utcDate.toISOString(),
+      };
+      
+      const response = await apiRequest("POST", "/api/appointments", requestData);
       return response.json();
     },
     onSuccess: () => {
@@ -98,7 +111,16 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   const updateAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
-      const response = await apiRequest("PUT", `/api/appointments/${appointment!.id}`, data);
+      // Convert local time to UTC for backend
+      const localDate = new Date(data.scheduledDate);
+      const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+      
+      const requestData = {
+        ...data,
+        scheduledDate: utcDate.toISOString(),
+      };
+      
+      const response = await apiRequest("PUT", `/api/appointments/${appointment!.id}`, requestData);
       return response.json();
     },
     onSuccess: () => {
