@@ -101,7 +101,9 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   // Convert appointments to calendar events
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     return filteredAppointments.map(appointment => {
-      const start = new Date(appointment.scheduledDate);
+      // Parse the date without timezone conversion to maintain local time
+      const scheduledDate = appointment.scheduledDate;
+      const start = moment(scheduledDate).toDate();
       const end = new Date(start.getTime() + (appointment.duration || 60) * 60000); // duration in minutes
       
       return {
