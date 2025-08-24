@@ -19,7 +19,6 @@ const navigation = [
   { name: "Agendamentos", href: "/appointments", icon: Calendar, roles: ["admin", "dentist", "secretary"] },
   { name: "Prontuários", href: "/medical-records", icon: FileText, roles: ["admin", "dentist"] },
   { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"] },
-  { name: "Orçamentos", href: "/budgets", icon: DollarSign, roles: ["admin", "dentist"] },
   { name: "Configurações", href: "/settings", icon: Settings, roles: ["admin"] },
 ];
 

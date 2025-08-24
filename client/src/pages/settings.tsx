@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/api";
@@ -20,6 +21,7 @@ export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -62,6 +64,53 @@ export default function SettingsPage() {
     },
   });
 
+  // Update user mutation
+  const updateUserMutation = useMutation({
+    mutationFn: async (data: typeof formData & { id: string }) => {
+      const response = await apiRequest("PUT", `/api/users/${data.id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Usuário atualizado",
+        description: "Dados do usuário atualizados com sucesso",
+      });
+      resetForm();
+      setIsModalOpen(false);
+    },
+    onError: () => {
+      toast({
+        title: "Erro ao atualizar usuário",
+        description: "Não foi possível atualizar os dados do usuário",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("DELETE", `/api/users/${userId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Usuário excluído",
+        description: "Usuário excluído com sucesso",
+      });
+      setUserToDelete(null);
+    },
+    onError: () => {
+      toast({
+        title: "Erro ao excluir usuário",
+        description: "Não foi possível excluir o usuário",
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       fullName: "",
@@ -73,9 +122,38 @@ export default function SettingsPage() {
     setSelectedUser(null);
   };
 
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setFormData({
+      fullName: user.fullName,
+      email: user.email,
+      username: (user as any).username || user.email,
+      password: "", // Don't pre-fill password for security
+      role: user.role as "admin" | "dentist" | "secretary",
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteUser = (user: User) => {
+    setUserToDelete(user);
+  };
+
+  const confirmDeleteUser = () => {
+    if (userToDelete) {
+      deleteUserMutation.mutate(userToDelete.id);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createUserMutation.mutate(formData);
+    
+    if (selectedUser) {
+      // Update existing user
+      updateUserMutation.mutate({ ...formData, id: selectedUser.id });
+    } else {
+      // Create new user
+      createUserMutation.mutate(formData);
+    }
   };
 
   const getRoleBadge = (role: string) => {
@@ -133,7 +211,9 @@ export default function SettingsPage() {
                       </DialogTrigger>
                       <DialogContent className="max-w-2xl">
                         <DialogHeader>
-                          <DialogTitle>Criar Novo Usuário</DialogTitle>
+                          <DialogTitle>
+                            {selectedUser ? "Editar Usuário" : "Criar Novo Usuário"}
+                          </DialogTitle>
                         </DialogHeader>
                         
                         <form onSubmit={handleSubmit} className="space-y-6">
@@ -220,10 +300,14 @@ export default function SettingsPage() {
                             </Button>
                             <Button
                               type="submit"
-                              disabled={createUserMutation.isPending}
+                              disabled={createUserMutation.isPending || updateUserMutation.isPending}
                               data-testid="button-save-user"
                             >
-                              {createUserMutation.isPending ? "Salvando..." : "Criar Usuário"}
+                              {createUserMutation.isPending || updateUserMutation.isPending
+                                ? "Salvando..."
+                                : selectedUser
+                                ? "Atualizar Usuário"
+                                : "Criar Usuário"}
                             </Button>
                           </div>
                         </form>
@@ -270,19 +354,48 @@ export default function SettingsPage() {
                                     variant="ghost"
                                     size="sm"
                                     disabled={user.id === currentUser?.id}
+                                    onClick={() => handleEditUser(user)}
                                     data-testid={`button-edit-user-${user.id}`}
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled={user.id === currentUser?.id}
-                                    className="text-red-600 hover:text-red-700"
-                                    data-testid={`button-delete-user-${user.id}`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  
+                                  <AlertDialog open={userToDelete?.id === user.id} onOpenChange={(open) => !open && setUserToDelete(null)}>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={user.id === currentUser?.id}
+                                        onClick={() => handleDeleteUser(user)}
+                                        className="text-red-600 hover:text-red-700"
+                                        data-testid={`button-delete-user-${user.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Tem certeza que deseja excluir o usuário "{user.fullName}"? 
+                                          Esta ação não pode ser desfeita.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel data-testid="button-cancel-delete-user">
+                                          Cancelar
+                                        </AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={confirmDeleteUser}
+                                          className="bg-red-600 hover:bg-red-700"
+                                          disabled={deleteUserMutation.isPending}
+                                          data-testid="button-confirm-delete-user"
+                                        >
+                                          {deleteUserMutation.isPending ? "Excluindo..." : "Excluir"}
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
                                 </div>
                               </TableCell>
                             </TableRow>

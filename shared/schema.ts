@@ -45,7 +45,29 @@ export const patients = pgTable("patients", {
   email: text("email"),
   phone: text("phone").notNull(),
   birthDate: date("birth_date"),
-  address: text("address"),
+  birthCity: text("birth_city"), // Cidade de Nascimento
+  maritalStatus: text("marital_status"), // Estado Civil
+  
+  // Endereço completo
+  cep: text("cep"),
+  address: text("address"), // Logradouro
+  number: text("number"), // Número
+  complement: text("complement"), // Complemento
+  neighborhood: text("neighborhood"), // Bairro
+  city: text("city"), // Cidade
+  state: text("state"), // Estado
+  
+  // Vínculos e responsáveis
+  responsibleDentistId: varchar("responsible_dentist_id").references(() => users.id), // Dentista Responsável
+  responsibleName: text("responsible_name"), // Responsável (para menores)
+  responsibleCpf: text("responsible_cpf"), // CPF do Responsável
+  
+  // Marketing e histórico
+  howDidYouKnowUs: text("how_did_you_know_us"), // Como nos Conheceu
+  howDidYouKnowUsOther: text("how_did_you_know_us_other"), // Especificação quando "Outros"
+  lastVisitDate: date("last_visit_date"), // Data da Última Visita
+  lastContactDate: date("last_contact_date"), // Último Contato
+  
   medicalNotes: text("medical_notes"),
   clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -1,0 +1,90 @@
+Claro! Preparei um novo prompt, bem estruturado, com todos os novos ajustes que você identificou. Você pode enviá-lo diretamente ao seu desenvolvedor no Replit.
+
+---
+
+### **Prompt para Desenvolvedor no Replit: Ajustes e Correções (Fase 2)**
+
+**Objetivo:** Implementar novos campos, corrigir bugs críticos e aprimorar a funcionalidade de agendamento, com base no feedback de uso da aplicação.
+
+**Contexto:** Após a primeira rodada de ajustes, foram identificados campos essenciais faltantes no cadastro de pacientes e diversos bugs que impedem o uso de funcionalidades chave como agendamento, gerenciamento de usuários e as ações no dashboard.
+
+---
+
+#### **Parte 1: Melhorias no Módulo "Cadastro de Pacientes"**
+
+É necessário adicionar os seguintes campos ao formulário e ao banco de dados de pacientes:
+
+1.  **Campos de Dados Pessoais:**
+    * **Cidade de Nascimento:** Campo de texto simples.
+    * **Estado Civil:** Campo de seleção (Dropdown) com opções como "Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União Estável".
+
+2.  **Endereço Completo com Autopreenchimento:**
+    * **CEP:** Campo para inserção do CEP.
+    * **Funcionalidade:** Ao digitar um CEP válido e o usuário sair do campo (on-blur), o sistema deve consultar uma API pública de CEP (como ViaCEP ou similar) para preencher automaticamente os campos de `Logradouro`, `Bairro`, `Cidade` e `Estado`. Os campos `Número` e `Complemento` devem ser de preenchimento manual.
+
+3.  **Vínculos e Responsáveis:**
+    * **Dentista Responsável:** Campo de seleção (Dropdown) que lista todos os usuários do sistema com a função "Dentista". O paciente deve ser associado a um dentista principal.
+    * **Responsável (para menores):** Campo de texto para o nome do responsável legal.
+    * **CPF do Responsável:** Campo de texto formatado para o CPF do responsável.
+
+4.  **Informações Adicionais e de Marketing:**
+    * **Como nos Conheceu?:** Campo de seleção (Dropdown) com as opções: "Google", "Propaganda de Rádio", "Propaganda de TV", "Redes Sociais", "Indicação", "Outros".
+    * **Funcionalidade Condicional:** Se a opção "Outros" for selecionada, um campo de texto adicional deve aparecer para que o usuário especifique a origem.
+
+5.  **Campos de Histórico (Automáticos e Manuais):**
+    * **Data da Última Visita:**
+        * Deve ser um campo de data que pode ser editado manualmente no cadastro do paciente.
+        * **Automatização:** Este campo deve ser atualizado automaticamente com a data da última entrada registrada na "Movimentação do Tratamento" do paciente.
+    * **Último Contato:**
+        * Campo de data, apenas para registro.
+        * **Nota para o dev:** Este campo será utilizado futuramente por uma funcionalidade de envio de mensagens via WhatsApp. Por enquanto, apenas precisa existir no banco de dados e na tela.
+
+---
+
+#### **Parte 2: Correções de Bugs Críticos**
+
+Os seguintes problemas precisam de atenção imediata:
+
+1.  **Gerenciamento de Usuários:**
+    * **Problema:** Os botões **"Editar"** e **"Excluir"** na tela de gerenciamento de usuários não estão executando suas respectivas funções.
+    * **Ação:** Corrigir a lógica para permitir a edição e a exclusão de usuários.
+
+2.  **Dashboard:**
+    * **Lista de Aniversariantes:**
+        * **Problema:** O componente está exibindo um resultado fixo e incorreto, não refletindo os aniversariantes do dia.
+        * **Ação:** Corrigir a consulta para que exiba corretamente os pacientes que fazem aniversário na data atual.
+    * **Ações Rápidas:**
+        * **Problema:** Os botões **"Novo Agendamento"** e **"Cadastrar Paciente"** não estão funcionando (não redirecionam ou não abrem o formulário correspondente).
+        * **Ação:** Implementar a funcionalidade correta para estes botões.
+
+3.  **Cadastro de Agendamento:**
+    * **Problema:** A funcionalidade de criar um novo agendamento não está salvando os dados ou está apresentando erro.
+    * **Ação:** Depurar e corrigir o processo de criação de agendamentos para que funcione conforme o esperado.
+
+---
+
+#### **Parte 3: Ajustes na Interface e Navegação**
+
+1.  **Menu Principal:**
+    * **Ação:** Remover o item de menu **"Orçamento"**. O acesso aos orçamentos deve ser feito exclusivamente através da área de "Tratamento" de cada paciente.
+
+2.  **Dashboard:**
+    * **Ação:** Retirar completamente os cards/widgets **"Receita do Mês"** e **"Receita Mensal"**. O dashboard não deve exibir informações financeiras.
+    * **Ação:** Retirar o botão **"Criar Orçamento"** da seção de "Ações Rápidas".
+
+---
+
+#### **Parte 4: Evolução do Módulo de Agendamento**
+
+1.  **Visualização de Calendário:**
+    * **Requisito:** Implementar uma interface de agendamento no estilo "Google Agenda".
+    * **Funcionalidades:**
+        * **Visão Diária:** Exibir os agendamentos de um dia específico, divididos por horário.
+        * **Visão Semanal:** Exibir a grade de horários de todos os dias da semana.
+        * **Visão Mensal:** Exibir uma visão geral do mês, indicando os dias que possuem agendamentos.
+
+2.  **Regras de Permissão e Visualização:**
+    * **Perfil Secretária:** Deve ter permissão para visualizar os agendamentos de **todos** os dentistas.
+    * **Perfil Dentista:**
+        * Ao abrir a agenda, a visualização padrão deve mostrar **apenas os seus próprios** agendamentos.
+        * Deve haver um filtro ou seletor que permita ao dentista visualizar a agenda de **outros dentistas** do consultório, caso necessário.

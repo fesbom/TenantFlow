@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,7 @@ import { DashboardStats, Appointment, Patient } from "@/types";
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
 
   // Fetch dashboard stats
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
@@ -86,14 +88,6 @@ export default function Dashboard() {
       bgColor: "bg-blue-100",
     },
     {
-      title: "Receita do Mês",
-      value: `R$ ${(stats?.monthlyRevenue ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      change: "+8%",
-      icon: DollarSign,
-      color: "text-green-600",
-      bgColor: "bg-green-100",
-    },
-    {
       title: "Taxa de Presença",
       value: `${stats?.attendanceRate ?? 0}%`,
       change: "+3%",
@@ -119,14 +113,6 @@ export default function Dashboard() {
       color: "text-green-600",
       bgColor: "bg-green-100",
       href: "/patients",
-    },
-    {
-      title: "Criar Orçamento",
-      description: "Novo orçamento",
-      icon: Receipt,
-      color: "text-purple-600",
-      bgColor: "bg-purple-100",
-      href: "/budgets",
     },
   ];
 
@@ -176,6 +162,7 @@ export default function Dashboard() {
                     key={index}
                     variant="ghost"
                     className="w-full justify-start h-auto p-3 hover:bg-gray-50"
+                    onClick={() => setLocation(action.href)}
                     data-testid={`action-${action.title.toLowerCase().replace(/\s+/g, '-')}`}
                   >
                     <div className={`h-8 w-8 ${action.bgColor} rounded-lg flex items-center justify-center mr-3`}>

@@ -41,7 +41,7 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, and, desc, gte, lte, count } from "drizzle-orm";
+import { eq, and, desc, gte, lte, count, sql, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   // Clinic methods
@@ -234,11 +234,11 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(patients)
       .where(and(eq(patients.id, id), eq(patients.clinicId, clinicId)));
-    return (result.rowCount || 0) > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getBirthdayPatients(clinicId: string, date: Date): Promise<Patient[]> {
-    const month = date.getMonth() + 1;
+    const month = date.getMonth() + 1; // JavaScript months are 0-indexed
     const day = date.getDate();
     
     return await db
@@ -246,7 +246,9 @@ export class DatabaseStorage implements IStorage {
       .from(patients)
       .where(and(
         eq(patients.clinicId, clinicId),
-        // SQL to match month and day
+        isNotNull(patients.birthDate),
+        sql`EXTRACT(MONTH FROM ${patients.birthDate}) = ${month}`,
+        sql`EXTRACT(DAY FROM ${patients.birthDate}) = ${day}`
       ));
   }
 
@@ -303,7 +305,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(appointments)
       .where(and(eq(appointments.id, id), eq(appointments.clinicId, clinicId)));
-    return (result.rowCount || 0) > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Medical record methods
@@ -364,7 +366,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(anamnesisQuestions)
       .where(and(eq(anamnesisQuestions.id, id), eq(anamnesisQuestions.clinicId, clinicId)));
-    return (result.rowCount || 0) > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async createAnamnesisResponse(insertResponse: InsertAnamnesisResponse): Promise<AnamnesisResponse> {
@@ -384,7 +386,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(anamnesisResponses)
       .where(eq(anamnesisResponses.treatmentId, treatmentId));
-    return (result.rowCount || 0) > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getAnamnesisWithResponsesByTreatment(treatmentId: string, clinicId: string): Promise<Array<{
@@ -408,7 +410,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(anamnesisQuestions.clinicId, clinicId))
       .orderBy(anamnesisQuestions.createdAt);
 
-    return result;
+    return result.map(row => ({
+      questionId: row.questionId,
+      question: row.question,
+      response: row.response || undefined,
+      createdAt: row.createdAt?.toISOString() || undefined,
+    }));
   }
 
   // Budget methods
@@ -446,7 +453,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(budgets)
       .where(and(eq(budgets.id, id), eq(budgets.clinicId, clinicId)));
-    return (result.rowCount || 0) > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Dashboard stats
@@ -629,6 +636,27 @@ export class DatabaseStorage implements IStorage {
   // Treatment Movement methods
   async createTreatmentMovement(insertMovement: InsertTreatmentMovement): Promise<TreatmentMovement> {
     const [movement] = await db.insert(treatmentMovements).values(insertMovement).returning();
+    
+    // Update patient's last visit date automatically
+    try {
+      // Get the treatment to find the patient
+      const [treatment] = await db
+        .select({ patientId: treatments.patientId })
+        .from(treatments)
+        .where(eq(treatments.id, insertMovement.treatmentId));
+      
+      if (treatment) {
+        // Update patient's last visit date to today
+        await db
+          .update(patients)
+          .set({ lastVisitDate: new Date().toISOString().split('T')[0] }) // YYYY-MM-DD format
+          .where(eq(patients.id, treatment.patientId));
+      }
+    } catch (error) {
+      console.error('Error updating patient last visit date:', error);
+      // Don't throw - the movement was created successfully
+    }
+    
     return movement;
   }
 
@@ -715,7 +743,7 @@ export class DatabaseStorage implements IStorage {
       .update(passwordResetTokens)
       .set({ isUsed: true })
       .where(eq(passwordResetTokens.token, token));
-    return (result.rowCount || 0) > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async deleteExpiredTokens(): Promise<void> {
