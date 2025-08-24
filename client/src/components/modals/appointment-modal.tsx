@@ -75,10 +75,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
-      const response = await apiRequest("POST", "/api/appointments", {
-        ...data,
-        scheduledDate: new Date(data.scheduledDate).toISOString(),
-      });
+      const response = await apiRequest("POST", "/api/appointments", data);
       return response.json();
     },
     onSuccess: () => {
@@ -101,10 +98,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   const updateAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
-      const response = await apiRequest("PUT", `/api/appointments/${appointment!.id}`, {
-        ...data,
-        scheduledDate: new Date(data.scheduledDate).toISOString(),
-      });
+      const response = await apiRequest("PUT", `/api/appointments/${appointment!.id}`, data);
       return response.json();
     },
     onSuccess: () => {

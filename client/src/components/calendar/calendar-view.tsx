@@ -15,6 +15,7 @@ import AppointmentModal from "@/components/modals/appointment-modal";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter } from "lucide-react";
 
 // Configure moment for Portuguese
+import 'moment/locale/pt-br';
 moment.locale('pt-br');
 const localizer = momentLocalizer(moment);
 
