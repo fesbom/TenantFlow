@@ -53,14 +53,15 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   useEffect(() => {
     if (appointment) {
-      // Convert UTC to local time for display
+      // Convert UTC to BRT for display: UTC - 3 hours = BRT
+      // Database has 13:00 UTC → should display as 10:00 BRT
       const utcDate = new Date(appointment.scheduledDate);
-      const localDate = new Date(utcDate.getTime() - (utcDate.getTimezoneOffset() * 60000));
+      const brtDate = new Date(utcDate.getTime() - (3 * 60 * 60 * 1000)); // Subtract 3 hours for UTC→BRT
       
       setFormData({
         patientId: appointment.patientId,
         dentistId: appointment.dentistId,
-        scheduledDate: localDate.toISOString().slice(0, 16),
+        scheduledDate: brtDate.toISOString().slice(0, 16),
         duration: appointment.duration || 60,
         procedure: appointment.procedure || "",
         notes: appointment.notes || "",
@@ -69,7 +70,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
       setFormData({
         patientId: "",
         dentistId: "",
-        scheduledDate: initialDateTime ? new Date(initialDateTime.getTime() - (initialDateTime.getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : "",
+        scheduledDate: initialDateTime ? new Date(initialDateTime.getTime() - (3 * 60 * 60 * 1000)).toISOString().slice(0, 16) : "",
         duration: 60,
         procedure: "",
         notes: "",
@@ -79,9 +80,11 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
-      // Convert local time to UTC for backend
-      const localDate = new Date(data.scheduledDate);
-      const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+      // Convert BRT to UTC: BRT + 3 hours = UTC
+      // User enters 10:00 BRT → should save as 13:00 UTC
+      const localDateTime = data.scheduledDate; // "2025-08-25T10:00"
+      const localDate = new Date(localDateTime);
+      const utcDate = new Date(localDate.getTime() + (3 * 60 * 60 * 1000)); // Add 3 hours for BRT→UTC
       
       const requestData = {
         ...data,
@@ -111,9 +114,11 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   const updateAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
-      // Convert local time to UTC for backend
-      const localDate = new Date(data.scheduledDate);
-      const utcDate = new Date(localDate.getTime() + (localDate.getTimezoneOffset() * 60000));
+      // Convert BRT to UTC: BRT + 3 hours = UTC
+      // User enters 10:00 BRT → should save as 13:00 UTC  
+      const localDateTime = data.scheduledDate; // "2025-08-25T10:00"
+      const localDate = new Date(localDateTime);
+      const utcDate = new Date(localDate.getTime() + (3 * 60 * 60 * 1000)); // Add 3 hours for BRT→UTC
       
       const requestData = {
         ...data,

@@ -1,0 +1,36 @@
+Objetivo: Corrigir o bug que faz com que os agendamentos sejam salvos no banco de dados com um horário 3 horas adiantado em relação ao que foi inserido pelo usuário.
+
+Contexto: Olá! A correção anterior resolveu a divergência de exibição entre a grade do calendário e o modal de edição. Agradeço por isso. Agora, ao testar a funcionalidade de salvar, identifiquei um novo problema: a hora que eu insiro no formulário não é a mesma que é gravada.
+
+Descrição Exata do Bug (Passos para Reproduzir):
+Ação: Clico para criar ou editar um agendamento e, no formulário, insiro o horário de 10:00.
+
+Salvar: Clico no botão "Salvar". Nenhuma mensagem de erro é exibida.
+
+O BUG: O agendamento aparece na grade do calendário às 13:00, e não às 10:00 como foi inserido. Ao reabrir para editar, ele também mostra 13:00. Verifiquei que o valor salvo no banco de dados está com 3 horas a mais.
+
+Hipótese Técnica do Problema:
+O problema agora está na lógica do backend ao receber os dados do formulário.
+
+O frontend está enviando a hora local corretamente (ex: "2025-08-25T10:00:00").
+
+O backend, ao receber essa informação, está realizando uma conversão de fuso horário incorreta. Ele provavelmente está interpretando "10:00" como se já fosse UTC e, em seguida, aplicando um ajuste adicional de +3 horas, ou está aplicando a conversão de BRT para UTC (somando 3 horas) a um horário que já foi indevidamente ajustado.
+
+Solicitação de Correção (O que precisa ser feito):
+É necessário revisar a rota da API responsável por criar (POST) e atualizar (PUT/PATCH) os agendamentos.
+
+Analisar a Conversão no Backend: Verifique como o backend está recebendo a string de data/hora do frontend e a convertendo para um objeto Date antes de salvar no banco de dados.
+
+Implementar a Lógica Correta: O backend deve assumir que a data/hora recebida do frontend está no fuso horário local (America/Sao_Paulo). Ele deve simplesmente salvar esse valor de forma que, ao ser lido, ele represente a hora local inserida. A maneira mais robusta é padronizar o armazenamento em UTC.
+
+Comportamento Esperado:
+
+Usuário digita: 10:00 (no fuso horário de Brasília, BRT, UTC-3).
+
+Backend recebe: A informação correspondente a 10:00 BRT.
+
+Backend salva no banco (em UTC): O equivalente a 10:00 BRT, que é 13:00 UTC (ex: 2025-08-25T13:00:00.000Z).
+
+Frontend lê e exibe: A aplicação lê 13:00 UTC do banco e exibe 10:00 na tela para o usuário no Brasil.
+
+Por favor, ajuste a lógica de salvamento no backend para garantir que a hora informada pelo usuário seja a hora que efetivamente fica registrada no calendário.
