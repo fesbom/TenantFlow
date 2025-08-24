@@ -120,10 +120,10 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 flex-1 w-full">
         <Header title="Dashboard" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-6">
+        <main className="p-6 w-full max-w-none">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {statsCards.map((stat, index) => (

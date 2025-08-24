@@ -175,10 +175,10 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-slate-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 flex-1 w-full">
         <Header title="Configurações" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-4 lg:p-6">
+        <main className="p-4 lg:p-6 w-full max-w-none">
           {currentUser?.role !== "admin" ? (
             <Card>
               <CardContent className="p-8 text-center text-gray-500">

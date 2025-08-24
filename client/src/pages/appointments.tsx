@@ -10,11 +10,11 @@ export default function Appointments() {
     <div className="min-h-screen bg-slate-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 flex-1 w-full">
         <Header title="Agenda" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-4 lg:p-6">
-          <CalendarView />
+        <main className="p-4 lg:p-6 w-full max-w-none">
+          <CalendarView className="w-full" />
         </main>
       </div>
     </div>

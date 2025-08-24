@@ -140,10 +140,10 @@ export default function MedicalRecords() {
     <div className="min-h-screen bg-slate-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 flex-1 w-full">
         <Header title="Prontuários" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-4 lg:p-6">
+        <main className="p-4 lg:p-6 w-full max-w-none">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Patients List */}
             <div className="lg:col-span-3">

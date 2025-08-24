@@ -349,7 +349,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                 step={30}
                 timeslots={2}
                 min={new Date(2024, 0, 1, 8, 0)} // 8:00 AM
-                max={new Date(2024, 0, 1, 18, 0)} // 6:00 PM
+                max={new Date(2024, 0, 1, 20, 0)} // 8:00 PM
                 timezone="local"
                 components={{
                   event: EventComponent,
