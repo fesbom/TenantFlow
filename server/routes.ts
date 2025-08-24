@@ -495,11 +495,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/appointments", authenticateToken, requireRole(["admin", "secretary"]), async (req: AuthenticatedRequest, res) => {
     try {
-      const appointmentData = insertAppointmentSchema.parse({
-        ...req.body,
-        clinicId: req.user!.clinicId,
-      });
-
+      let requestData = { ...req.body, clinicId: req.user!.clinicId };
+      
+      // Convert scheduledDate string to Date object
+      if (requestData.scheduledDate) {
+        requestData.scheduledDate = new Date(requestData.scheduledDate);
+      }
+      
+      const appointmentData = insertAppointmentSchema.parse(requestData);
       const appointment = await storage.createAppointment(appointmentData);
       res.status(201).json(appointment);
     } catch (error: any) {

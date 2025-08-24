@@ -47,7 +47,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment }: Appoi
     queryKey: ["/api/users"],
   });
 
-  const dentists = users.filter(user => user.role === "dentist" || user.role === "admin");
+  const dentists = users.filter(user => user.role === "dentist");
 
   useEffect(() => {
     if (appointment) {
