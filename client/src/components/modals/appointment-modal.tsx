@@ -53,25 +53,24 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   useEffect(() => {
     if (appointment) {
-      // Convert UTC to BRT for display
-      // Example: Database has "2025-08-25T19:00:00.000Z" (UTC) → should display as "16:00" (BRT)
-      const utcDate = new Date(appointment.scheduledDate);
-      console.log('UTC date from DB:', utcDate.toISOString());
+      // NO TIMEZONE CONVERSION - Use date as literal value
+      // Database has "2025-08-25T16:00:00" → display exactly "16:00"
+      const appointmentDate = appointment.scheduledDate;
+      let formattedDateTime = "";
       
-      // Create BRT date by subtracting 3 hours
-      const brtHours = utcDate.getUTCHours() - 3;
-      const brtDate = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), brtHours, utcDate.getUTCMinutes());
-      console.log('BRT date for display:', brtDate.toISOString());
-      
-      // Format for datetime-local input (YYYY-MM-DDTHH:MM)
-      const year = brtDate.getFullYear();
-      const month = String(brtDate.getMonth() + 1).padStart(2, '0');
-      const day = String(brtDate.getDate()).padStart(2, '0');
-      const hours = String(brtDate.getHours()).padStart(2, '0');
-      const minutes = String(brtDate.getMinutes()).padStart(2, '0');
-      const formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-      
-      console.log('Formatted for input:', formattedDateTime);
+      if (typeof appointmentDate === 'string') {
+        // If it's already a string like "2025-08-25T16:00:00.000Z", strip the Z and use as-is
+        formattedDateTime = appointmentDate.replace(/Z$/, '').slice(0, 16);
+      } else {
+        // If it's a Date object, convert to local string without timezone conversion
+        const date = new Date(appointmentDate);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      }
       
       setFormData({
         patientId: appointment.patientId,
@@ -82,7 +81,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
         notes: appointment.notes || "",
       });
     } else {
-      // For new appointments created by clicking on calendar
+      // For new appointments - use the clicked time as-is
       let formattedDateTime = "";
       if (initialDateTime) {
         const year = initialDateTime.getFullYear();
@@ -106,15 +105,11 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
-      // Convert BRT to UTC: BRT + 3 hours = UTC
-      // User enters 10:00 BRT → should save as 13:00 UTC
-      const localDateTime = data.scheduledDate; // "2025-08-25T10:00"
-      const localDate = new Date(localDateTime);
-      const utcDate = new Date(localDate.getTime() + (3 * 60 * 60 * 1000)); // Add 3 hours for BRT→UTC
-      
+      // NO TIMEZONE CONVERSION - Send exactly what user typed
+      // User enters 16:00 → save exactly 16:00
       const requestData = {
         ...data,
-        scheduledDate: utcDate.toISOString(),
+        scheduledDate: data.scheduledDate, // Send as literal string "2025-08-25T16:00"
       };
       
       const response = await apiRequest("POST", "/api/appointments", requestData);
@@ -140,15 +135,11 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   const updateAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
-      // Convert BRT to UTC: BRT + 3 hours = UTC
-      // User enters 10:00 BRT → should save as 13:00 UTC  
-      const localDateTime = data.scheduledDate; // "2025-08-25T10:00"
-      const localDate = new Date(localDateTime);
-      const utcDate = new Date(localDate.getTime() + (3 * 60 * 60 * 1000)); // Add 3 hours for BRT→UTC
-      
+      // NO TIMEZONE CONVERSION - Send exactly what user typed  
+      // User enters 16:00 → save exactly 16:00
       const requestData = {
         ...data,
-        scheduledDate: utcDate.toISOString(),
+        scheduledDate: data.scheduledDate, // Send as literal string "2025-08-25T16:00"
       };
       
       const response = await apiRequest("PUT", `/api/appointments/${appointment!.id}`, requestData);

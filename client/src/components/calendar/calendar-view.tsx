@@ -101,10 +101,9 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   // Convert appointments to calendar events
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     return filteredAppointments.map(appointment => {
-      // Convert UTC to BRT for display: UTC - 3 hours = BRT
-      // Database has 13:00 UTC → should display as 10:00 BRT
-      const utcDate = new Date(appointment.scheduledDate);
-      const start = new Date(utcDate.getTime() - (3 * 60 * 60 * 1000)); // Subtract 3 hours for UTC→BRT
+      // NO TIMEZONE CONVERSION - Use date as literal value
+      // Database has "16:00" → display exactly "16:00"  
+      const start = new Date(appointment.scheduledDate);
       const end = new Date(start.getTime() + (appointment.duration || 60) * 60000); // duration in minutes
       
       return {

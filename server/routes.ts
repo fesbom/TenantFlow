@@ -497,7 +497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let requestData = { ...req.body, clinicId: req.user!.clinicId };
       
-      // Convert scheduledDate string to Date object
+      // NO TIMEZONE CONVERSION - Save exactly what was received
       if (requestData.scheduledDate) {
         requestData.scheduledDate = new Date(requestData.scheduledDate);
       }
@@ -537,7 +537,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let updateData = { ...req.body };
       
-      // Convert scheduledDate string to Date object
+      // NO TIMEZONE CONVERSION - Save exactly what was received
       if (updateData.scheduledDate) {
         updateData.scheduledDate = new Date(updateData.scheduledDate);
       }

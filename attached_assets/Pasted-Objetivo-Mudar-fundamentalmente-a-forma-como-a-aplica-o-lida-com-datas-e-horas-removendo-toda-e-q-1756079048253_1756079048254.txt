@@ -1,0 +1,40 @@
+Objetivo: Mudar fundamentalmente a forma como a aplicação lida com datas e horas, removendo toda e qualquer conversão de fuso horário para garantir consistência e eliminar bugs recorrentes.
+
+Contexto: Olá. Após múltiplas tentativas de corrigir os bugs de fuso horário (UTC vs. Horário Local), ficou claro que a lógica de conversão está gerando instabilidade. Vamos simplificar radicalmente a abordagem.
+
+A Nova Regra de Ouro:
+O sistema não deve mais realizar NENHUMA conversão de fuso horário. A hora que o usuário digita é a hora que deve ser salva, e essa mesma hora é a que deve ser exibida em TODOS os lugares (grade do calendário, modal de edição, etc.). O sistema deve operar como se fuso horário não existisse.
+
+Plano de Ação Detalhado:
+1. Lógica de Gravação (Salvar no Banco de Dados):
+
+O que o usuário faz: Digita 16:00 no formulário de agendamento.
+
+O que o sistema faz: Envia a informação "16:00" para o backend. O backend deve salvar no banco de dados um valor que represente exatamente "16:00", sem adicionar ou subtrair horas. O valor no banco deve ser um reflexo literal do input do usuário.
+
+Exemplo: Salvar como 2025-08-25T16:00:00 (sem o Z de Zulu/UTC). Se o tipo da coluna no banco for TIMESTAMP WITHOUT TIME ZONE (ou similar), isso funcionará perfeitamente.
+
+2. Lógica de Leitura (Exibir na Tela):
+
+O que o sistema faz: O backend lê o valor literal do banco de dados (ex: 2025-08-25T16:00:00) e o envia para o frontend.
+
+O que o frontend faz: O frontend (tanto a grade do calendário quanto o modal de edição) deve pegar este valor e exibi-lo exatamente como ele é.
+
+A grade do calendário deve mostrar um evento às 16:00.
+
+O modal de edição deve mostrar 16:00 no campo de horário.
+
+Atenção: É crucial garantir que as bibliotecas do frontend (FullCalendar, manipuladores de data) não tentem aplicar automaticamente uma conversão de fuso horário do sistema do usuário. Elas devem ser configuradas para tratar as datas como "flutuantes" ou locais.
+
+Tarefa para o Desenvolvedor:
+Por favor, revise todo o fluxo de dados de agendamento (frontend e backend) e remova toda e qualquer lógica de conversão de fuso horário. Isso inclui:
+
+Remover funções que somam ou subtraem 3 horas.
+
+Remover o uso de métodos como .toUTCString(), .toISOString() se eles estiverem causando conversões indesejadas.
+
+Garantir que o backend trate a data recebida como um valor literal.
+
+Configurar os componentes do frontend para exibirem o valor literal recebido do backend.
+
+O comportamento final deve ser simples e previsível: Se eu agendar às 16:00, quero ver 16:00 em todos os lugares, sempre.
