@@ -1,0 +1,65 @@
+Objetivo: Substituir a atual visualização de agendamentos em tabela por uma interface de calendário interativa e visual, similar ao Google Agenda, para otimizar a gestão de horários da clínica.
+
+Contexto: A listagem em tabela de agendamentos é ineficiente para a visualização de horários vagos e para o gerenciamento diário. A clínica precisa de uma ferramenta visual que permita uma compreensão rápida da ocupação dos dentistas e facilite a marcação, edição e exclusão de consultas.
+
+1. Requisitos Fundamentais da Interface (O Layout)
+Componente de Calendário: A implementação deve utilizar uma biblioteca de front-end robusta para calendários, como FullCalendar.js ou uma similar (ex: React Big Calendar), para garantir a interatividade e visualização profissional.
+
+Visualização Principal (Padrão): A visão padrão deve ser a Visão Semanal (timeGridWeek), mostrando os dias da semana nas colunas e os horários em linhas (ex: das 8h às 18h, com intervalos de 30 minutos).
+
+Outras Visualizações: A interface deve ter botões para alternar entre:
+
+Visão Diária (timeGridDay): Foco em um único dia.
+
+Visão Mensal (dayGridMonth): Visão geral do mês.
+
+Exibição dos Agendamentos: Cada agendamento deve aparecer como um bloco colorido na grade, posicionado no dia e horário corretos. O bloco deve exibir informações essenciais, como o nome do paciente.
+
+2. Interatividade para Gerenciamento (As Ações)
+Criar Novo Agendamento:
+
+Ação: O usuário deve poder clicar em um horário vago na grade da agenda (seja na visão diária ou semanal).
+
+Resultado: Ao clicar, o sistema deve abrir um modal (janela pop-up) para a criação do novo agendamento.
+
+Dados no Modal: O formulário deve conter campos para selecionar o Paciente, o Dentista, e as Observações. A Data e Hora de Início/Fim devem ser preenchidas automaticamente com base no local clicado na grade.
+
+Editar e Excluir Agendamento Existente:
+
+Ação: O usuário deve poder clicar em um agendamento já existente (um bloco colorido) na grade.
+
+Resultado: Ao clicar, deve abrir um modal ou um pop-over exibindo os detalhes do agendamento (Paciente, Dentista, Horário, Observações).
+
+Opções no Modal: Esta janela deve conter claramente os botões:
+
+"Editar": Abre o mesmo formulário de criação, mas já preenchido com os dados do agendamento, permitindo a alteração.
+
+"Excluir": Solicita uma confirmação ("Você tem certeza?") e, se confirmado, remove o agendamento da agenda e do banco de dados.
+
+3. Filtros e Navegação
+Filtro por Dentista:
+
+Componente: A interface deve conter um filtro de seleção (Dropdown) bem visível, listando todos os dentistas cadastrados e uma opção "Todos".
+
+Funcionalidade: Ao selecionar um dentista, a agenda deve atualizar dinamicamente, exibindo apenas os agendamentos do profissional selecionado. A seleção de "Todos" mostra a agenda completa da clínica (útil para a secretária).
+
+Navegação no Tempo:
+
+Controles: Incluir botões de navegação padrão:
+
+Setas < e >: Para avançar ou retroceder para a semana/dia/mês seguinte ou anterior.
+
+Botão "Hoje": Para retornar rapidamente para a data atual.
+
+Resumo Técnico para o Desenvolvedor:
+Front-End: A prioridade é a implementação da interface visual. Recomendo fortemente o uso da biblioteca FullCalendar para atender a todos os requisitos de visualização e interatividade (clicar, arrastar, redimensionar).
+
+Back-End (API): O front-end deverá se comunicar com o back-end através de uma API para:
+
+Buscar os agendamentos (com capacidade de filtrar por intervalo de datas e por dentista_id).
+
+Salvar novos agendamentos.
+
+Atualizar agendamentos existentes.
+
+Excluir agendamentos.

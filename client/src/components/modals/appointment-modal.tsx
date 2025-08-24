@@ -7,13 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/api";
+import { apiRequest } from "@/lib/queryClient";
 import { Appointment, Patient, User } from "@/types";
 
 interface AppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   appointment?: Appointment | null;
+  initialDateTime?: Date;
+  onDelete?: (appointment: Appointment) => void;
 }
 
 interface AppointmentFormData {
@@ -25,7 +27,7 @@ interface AppointmentFormData {
   notes: string;
 }
 
-export default function AppointmentModal({ isOpen, onClose, appointment }: AppointmentModalProps) {
+export default function AppointmentModal({ isOpen, onClose, appointment, initialDateTime, onDelete }: AppointmentModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -63,13 +65,13 @@ export default function AppointmentModal({ isOpen, onClose, appointment }: Appoi
       setFormData({
         patientId: "",
         dentistId: "",
-        scheduledDate: "",
+        scheduledDate: initialDateTime ? initialDateTime.toISOString().slice(0, 16) : "",
         duration: 60,
         procedure: "",
         notes: "",
       });
     }
-  }, [appointment]);
+  }, [appointment, initialDateTime]);
 
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormData) => {
@@ -238,26 +240,42 @@ export default function AppointmentModal({ isOpen, onClose, appointment }: Appoi
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              data-testid="button-cancel-appointment"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={createAppointmentMutation.isPending || updateAppointmentMutation.isPending}
-              data-testid="button-save-appointment"
-            >
-              {createAppointmentMutation.isPending || updateAppointmentMutation.isPending
-                ? "Salvando..."
-                : appointment
-                ? "Atualizar"
-                : "Criar Agendamento"}
-            </Button>
+          <div className="flex justify-between pt-4 border-t">
+            {appointment && onDelete && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  onDelete(appointment);
+                  onClose();
+                }}
+                data-testid="button-delete-appointment"
+              >
+                Excluir
+              </Button>
+            )}
+            
+            <div className="flex space-x-3 ml-auto">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                data-testid="button-cancel-appointment"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={createAppointmentMutation.isPending || updateAppointmentMutation.isPending}
+                data-testid="button-save-appointment"
+              >
+                {createAppointmentMutation.isPending || updateAppointmentMutation.isPending
+                  ? "Salvando..."
+                  : appointment
+                  ? "Atualizar"
+                  : "Criar Agendamento"}
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>
