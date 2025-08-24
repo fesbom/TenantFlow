@@ -539,15 +539,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let updateData = { ...req.body };
       
+      console.log('Update appointment data received:', updateData);
+      
       // Convert scheduledDate string to Date object maintaining local time
       if (updateData.scheduledDate) {
         const localDate = new Date(updateData.scheduledDate);
         // Adjust for timezone offset to maintain local time
         updateData.scheduledDate = new Date(localDate.getTime() + localDate.getTimezoneOffset() * 60000);
+        console.log('Converted scheduledDate:', updateData.scheduledDate);
       }
       
       const parsedData = insertAppointmentSchema.partial().parse(updateData);
+      console.log('Parsed data for update:', parsedData);
+      
       const appointment = await storage.updateAppointment(req.params.id, parsedData, req.user!.clinicId);
+      console.log('Updated appointment result:', appointment);
       
       if (!appointment) {
         return res.status(404).json({ message: "Appointment not found" });
