@@ -53,14 +53,10 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
 
   useEffect(() => {
     if (appointment) {
-      // Convert to local time for display in the form
-      const localDate = new Date(appointment.scheduledDate);
-      const localDateString = new Date(localDate.getTime() - localDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-      
       setFormData({
         patientId: appointment.patientId,
         dentistId: appointment.dentistId,
-        scheduledDate: localDateString,
+        scheduledDate: new Date(appointment.scheduledDate).toISOString().slice(0, 16),
         duration: appointment.duration || 60,
         procedure: appointment.procedure || "",
         notes: appointment.notes || "",
@@ -69,7 +65,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
       setFormData({
         patientId: "",
         dentistId: "",
-        scheduledDate: initialDateTime ? new Date(initialDateTime.getTime() - initialDateTime.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "",
+        scheduledDate: initialDateTime ? initialDateTime.toISOString().slice(0, 16) : "",
         duration: 60,
         procedure: "",
         notes: "",

@@ -497,11 +497,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       let requestData = { ...req.body, clinicId: req.user!.clinicId };
       
-      // Convert scheduledDate string to Date object maintaining local time
+      // Convert scheduledDate string to Date object
       if (requestData.scheduledDate) {
-        const localDate = new Date(requestData.scheduledDate);
-        // Adjust for timezone offset to maintain local time
-        requestData.scheduledDate = new Date(localDate.getTime() + localDate.getTimezoneOffset() * 60000);
+        requestData.scheduledDate = new Date(requestData.scheduledDate);
       }
       
       const appointmentData = insertAppointmentSchema.parse(requestData);
@@ -541,11 +539,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log('Update appointment data received:', updateData);
       
-      // Convert scheduledDate string to Date object maintaining local time
+      // Convert scheduledDate string to Date object
       if (updateData.scheduledDate) {
-        const localDate = new Date(updateData.scheduledDate);
-        // Adjust for timezone offset to maintain local time
-        updateData.scheduledDate = new Date(localDate.getTime() + localDate.getTimezoneOffset() * 60000);
+        updateData.scheduledDate = new Date(updateData.scheduledDate);
         console.log('Converted scheduledDate:', updateData.scheduledDate);
       }
       
