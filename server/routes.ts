@@ -336,11 +336,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/patients", authenticateToken, requireRole(["admin", "secretary"]), async (req: AuthenticatedRequest, res) => {
     try {
-      const patientData = insertPatientSchema.parse({
-        ...req.body,
-        clinicId: req.user!.clinicId,
+      let requestData = { ...req.body, clinicId: req.user!.clinicId };
+      
+      // Clean up empty date fields - convert empty strings to null
+      const dateFields = ['birthDate', 'lastVisitDate', 'lastContactDate'];
+      dateFields.forEach(field => {
+        if (requestData[field] === "" || requestData[field] === undefined) {
+          requestData[field] = null;
+        }
       });
-
+      
+      const patientData = insertPatientSchema.parse(requestData);
       const patient = await storage.createPatient(patientData);
       res.status(201).json(patient);
     } catch (error) {
@@ -364,7 +370,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/patients/:id", authenticateToken, requireRole(["admin", "secretary"]), async (req: AuthenticatedRequest, res) => {
     try {
-      const updateData = insertPatientSchema.partial().parse(req.body);
+      let updateData = insertPatientSchema.partial().parse(req.body);
+      
+      // Clean up empty date fields - convert empty strings to null
+      const dateFields = ['birthDate', 'lastVisitDate', 'lastContactDate'];
+      dateFields.forEach(field => {
+        if (updateData[field] === "" || updateData[field] === undefined) {
+          updateData[field] = null;
+        }
+      });
+      
       const patient = await storage.updatePatient(req.params.id, updateData, req.user!.clinicId);
       
       if (!patient) {
