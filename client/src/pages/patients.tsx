@@ -75,7 +75,7 @@ export default function Patients() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-container bg-slate-50">
       <Sidebar 
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)}
@@ -83,14 +83,10 @@ export default function Patients() {
         onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
       />
       
-      <div 
-        className={`flex-1 w-full ${
-          sidebarExpanded ? "main-content-expanded" : "main-content-collapsed"
-        }`}
-      >
+      <div className="main-content">
         <Header title="Pacientes" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-4 lg:p-6 w-full max-w-none">
+        <main className="p-4 lg:p-6 flex-grow">
           {/* Search and Actions */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="relative flex-1">

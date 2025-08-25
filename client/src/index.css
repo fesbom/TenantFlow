@@ -111,18 +111,30 @@
     @apply bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl;
   }
 
-  /* Layout responsivo para sidebar expansível */
-  @media (min-width: 1024px) {
-    /* Seletor específico para estado recolhido */
-    body .main-content-collapsed {
-      margin-left: 80px;
-      transition: margin-left 0.3s ease-in-out;
-    }
-    
-    /* Seletor específico para estado expandido */  
-    body .main-content-expanded {
-      margin-left: 256px;
-      transition: margin-left 0.3s ease-in-out;
-    }
+  /* SOLUÇÃO DEFINITIVA COM FLEXBOX - Layout Sidebar + Conteúdo */
+  .app-container {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+  }
+  
+  /* Sidebar - Largura fixa e flexível */
+  .sidebar {
+    flex-shrink: 0;
+    width: 80px; /* Largura padrão (recolhido) */
+    transition: width 0.3s ease-in-out;
+  }
+  
+  /* Sidebar expandido */
+  .sidebar-expanded {
+    width: 256px; /* Largura quando expandido */
+  }
+  
+  /* Conteúdo principal - Ocupa todo espaço restante */
+  .main-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
   }
 }

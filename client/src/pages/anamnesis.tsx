@@ -150,7 +150,7 @@ export default function Anamnesis() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-container bg-slate-50">
       <Sidebar 
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)}
@@ -158,14 +158,10 @@ export default function Anamnesis() {
         onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
       />
       
-      <div 
-        className={`flex-1 w-full ${
-          sidebarExpanded ? "main-content-expanded" : "main-content-collapsed"
-        }`}
-      >
+      <div className="main-content">
         <Header title="Anamnese" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-4 lg:p-6 w-full max-w-none">
+        <main className="p-4 lg:p-6 flex-grow">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Question Form */}
             <div className="lg:col-span-1">

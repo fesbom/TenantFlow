@@ -118,7 +118,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-container bg-slate-50">
       <Sidebar 
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)}
@@ -126,14 +126,10 @@ export default function Dashboard() {
         onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
       />
       
-      <div 
-        className={`flex-1 w-full ${
-          sidebarExpanded ? "main-content-expanded" : "main-content-collapsed"
-        }`}
-      >
+      <div className="main-content">
         <Header title="Dashboard" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-6 w-full max-w-none">
+        <main className="p-6 flex-grow">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {statsCards.map((stat, index) => (

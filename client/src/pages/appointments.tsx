@@ -8,7 +8,7 @@ export default function Appointments() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-container bg-slate-50">
       <Sidebar 
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)}
@@ -16,14 +16,10 @@ export default function Appointments() {
         onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
       />
       
-      <div 
-        className={`flex-1 w-full ${
-          sidebarExpanded ? "main-content-expanded" : "main-content-collapsed"
-        }`}
-      >
+      <div className="main-content">
         <Header title="Agenda" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-4 lg:p-6 w-full max-w-none">
+        <main className="p-4 lg:p-6 flex-grow">
           <CalendarView className="w-full" />
         </main>
       </div>

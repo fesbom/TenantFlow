@@ -1,0 +1,64 @@
+Objetivo: Eliminar permanentemente o bug de layout, reconstruindo a estrutura da página com CSS Flexbox, um método moderno e à prova de falhas para este tipo de interface.
+
+Contexto: Após múltiplas tentativas falhas, está claro que a abordagem atual de ajustar margens não é suficiente. Sua descrição de que o conteúdo é "empurrado para baixo" confirma que precisamos de uma solução estrutural. Peço que descarte as abordagens anteriores e implemente esta solução definitiva.
+
+Ação Requerida: Implementar Layout com Flexbox
+Vamos definir explicitamente como o menu lateral e o conteúdo principal devem se comportar, garantindo que eles sempre fiquem lado a lado.
+
+Passo 1: Verifique a Estrutura HTML
+
+Garanta que o HTML da sua aplicação tenha uma estrutura similar a esta, onde o menu lateral (sidebar) e o conteúdo principal (main-content) são irmãos, filhos diretos de um contêiner pai (pode ser o <body> ou um div principal).
+
+HTML
+
+<body>
+  <aside class="sidebar">
+    </aside>
+
+  <main class="main-content">
+    </main>
+
+  </body>
+Passo 2: Aplique o CSS Flexbox (A Solução Definitiva)
+
+Remova as regras de CSS anteriores (margin-left, etc.) do contêiner principal e aplique esta nova lógica ao contêiner pai (ex: <body>).
+
+CSS
+
+/*
+ * ESTE É O CÓDIGO QUE DEVE SER IMPLEMENTADO PARA CORRIGIR O LAYOUT
+ */
+
+/* 1. Transforma o container principal em um layout flexível */
+body { /* Ou o seletor do seu container principal, ex: #app-container */
+  display: flex;
+  flex-direction: row;
+}
+
+/* 2. Define o comportamento do menu lateral (Sidebar) */
+.sidebar {
+  flex-shrink: 0; /* Impede que o menu encolha */
+  width: 80px; /* Largura padrão (recolhido) */
+  transition: width 0.3s ease-in-out; /* Animação suave */
+  /* Adicione outros estilos necessários (background, etc.) */
+}
+
+/* 3. Define a largura do menu quando ele está expandido */
+body.sidebar-expanded .sidebar {
+  width: 256px; /* Largura quando expandido */
+}
+
+/* 4. Define o comportamento do conteúdo principal */
+.main-content {
+  flex-grow: 1; /* Faz o conteúdo ocupar todo o espaço restante */
+  overflow-y: auto; /* Adiciona scroll se o conteúdo for maior que a tela */
+  padding: 20px; /* Exemplo de espaçamento interno */
+}
+Por que esta solução funciona?
+display: flex; cria um contexto onde os filhos diretos (.sidebar e .main-content) são alinhados em uma linha.
+
+.sidebar tem uma largura fixa (width) que muda quando a classe .sidebar-expanded é aplicada ao <body>. flex-shrink: 0 garante que ele nunca seja espremido.
+
+.main-content com flex-grow: 1 é a regra mais importante: ela força o conteúdo a se "esticar" e ocupar todo e qualquer espaço horizontal restante, garantindo que nunca haverá um espaço em branco e que o conteúdo nunca será empurrado para baixo.
+
+Por favor, substitua a lógica de layout atual por esta implementação com Flexbox. É o padrão da indústria para este exato cenário e resolverá o problema de forma definitiva.

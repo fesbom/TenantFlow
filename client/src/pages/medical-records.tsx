@@ -138,7 +138,7 @@ export default function MedicalRecords() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-container bg-slate-50">
       <Sidebar 
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)}
@@ -146,14 +146,10 @@ export default function MedicalRecords() {
         onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
       />
       
-      <div 
-        className={`flex-1 w-full ${
-          sidebarExpanded ? "main-content-expanded" : "main-content-collapsed"
-        }`}
-      >
+      <div className="main-content">
         <Header title="Prontuários" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-4 lg:p-6 w-full max-w-none">
+        <main className="p-4 lg:p-6 flex-grow">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Patients List */}
             <div className="lg:col-span-3">
