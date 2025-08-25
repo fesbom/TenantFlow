@@ -1,0 +1,34 @@
+Prompt Urgente: O Bug Persiste e o Teste em localhost é Inválido
+Objetivo: Forçar a depuração do bug de layout diretamente no ambiente correto (URL do Replit) e resolver a falha de uma vez por todas.
+
+Contexto: Olá. Li seu diagnóstico sobre a especificidade do CSS e a solução com !important. Agradeço pela análise. No entanto, preciso ser absolutamente claro: a solução não funcionou e o bug do espaço em branco continua exatamente o mesmo.
+
+Causa Fundamental da Falha: Teste em Ambiente Errado
+A principal razão pela qual suas correções não estão funcionando é que você está testando a aplicação em um ambiente (localhost) diferente do meu.
+
+O link de teste que você forneceu (http://localhost:5000/...) é inacessível e irrelevante para mim, pois estou usando a aplicação através da URL pública gerada pelo Replit. O ambiente do Replit pode ter diferenças estruturais (como o uso de iframes ou outros contêineres) que não existem em localhost.
+
+É fundamental que você pare de testar em localhost e passe a testar e depurar diretamente na URL pública do Replit para ver exatamente o que eu vejo.
+
+Nova Abordagem de Depuração (Ação Requerida)
+Dado que nem a solução drástica com !important funcionou, suspeito que o problema não seja apenas a especificidade do CSS, mas sim o JavaScript que deveria aplicar as classes .main-content-expanded e .main-content-collapsed.
+
+Por favor, siga estes passos exatamente:
+
+Abra a URL pública do Replit da nossa aplicação em seu navegador.
+
+Abra as Ferramentas de Desenvolvedor (tecla F12).
+
+Vá para a aba "Elements" (Elementos) e encontre o div ou main que serve como contêiner do conteúdo principal. Mantenha-o selecionado.
+
+Clique no botão para expandir e recolher o menu lateral e observe em tempo real as classes deste contêiner.
+
+Responda a estas perguntas diagnósticas:
+Pergunta 1: Quando você expande o menu, a classe .main-content-expanded está sendo realmente adicionada ao elemento do conteúdo principal?
+
+Pergunta 2: Quando você recolhe o menu, a classe .main-content-collapsed está sendo realmente adicionada?
+
+Pergunta 3: Se as classes estão sendo adicionadas corretamente, por que a regra CSS com !important não está tendo efeito? Verifique a aba "Styles" e "Computed" para ver qual outra propriedade pode estar causando o problema (talvez uma propriedade transform ou uma width fixa que não foi removida).
+
+Conclusão:
+A solução final DEVE funcionar na URL pública do Replit. Por favor, ajuste seu processo de teste para o ambiente correto e investigue se o JavaScript está aplicando as classes como esperado. Vamos resolver isso com base no ambiente real de uso.
