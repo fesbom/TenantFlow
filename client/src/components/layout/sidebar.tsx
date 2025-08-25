@@ -76,9 +76,13 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
           {/* Toggle button - desktop only */}
           {onToggleExpanded && (
             <button
-              onClick={onToggleExpanded}
+              onClick={() => {
+                console.log('🔄 Toggle clicked! Current state:', isExpanded);
+                onToggleExpanded();
+              }}
               className="hidden lg:flex p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
               title={isExpanded ? "Recolher menu" : "Expandir menu"}
+              data-testid="sidebar-toggle"
             >
               {isExpanded ? (
                 <ChevronLeft className="h-4 w-4 text-gray-500" />
