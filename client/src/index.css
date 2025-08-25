@@ -110,4 +110,25 @@
   .dental-button-secondary {
     @apply bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl;
   }
+
+  /* Layout específico para sidebar responsiva */
+  .main-content-expanded {
+    @apply transition-all duration-300 ease-in-out;
+    margin-left: 0;
+  }
+  
+  .main-content-collapsed {
+    @apply transition-all duration-300 ease-in-out;
+    margin-left: 0;
+  }
+  
+  @media (min-width: 1024px) {
+    .main-content-expanded {
+      margin-left: 256px !important; /* 16rem = 64 * 4px */
+    }
+    
+    .main-content-collapsed {
+      margin-left: 80px !important; /* 5rem = 20 * 4px */
+    }
+  }
 }

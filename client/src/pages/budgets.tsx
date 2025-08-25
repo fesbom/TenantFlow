@@ -183,8 +183,8 @@ export default function Budgets() {
       />
       
       <div 
-        className={`transition-all duration-300 ease-in-out flex-1 w-full ${
-          sidebarExpanded ? "lg:pl-64" : "lg:pl-20"
+        className={`flex-1 w-full ${
+          sidebarExpanded ? "main-content-expanded" : "main-content-collapsed"
         }`}
       >
         <Header title="Orçamentos" onMenuClick={() => setSidebarOpen(true)} />
