@@ -5,12 +5,22 @@ import CalendarView from "@/components/calendar/calendar-view";
 
 export default function Appointments() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+        isExpanded={sidebarExpanded}
+        onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
+      />
       
-      <div className="lg:pl-64 flex-1 w-full">
+      <div 
+        className={`transition-all duration-300 ease-in-out flex-1 w-full ${
+          sidebarExpanded ? "lg:pl-64" : "lg:pl-20"
+        }`}
+      >
         <Header title="Agenda" onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="p-4 lg:p-6 w-full max-w-none">

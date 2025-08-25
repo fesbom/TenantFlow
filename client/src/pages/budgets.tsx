@@ -18,6 +18,7 @@ import { Search, Plus, DollarSign, Edit, Trash2, Eye } from "lucide-react";
 
 export default function Budgets() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null);
@@ -174,9 +175,18 @@ export default function Budgets() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+        isExpanded={sidebarExpanded}
+        onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
+      />
       
-      <div className="lg:pl-64 flex-1 w-full">
+      <div 
+        className={`transition-all duration-300 ease-in-out flex-1 w-full ${
+          sidebarExpanded ? "lg:pl-64" : "lg:pl-20"
+        }`}
+      >
         <Header title="Orçamentos" onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="p-4 lg:p-6 w-full max-w-none">

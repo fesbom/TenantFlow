@@ -15,6 +15,7 @@ import { Search, Plus, Edit, Trash2, Phone, Mail } from "lucide-react";
 
 export default function Patients() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,9 +76,18 @@ export default function Patients() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+        isExpanded={sidebarExpanded}
+        onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
+      />
       
-      <div className="lg:pl-64 flex-1 w-full">
+      <div 
+        className={`transition-all duration-300 ease-in-out flex-1 w-full ${
+          sidebarExpanded ? "lg:pl-64" : "lg:pl-20"
+        }`}
+      >
         <Header title="Pacientes" onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="p-4 lg:p-6 w-full max-w-none">

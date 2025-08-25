@@ -11,6 +11,8 @@ import {
   Settings,
   LogOut,
   Stethoscope,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 const navigation = [
@@ -25,9 +27,11 @@ const navigation = [
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  isExpanded?: boolean;
+  onToggleExpanded?: () => void;
 }
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpanded }: SidebarProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
 
@@ -48,32 +52,57 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Sidebar */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg border-r border-gray-200 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
-          isOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-50 bg-white shadow-lg border-r border-gray-200 transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
+          // Mobile behavior
+          isOpen ? "translate-x-0 w-64" : "-translate-x-full w-64",
+          // Desktop behavior - expandable width
+          "lg:translate-x-0",
+          isExpanded ? "lg:w-64" : "lg:w-20"
         )}
       >
         {/* Logo */}
-        <div className="flex items-center justify-center h-16 border-b border-gray-200">
+        <div className="flex items-center justify-between h-16 border-b border-gray-200 px-4">
           <div className="flex items-center space-x-2">
             <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center">
               <Stethoscope className="h-4 w-4 text-white" />
             </div>
-            <span className="text-xl font-bold text-gray-900">DentiCare</span>
+            {isExpanded && (
+              <span className="text-xl font-bold text-gray-900 transition-opacity duration-300">
+                DentiCare
+              </span>
+            )}
           </div>
+          
+          {/* Toggle button - desktop only */}
+          {onToggleExpanded && (
+            <button
+              onClick={onToggleExpanded}
+              className="hidden lg:flex p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              title={isExpanded ? "Recolher menu" : "Expandir menu"}
+            >
+              {isExpanded ? (
+                <ChevronLeft className="h-4 w-4 text-gray-500" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-gray-500" />
+              )}
+            </button>
+          )}
         </div>
 
         {/* User info */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
               <span className="text-primary font-medium text-sm">
                 {user?.fullName?.charAt(0) || "U"}
               </span>
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">{user?.fullName}</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
-            </div>
+            {isExpanded && (
+              <div className="transition-opacity duration-300 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{user?.fullName}</p>
+                <p className="text-xs text-gray-500 capitalize truncate">{user?.role}</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -87,20 +116,26 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 href={item.href}
                 onClick={onClose}
                 className={cn(
-                  "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
+                  "flex items-center rounded-lg text-sm font-medium transition-colors group relative",
+                  isExpanded ? "space-x-3 px-3 py-2" : "justify-center px-2 py-3",
                   isActive
                     ? "bg-primary text-white"
                     : "text-gray-700 hover:bg-primary/5 hover:text-primary"
                 )}
                 data-testid={`nav-${item.name.toLowerCase()}`}
+                title={!isExpanded ? item.name : undefined}
               >
                 <item.icon
                   className={cn(
-                    "h-5 w-5",
+                    "h-5 w-5 flex-shrink-0",
                     isActive ? "text-white" : "text-gray-400 group-hover:text-primary"
                   )}
                 />
-                <span>{item.name}</span>
+                {isExpanded && (
+                  <span className="transition-opacity duration-300 truncate">
+                    {item.name}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -110,11 +145,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="p-4 border-t border-gray-200">
           <button
             onClick={logout}
-            className="flex items-center space-x-3 w-full px-3 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+            className={cn(
+              "flex items-center w-full text-sm text-gray-600 hover:text-gray-900 transition-colors",
+              isExpanded ? "space-x-3 px-3 py-2" : "justify-center px-2 py-3"
+            )}
             data-testid="button-logout"
+            title={!isExpanded ? "Sair" : undefined}
           >
-            <LogOut className="h-5 w-5" />
-            <span>Sair</span>
+            <LogOut className="h-5 w-5 flex-shrink-0" />
+            {isExpanded && (
+              <span className="transition-opacity duration-300">Sair</span>
+            )}
           </button>
         </div>
       </div>

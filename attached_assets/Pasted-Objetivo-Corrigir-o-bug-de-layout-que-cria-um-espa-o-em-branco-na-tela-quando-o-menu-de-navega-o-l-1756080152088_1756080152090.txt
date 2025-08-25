@@ -1,0 +1,41 @@
+Objetivo: Corrigir o bug de layout que cria um espaço em branco na tela quando o menu de navegação lateral é expandido.
+
+Contexto: Olá. Agradeço a tentativa de ajuste no layout. O problema do espaço em branco persiste, mas agora a causa foi identificada com precisão: ele ocorre especificamente quando o menu lateral é expandido para mostrar os nomes dos itens (modo detalhado), como na imagem que enviei anteriormente. Quando o menu está recolhido (mostrando apenas os ícones), o layout funciona corretamente.
+
+Descrição Exata do Bug (Passos para Reproduzir):
+Carregue a aplicação com o menu lateral no modo "recolhido". O conteúdo principal ocupa a tela corretamente.
+
+Clique no botão para expandir o menu lateral.
+
+O BUG: O menu se expande, mas o container do conteúdo principal não se ajusta à nova largura do menu. Ele permanece na mesma posição, o que cria um espaço em branco entre o menu lateral e o início do conteúdo.
+
+Causa Técnica Provável:
+O problema está no CSS ou JavaScript que gerencia a transição de estado do menu. Quando a classe que expande o menu lateral é aplicada (ex: .sidebar-expanded), o container do conteúdo principal (.main-content, .page-wrapper, etc.) não está atualizando sua propriedade width ou margin-left para compensar a nova largura do menu.
+
+Ação de Correção Requerida:
+É necessário ajustar o CSS para que a área de conteúdo principal reaja dinamicamente à expansão do menu lateral.
+
+Instrução:
+Inspecione as regras de CSS que governam o container do conteúdo principal. Crie ou ajuste uma regra de CSS que seja aplicada apenas quando o menu lateral estiver expandido. Essa regra deve "empurrar" o conteúdo para a direita, fazendo-o ocupar todo o espaço restante.
+
+Exemplo de Lógica CSS para Investigar:
+
+CSS
+
+/* Este é um exemplo conceitual de como a solução pode ser implementada.
+   Os nomes das classes (.sidebar-expanded, .main-content) precisam ser
+   ajustados para os nomes reais usados no projeto. */
+
+.main-content {
+  /* Estilos padrão quando o menu está recolhido */
+  margin-left: 80px; /* Ex: Largura do menu recolhido */
+  transition: margin-left 0.3s ease; /* Para uma transição suave */
+}
+
+/* REGRA A SER ADICIONADA/CORRIGIDA: */
+/* Quando o corpo ou container pai tiver a classe do menu expandido... */
+.sidebar-expanded .main-content {
+  /* ...aplica o novo recuo para o conteúdo principal. */
+  margin-left: 250px; /* Ex: Largura do menu expandido */
+}
+Por favor, implemente essa lógica para que o conteúdo da página se ajuste de forma fluida e automática sempre que o menu lateral for expandido ou recolhido.

@@ -22,6 +22,7 @@ import { DashboardStats, Appointment, Patient } from "@/types";
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
 
@@ -118,9 +119,18 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+        isExpanded={sidebarExpanded}
+        onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
+      />
       
-      <div className="lg:pl-64 flex-1 w-full">
+      <div 
+        className={`transition-all duration-300 ease-in-out flex-1 w-full ${
+          sidebarExpanded ? "lg:pl-64" : "lg:pl-20"
+        }`}
+      >
         <Header title="Dashboard" onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="p-6 w-full max-w-none">

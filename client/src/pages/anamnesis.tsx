@@ -17,6 +17,7 @@ import { Plus, Edit, Trash2, ClipboardList } from "lucide-react";
 
 export default function Anamnesis() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<AnamnesisQuestion | null>(null);
   const { toast } = useToast();
@@ -150,9 +151,18 @@ export default function Anamnesis() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+        isExpanded={sidebarExpanded}
+        onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
+      />
       
-      <div className="lg:pl-64 flex-1 w-full">
+      <div 
+        className={`transition-all duration-300 ease-in-out flex-1 w-full ${
+          sidebarExpanded ? "lg:pl-64" : "lg:pl-20"
+        }`}
+      >
         <Header title="Anamnese" onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="p-4 lg:p-6 w-full max-w-none">

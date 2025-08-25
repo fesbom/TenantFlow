@@ -19,6 +19,7 @@ import { Settings, Plus, Edit, Trash2, Users, Shield } from "lucide-react";
 
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -173,9 +174,18 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+        isExpanded={sidebarExpanded}
+        onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
+      />
       
-      <div className="lg:pl-64 flex-1 w-full">
+      <div 
+        className={`transition-all duration-300 ease-in-out flex-1 w-full ${
+          sidebarExpanded ? "lg:pl-64" : "lg:pl-20"
+        }`}
+      >
         <Header title="Configurações" onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="p-4 lg:p-6 w-full max-w-none">
