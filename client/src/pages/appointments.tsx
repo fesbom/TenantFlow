@@ -20,11 +20,6 @@ export default function Appointments() {
         className={`flex-1 w-full ${
           sidebarExpanded ? "main-content-expanded" : "main-content-collapsed"
         }`}
-        data-sidebar-state={sidebarExpanded ? "expanded" : "collapsed"}
-        style={{
-          marginLeft: sidebarExpanded ? '256px' : '80px',
-          transition: 'margin-left 0.3s ease-in-out'
-        }}
       >
         <Header title="Agenda" onMenuClick={() => setSidebarOpen(true)} />
         

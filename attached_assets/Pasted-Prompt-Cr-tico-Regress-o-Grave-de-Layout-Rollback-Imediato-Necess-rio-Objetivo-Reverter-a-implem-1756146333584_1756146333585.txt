@@ -1,0 +1,54 @@
+Prompt Crítico: Regressão Grave de Layout - Rollback Imediato Necessário
+Objetivo: Reverter a implementação falha de estilos inline, corrigir os novos bugs críticos de layout e implementar uma solução CSS estável e profissional para o problema original.
+
+Contexto: Olá. Vi sua última tentativa de correção usando estilos inline via JavaScript. Infelizmente, essa abordagem piorou drasticamente o problema e introduziu novos bugs que tornaram a aplicação inutilizável em certas condições.
+
+Novos Bugs Críticos Introduzidos:
+Desaparecimento de Elementos: Em tela cheia ou em telas maiores, a barra de navegação superior e todo o menu lateral agora desaparecem completamente. A página fica quebrada.
+
+Comportamento Anômalo com DevTools (F12): Quando as ferramentas de desenvolvedor (F12) são ativadas, o menu lateral fica permanentemente visível e expandido, e o botão de recolher/expandir para de funcionar.
+
+Diagnóstico da Causa Raiz:
+A causa desses novos problemas é o uso de estilos inline aplicados via JavaScript para controlar o layout. Estilos inline têm a prioridade máxima e ignoram/sobrescrevem todas as regras de CSS responsivo (media queries). Isso faz com que o layout não consiga se adaptar a diferentes tamanhos de tela, quebrando a aplicação.
+
+Plano de Ação Urgente (Ação Requerida):
+Passo 1: Reverter Imediatamente a Última Mudança (Rollback)
+
+Por favor, remova completamente a lógica JavaScript que aplica style.marginLeft ao contêiner de conteúdo.
+
+Volte para a abordagem anterior, que se baseia apenas na alternância de classes CSS (.main-content-expanded e .main-content-collapsed).
+
+Passo 2: Implementar uma Solução CSS Limpa e Correta
+O problema original de especificidade do CSS deve ser resolvido dentro do próprio CSS, sem recorrer a !important ou estilos inline. A maneira profissional de fazer isso é usando seletores mais específicos.
+
+Instrução: Em vez de usar a classe sozinha, aumente a especificidade do seletor.
+
+Exemplo de uma solução CSS correta e robusta:
+
+CSS
+
+/* Este é um exemplo de como a solução deve ser estruturada.
+   Use seletores mais específicos para garantir a prioridade. */
+
+/* Estado Padrão (Recolhido) */
+body .main-content {
+  margin-left: 80px;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+/* Estado Expandido */
+body.sidebar-expanded .main-content {
+  margin-left: 256px;
+}
+Neste exemplo, body.sidebar-expanded .main-content é um seletor muito mais forte do que apenas .main-content-expanded e resolverá o conflito de especificidade com o Tailwind sem quebrar o design responsivo.
+
+Requisitos para a Correção Definitiva:
+NÃO USAR estilos inline via JavaScript para o layout principal.
+
+A solução DEVE SER totalmente responsiva (não pode quebrar em telas grandes nem com o F12 aberto).
+
+O bug original do espaço em branco deve ser resolvido.
+
+Por favor, reverta a última alteração e aplique uma solução CSS limpa como a exemplificada acima.
+
+(Observação: Os avisos do console sobre formulários sem id ou name podem ser ignorados por agora. A prioridade máxima é restaurar a funcionalidade do layout.)
