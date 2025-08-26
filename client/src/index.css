@@ -111,19 +111,21 @@
     @apply bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl;
   }
 
-  /* Enhanced Input Styling for Better Visibility */
-  .enhanced-input {
-    @apply border-gray-300;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  /* Regras para forçar a visibilidade da borda no ambiente Replit */
+  .input-borda-visivel-replit {
+    border: 1px solid #cccccc !important; 
+    border-radius: 6px !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
   }
 
-  .enhanced-input:hover {
-    @apply border-gray-400;
+  .input-borda-visivel-replit:hover {
+    border-color: #999999 !important;
   }
 
-  .enhanced-input:focus,
-  .enhanced-input:focus-visible {
-    @apply ring-2 ring-primary ring-opacity-20 border-primary outline-none;
+  .input-borda-visivel-replit:focus {
+    border-color: #059669 !important; /* Cor verde do tema */
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.4) !important; 
+    outline: none !important;
   }
 
   /* SOLUÇÃO DEFINITIVA COM FLEXBOX - Layout Sidebar + Conteúdo */

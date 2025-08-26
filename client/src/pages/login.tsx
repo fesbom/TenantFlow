@@ -156,7 +156,7 @@ export default function Login() {
                       placeholder="seu@email.com"
                       required
                       data-testid="input-email"
-                      className="enhanced-input"
+                      className="input-borda-visivel-replit"
                     />
                   </div>
                   
@@ -170,7 +170,7 @@ export default function Login() {
                       placeholder="••••••••"
                       required
                       data-testid="input-password"
-                      className="enhanced-input"
+                      className="input-borda-visivel-replit"
                     />
                   </div>
 
@@ -207,7 +207,7 @@ export default function Login() {
                               placeholder="seu@email.com"
                               required
                               data-testid="input-reset-email"
-                              className="enhanced-input"
+                              className="input-borda-visivel-replit"
                             />
                           </div>
                           <div className="flex gap-2">
@@ -258,7 +258,7 @@ export default function Login() {
                         placeholder="Nome da sua clínica"
                         required
                         data-testid="input-clinic-name"
-                        className="enhanced-input"
+                        className="input-borda-visivel-replit"
                       />
                     </div>
                     
@@ -272,7 +272,7 @@ export default function Login() {
                         placeholder="contato@clinica.com"
                         required
                         data-testid="input-clinic-email"
-                        className="enhanced-input"
+                        className="input-borda-visivel-replit"
                       />
                     </div>
                     
@@ -285,7 +285,7 @@ export default function Login() {
                         placeholder="Seu nome completo"
                         required
                         data-testid="input-admin-name"
-                        className="enhanced-input"
+                        className="input-borda-visivel-replit"
                       />
                     </div>
                     
@@ -299,7 +299,7 @@ export default function Login() {
                         placeholder="seu@email.com"
                         required
                         data-testid="input-admin-email"
-                        className="enhanced-input"
+                        className="input-borda-visivel-replit"
                       />
                     </div>
                     
@@ -313,7 +313,7 @@ export default function Login() {
                         placeholder="••••••••"
                         required
                         data-testid="input-register-password"
-                        className="enhanced-input"
+                        className="input-borda-visivel-replit"
                       />
                     </div>
                     
@@ -327,7 +327,7 @@ export default function Login() {
                         placeholder="••••••••"
                         required
                         data-testid="input-confirm-password"
-                        className="enhanced-input"
+                        className="input-borda-visivel-replit"
                       />
                     </div>
                   </div>

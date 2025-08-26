@@ -1,0 +1,46 @@
+Prompt de Correção (Ambiente Replit): Ajustes Visuais na Tela de Login
+Objetivo: Aplicar correções visuais na tela de login, garantindo que as alterações de CSS funcionem especificamente no ambiente de execução do Replit via browser.
+
+Contexto: Olá. Precisamos ajustar a tela de login para corrigir dois problemas visuais: um link "Entrar" redundante e campos de formulário com bordas quase invisíveis. As tentativas anteriores falharam, e suspeitamos que o ambiente Replit possa estar causando conflitos de CSS que não ocorreriam em um ambiente localhost.
+
+Atenção ao Ambiente Replit:
+Lembre-se que a aplicação está rodando em uma URL pública do Replit. A forma como o Replit compila e serve os arquivos CSS (especialmente com TailwindCSS) pode criar problemas de especificidade ou de cache. A solução precisa ser robusta o suficiente para superar esses obstáculos.
+
+Ação Requerida:
+1. Remover o Link "Entrar" Redundante (Lógica do Componente):
+
+Problema: A tela possui um link de texto "Entrar" no topo, que é desnecessário e visualmente confuso.
+
+Ação: Edite o arquivo do componente (client/src/pages/login.tsx) e remova este elemento. Esta é uma mudança estrutural e deve funcionar independentemente do CSS.
+
+2. Forçar a Visibilidade dos Campos de Input (Solução CSS Robusta):
+
+Problema: As bordas dos campos de input não estão visíveis no ambiente Replit, provavelmente porque as classes padrão do Tailwind estão sendo sobrescritas ou não estão sendo aplicadas corretamente.
+
+Ação: Vamos criar uma regra de CSS customizada e usar !important para garantir que ela tenha a prioridade máxima e não seja anulada por nenhum outro estilo.
+
+a) No seu arquivo CSS principal (ex: client/src/index.css): Adicione as seguintes regras:
+
+CSS
+
+/* Regras para forçar a visibilidade da borda no ambiente Replit */
+.input-borda-visivel-replit {
+  border: 1px solid #cccccc !important; 
+  border-radius: 6px;
+}
+
+.input-borda-visivel-replit:focus {
+  border-color: #059669 !important; /* Cor verde do tema */
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.4) !important; 
+}
+b) No arquivo do componente (client/src/pages/login.tsx): Adicione esta nova classe, input-borda-visivel-replit, aos elementos <input> de Email e Senha.
+
+Passo de Verificação:
+Após aplicar as mudanças, por favor, verifique diretamente na URL pública do Replit. Se as bordas ainda não aparecerem, use as Ferramentas de Desenvolvedor (F12) para inspecionar um dos campos e confirmar na aba "Styles" se a classe input-borda-visivel-replit está aplicada e se as regras com !important estão ativas.
+
+
+
+
+
+
+
