@@ -1,0 +1,50 @@
+Prompt de Redesenho: Melhorar o Fluxo de Usuário para Login e Cadastro
+Objetivo: Redesenhar o fluxo de interação da tela de login para torná-lo mais claro, intuitivo e alinhado com as práticas modernas de design, eliminando a confusão causada pelos botões duplicados.
+
+Contexto: Após uma análise mais aprofundada, ficou claro que os links "Entrar" e "Cadastrar" no topo funcionam como um seletor para alternar entre os formulários de login e de cadastro. A proposta é abandonar esse modelo e adotar um fluxo mais direto e guiado para o usuário.
+
+Implementação do Novo Fluxo (Ação Requerida):
+1. Tela Padrão: Foco no Login
+
+A página deve sempre carregar exibindo o formulário de Login por padrão.
+
+Os links de texto "Entrar" e "Cadastrar" que ficam no topo do formulário devem ser completamente removidos.
+
+Abaixo do botão principal "Entrar", adicione um link de texto com a seguinte frase: "Ainda não tem uma conta? Cadastre sua clínica".
+
+2. Transição para a Tela de Cadastro
+
+Quando o usuário clicar no link "Cadastre sua clínica", o formulário de Login deve ser substituído pelo formulário de Cadastro.
+
+(Opcional, mas recomendado) A transição entre os formulários pode ter uma animação suave (como um fade) para melhorar a experiência.
+
+3. Tela de Cadastro com Opção de Retorno
+
+Quando o formulário de Cadastro estiver visível, o link de texto na parte inferior também deve mudar.
+
+O novo texto do link deve ser: "Já possui uma conta? Voltar para o login".
+
+Ao clicar neste link, o usuário deve ser levado de volta para a tela de Login.
+
+Resumo Visual do Resultado Esperado:
+VISÃO 1 (Padrão):
+
+Título: "Entre na sua conta"
+
+Campos: Email, Senha
+
+Botão principal: "Entrar"
+
+Link inferior: "Ainda não tem uma conta? Cadastre sua clínica"
+
+VISÃO 2 (Após clicar no link):
+
+Título: "Crie sua Conta"
+
+Campos: (Nome, Email, Senha, etc., do formulário de cadastro)
+
+Botão principal: "Cadastrar"
+
+Link inferior: "Já possui uma conta? Voltar para o login"
+
+Esta abordagem elimina toda a ambiguidade, cria um caminho claro para o usuário e moderniza a interface.

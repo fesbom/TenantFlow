@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +14,7 @@ export default function Login() {
   const { login, registerClinic } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
 
   const [loginForm, setLoginForm] = useState({
     email: "",
@@ -136,213 +136,232 @@ export default function Login() {
 
         <Card className="shadow-lg border border-gray-100">
           <CardHeader>
-            <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login" data-testid="tab-login">Entrar</TabsTrigger>
-                <TabsTrigger value="register" data-testid="tab-register">Cadastrar</TabsTrigger>
-              </TabsList>
-
-              {/* Login Tab */}
-              <TabsContent value="login" className="space-y-4">
-                <CardTitle className="text-center">Entre na sua conta</CardTitle>
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={loginForm.email}
-                      onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                      placeholder="seu@email.com"
-                      required
-                      data-testid="input-email"
-                      className="input-borda-visivel-replit"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Senha</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={loginForm.password}
-                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                      placeholder="••••••••"
-                      required
-                      data-testid="input-password"
-                      className="input-borda-visivel-replit"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="remember"
-                        checked={loginForm.remember}
-                        onCheckedChange={(checked) => 
-                          setLoginForm({ ...loginForm, remember: checked as boolean })
-                        }
-                        data-testid="checkbox-remember"
-                      />
-                      <Label htmlFor="remember" className="text-sm">Lembrar-me</Label>
-                    </div>
-                    <Dialog open={isResetModalOpen} onOpenChange={setIsResetModalOpen}>
-                      <DialogTrigger asChild>
-                        <button type="button" className="text-sm font-medium text-primary hover:text-primary/80">
-                          Esqueceu a senha?
-                        </button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                          <DialogTitle>Redefinir Senha</DialogTitle>
-                        </DialogHeader>
-                        <form onSubmit={handlePasswordReset} className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="reset-email">Email</Label>
-                            <Input
-                              id="reset-email"
-                              type="email"
-                              value={resetForm.email}
-                              onChange={(e) => setResetForm({ email: e.target.value })}
-                              placeholder="seu@email.com"
-                              required
-                              data-testid="input-reset-email"
-                              className="input-borda-visivel-replit"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => setIsResetModalOpen(false)}
-                              className="flex-1"
-                            >
-                              Cancelar
-                            </Button>
-                            <Button
-                              type="submit"
-                              disabled={isLoading}
-                              className="flex-1"
-                              data-testid="button-reset-password"
-                            >
-                              {isLoading ? "Enviando..." : "Enviar"}
-                            </Button>
-                          </div>
-                        </form>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading}
-                    data-testid="button-login"
-                  >
-                    {isLoading ? "Entrando..." : "Entrar"}
-                  </Button>
-                </form>
-              </TabsContent>
-
-              {/* Register Tab */}
-              <TabsContent value="register" className="space-y-4">
-                <CardTitle className="text-center">Cadastrar Nova Clínica</CardTitle>
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-6">
+              {!showRegister ? (
+                // Login Form
+                <div className="form-transition">
+                  <CardTitle className="text-center">Entre na sua conta</CardTitle>
+                  <form onSubmit={handleLogin} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="clinicName">Nome da Clínica</Label>
+                      <Label htmlFor="email">Email</Label>
                       <Input
-                        id="clinicName"
-                        value={registerForm.clinicName}
-                        onChange={(e) => setRegisterForm({ ...registerForm, clinicName: e.target.value })}
-                        placeholder="Nome da sua clínica"
-                        required
-                        data-testid="input-clinic-name"
-                        className="input-borda-visivel-replit"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="clinicEmail">Email da Clínica</Label>
-                      <Input
-                        id="clinicEmail"
+                        id="email"
                         type="email"
-                        value={registerForm.clinicEmail}
-                        onChange={(e) => setRegisterForm({ ...registerForm, clinicEmail: e.target.value })}
-                        placeholder="contato@clinica.com"
-                        required
-                        data-testid="input-clinic-email"
-                        className="input-borda-visivel-replit"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="adminName">Nome do Administrador</Label>
-                      <Input
-                        id="adminName"
-                        value={registerForm.adminName}
-                        onChange={(e) => setRegisterForm({ ...registerForm, adminName: e.target.value })}
-                        placeholder="Seu nome completo"
-                        required
-                        data-testid="input-admin-name"
-                        className="input-borda-visivel-replit"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="adminEmail">Email do Administrador</Label>
-                      <Input
-                        id="adminEmail"
-                        type="email"
-                        value={registerForm.adminEmail}
-                        onChange={(e) => setRegisterForm({ ...registerForm, adminEmail: e.target.value })}
+                        value={loginForm.email}
+                        onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                         placeholder="seu@email.com"
                         required
-                        data-testid="input-admin-email"
+                        data-testid="input-email"
                         className="input-borda-visivel-replit"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="registerPassword">Senha</Label>
+                      <Label htmlFor="password">Senha</Label>
                       <Input
-                        id="registerPassword"
+                        id="password"
                         type="password"
-                        value={registerForm.password}
-                        onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                        value={loginForm.password}
+                        onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                         placeholder="••••••••"
                         required
-                        data-testid="input-register-password"
+                        data-testid="input-password"
                         className="input-borda-visivel-replit"
                       />
                     </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirmar Senha</Label>
-                      <Input
-                        id="confirmPassword"
-                        type="password"
-                        value={registerForm.confirmPassword}
-                        onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })}
-                        placeholder="••••••••"
-                        required
-                        data-testid="input-confirm-password"
-                        className="input-borda-visivel-replit"
-                      />
-                    </div>
-                  </div>
 
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading}
-                    data-testid="button-register"
-                  >
-                    {isLoading ? "Cadastrando..." : "Cadastrar Clínica"}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="remember"
+                          checked={loginForm.remember}
+                          onCheckedChange={(checked) => 
+                            setLoginForm({ ...loginForm, remember: checked as boolean })
+                          }
+                          data-testid="checkbox-remember"
+                        />
+                        <Label htmlFor="remember" className="text-sm">Lembrar-me</Label>
+                      </div>
+                      <Dialog open={isResetModalOpen} onOpenChange={setIsResetModalOpen}>
+                        <DialogTrigger asChild>
+                          <button type="button" className="text-sm font-medium text-primary hover:text-primary/80">
+                            Esqueceu a senha?
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>Redefinir Senha</DialogTitle>
+                          </DialogHeader>
+                          <form onSubmit={handlePasswordReset} className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="reset-email">Email</Label>
+                              <Input
+                                id="reset-email"
+                                type="email"
+                                value={resetForm.email}
+                                onChange={(e) => setResetForm({ email: e.target.value })}
+                                placeholder="seu@email.com"
+                                required
+                                data-testid="input-reset-email"
+                                className="input-borda-visivel-replit"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsResetModalOpen(false)}
+                                className="flex-1"
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                type="submit"
+                                disabled={isLoading}
+                                className="flex-1"
+                                data-testid="button-reset-password"
+                              >
+                                {isLoading ? "Enviando..." : "Enviar"}
+                              </Button>
+                            </div>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                      data-testid="button-login"
+                    >
+                      {isLoading ? "Entrando..." : "Entrar"}
+                    </Button>
+                  </form>
+                  
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowRegister(true)}
+                      className="text-sm text-gray-600 hover:text-primary transition-colors"
+                      data-testid="link-show-register"
+                    >
+                      Ainda não tem uma conta? <span className="font-medium text-primary">Cadastre sua clínica</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // Register Form
+                <div className="form-transition">
+                  <CardTitle className="text-center">Crie sua Conta</CardTitle>
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="clinicName">Nome da Clínica</Label>
+                        <Input
+                          id="clinicName"
+                          value={registerForm.clinicName}
+                          onChange={(e) => setRegisterForm({ ...registerForm, clinicName: e.target.value })}
+                          placeholder="Nome da sua clínica"
+                          required
+                          data-testid="input-clinic-name"
+                          className="input-borda-visivel-replit"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="clinicEmail">Email da Clínica</Label>
+                        <Input
+                          id="clinicEmail"
+                          type="email"
+                          value={registerForm.clinicEmail}
+                          onChange={(e) => setRegisterForm({ ...registerForm, clinicEmail: e.target.value })}
+                          placeholder="contato@clinica.com"
+                          required
+                          data-testid="input-clinic-email"
+                          className="input-borda-visivel-replit"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="adminName">Nome do Administrador</Label>
+                        <Input
+                          id="adminName"
+                          value={registerForm.adminName}
+                          onChange={(e) => setRegisterForm({ ...registerForm, adminName: e.target.value })}
+                          placeholder="Seu nome completo"
+                          required
+                          data-testid="input-admin-name"
+                          className="input-borda-visivel-replit"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="adminEmail">Email do Administrador</Label>
+                        <Input
+                          id="adminEmail"
+                          type="email"
+                          value={registerForm.adminEmail}
+                          onChange={(e) => setRegisterForm({ ...registerForm, adminEmail: e.target.value })}
+                          placeholder="seu@email.com"
+                          required
+                          data-testid="input-admin-email"
+                          className="input-borda-visivel-replit"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="registerPassword">Senha</Label>
+                        <Input
+                          id="registerPassword"
+                          type="password"
+                          value={registerForm.password}
+                          onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                          placeholder="••••••••"
+                          required
+                          data-testid="input-register-password"
+                          className="input-borda-visivel-replit"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                        <Input
+                          id="confirmPassword"
+                          type="password"
+                          value={registerForm.confirmPassword}
+                          onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })}
+                          placeholder="••••••••"
+                          required
+                          data-testid="input-confirm-password"
+                          className="input-borda-visivel-replit"
+                        />
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                      data-testid="button-register"
+                    >
+                      {isLoading ? "Cadastrando..." : "Cadastrar"}
+                    </Button>
+                  </form>
+                  
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowRegister(false)}
+                      className="text-sm text-gray-600 hover:text-primary transition-colors"
+                      data-testid="link-show-login"
+                    >
+                      Já possui uma conta? <span className="font-medium text-primary">Voltar para o login</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </CardHeader>
         </Card>
       </div>
