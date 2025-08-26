@@ -19,8 +19,8 @@
   --accent-foreground: hsl(168 76% 42%);
   --destructive: hsl(356.3033 90.5579% 54.3137%);
   --destructive-foreground: hsl(0 0% 100%);
-  --border: hsl(214.3 31.8% 91.4%);
-  --input: hsl(214.3 31.8% 91.4%);
+  --border: hsl(214.3 31.8% 85%);
+  --input: hsl(214.3 31.8% 85%);
   --ring: hsl(168 76% 42%);
   --chart-1: hsl(168 76% 42%);
   --chart-2: hsl(159.7826 100% 36.0784%);
@@ -109,6 +109,21 @@
   
   .dental-button-secondary {
     @apply bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl;
+  }
+
+  /* Enhanced Input Styling for Better Visibility */
+  .enhanced-input {
+    @apply border-gray-300;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .enhanced-input:hover {
+    @apply border-gray-400;
+  }
+
+  .enhanced-input:focus,
+  .enhanced-input:focus-visible {
+    @apply ring-2 ring-primary ring-opacity-20 border-primary outline-none;
   }
 
   /* SOLUÇÃO DEFINITIVA COM FLEXBOX - Layout Sidebar + Conteúdo */
