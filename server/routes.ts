@@ -1064,15 +1064,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return statusMap[status?.toLowerCase()] || 'Em andamento';
     }
 
+    function mapGender(gender: string): string | null {
+      if (!gender) return null;
+      const genderMap: { [key: string]: string } = {
+        'M': 'Masculino',
+        'F': 'Feminino',
+        'masculino': 'Masculino',
+        'feminino': 'Feminino'
+      };
+      return genderMap[gender.toUpperCase()] || gender;
+    }
+
+    function mapMaritalStatus(status: string): string | null {
+      if (!status) return null;
+      const statusMap: { [key: string]: string } = {
+        'SO': 'Solteiro',
+        'CA': 'Casado',
+        'DI': 'Divorciado',
+        'VI': 'Viúvo',
+        'solteiro': 'Solteiro',
+        'casado': 'Casado',
+        'divorciado': 'Divorciado',
+        'viuvo': 'Viúvo',
+        'viúvo': 'Viúvo'
+      };
+      return statusMap[status.toUpperCase()] || status;
+    }
+
     function parseDate(dateStr: string): string {
-      if (!dateStr) return new Date().toISOString().split('T')[0];
+      if (!dateStr || dateStr.trim() === '') return new Date().toISOString().split('T')[0];
+      
+      const cleaned = dateStr.trim();
       
       // Handle DD/MM/YYYY format
-      const parts = dateStr.split('/');
-      if (parts.length === 3) {
-        const [day, month, year] = parts;
-        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      if (cleaned.includes('/')) {
+        const parts = cleaned.split('/');
+        if (parts.length === 3) {
+          const [day, month, year] = parts;
+          const fullYear = year.length === 2 ? `20${year}` : year;
+          return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
       }
+      
+      // Handle DD-MM-YYYY format
+      if (cleaned.includes('-') && cleaned.length >= 8) {
+        const parts = cleaned.split('-');
+        if (parts.length === 3 && parts[0].length <= 2) {
+          const [day, month, year] = parts;
+          const fullYear = year.length === 2 ? `20${year}` : year;
+          return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+      }
+      
       return new Date().toISOString().split('T')[0];
     }
 
@@ -1132,24 +1175,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let imported = 0;
       let failed = 0;
 
-      // Parse CSV data
+      // Parse CSV data with encoding detection
       await new Promise<void>((resolve, reject) => {
-        const stream = Readable.from(fileBuffer.toString());
-        stream
-          .pipe(csv())
-          .on('data', (row) => {
-            csvData.push(row);
-          })
-          .on('end', resolve)
-          .on('error', reject);
+        try {
+          // Try different encodings for Brazilian CSV files
+          let csvContent: string;
+          try {
+            csvContent = fileBuffer.toString('utf8');
+            // Check if UTF-8 decoding worked properly by looking for replacement characters
+            if (csvContent.includes('�')) {
+              throw new Error('UTF-8 decoding failed');
+            }
+          } catch (error) {
+            // Fallback to latin1 (ISO-8859-1) which is common for Brazilian CSV files
+            csvContent = fileBuffer.toString('latin1');
+          }
+          
+          const stream = Readable.from(csvContent);
+          stream
+            .pipe(csv({ 
+              separator: ',', // Use comma separator
+              skipEmptyLines: true,
+              trim: true
+            }))
+            .on('data', (row) => {
+              // Only add rows that have at least one non-empty value
+              const hasData = Object.values(row).some(value => 
+                value && typeof value === 'string' && value.trim().length > 0
+              );
+              if (hasData) {
+                csvData.push(row);
+              }
+            })
+            .on('end', resolve)
+            .on('error', reject);
+        } catch (error) {
+          reject(error);
+        }
       });
 
       if (csvData.length === 0) {
         return res.status(400).json({ 
           success: false, 
-          message: "CSV file is empty or invalid",
+          message: "CSV file is empty, has no valid data rows, or has encoding issues. Please ensure the file is properly formatted with headers and data.",
           imported: 0,
-          failed: 0
+          failed: 0,
+          debug: {
+            fileSize: fileBuffer.length,
+            rawContent: fileBuffer.toString('utf8').substring(0, 200) + '...'
+          }
         });
       }
 
@@ -1161,43 +1235,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'patients':
             for (const row of csvData) {
               try {
-                // Map CSV fields to database fields according to specification
+                // Map CSV fields to database fields based on actual CSV structure
                 const patientData = {
-                  fullName: row.nome?.trim(),
-                  email: row.email?.trim() || null,
+                  fullName: row.nm_paciente?.trim(),
+                  email: row.e_mail?.trim() || null,
                   cpf: row.cpf?.trim() || null,
-                  phone: row.telefone?.trim(),
-                  birthDate: parseDate(row.data_nascimento),
-                  gender: row.genero?.trim() || null,
-                  maritalStatus: row.estado_civil?.trim() || null,
-                  howTheyFoundUs: row.como_nos_conheceu?.trim() || null,
-                  howTheyFoundUsOther: row.como_nos_conheceu_outros?.trim() || null,
-                  guardianName: row.nome_responsavel?.trim() || null,
-                  guardianCpf: row.cpf_responsavel?.trim() || null,
-                  lastVisitDate: row.data_ultima_visita ? parseDate(row.data_ultima_visita) : null,
-                  lastContactDate: row.data_ultimo_contato ? parseDate(row.data_ultimo_contato) : null,
-                  addressCep: row.cep?.trim() || null,
-                  addressStreet: row.endereco?.trim() || null,
-                  addressNumber: row.numero?.trim() || null,
-                  addressComplement: row.complemento?.trim() || null,
-                  addressNeighborhood: row.bairro?.trim() || null,
-                  addressCity: row.cidade?.trim() || null,
-                  addressState: row.estado?.trim() || null,
-                  responsibleDentistId: row.id_dentista_responsavel ? idMapping.get(`user_${row.id_dentista_responsavel}`) || null : null,
-                  clinicId: req.user!.clinicId,
-                  isActive: true
+                  phone: row.fone_res?.trim() || row.celular?.trim() || row.fone_trab?.trim(),
+                  birthDate: parseDate(row.dt_nascimento),
+                  birthCity: row.naturalidade?.trim() || null,
+                  maritalStatus: mapMaritalStatus(row.estado_civil?.trim()),
+                  // Address fields using correct schema field names
+                  cep: row.cep_res?.trim() || null,
+                  address: row.rua_res?.trim() || null,
+                  number: null, // Not available in this CSV format
+                  complement: null,
+                  neighborhood: row.bairro_res?.trim() || null,
+                  city: row.cidade_res?.trim() || null,
+                  state: row.uf_res?.trim() || null,
+                  // Responsible person fields
+                  responsibleDentistId: row.cd_dentista_original ? idMapping.get(`user_${row.cd_dentista_original}`) || null : null,
+                  responsibleName: row.nm_resposavel?.trim() || null,
+                  responsibleCpf: row.cpf_responsavel?.trim() || null,
+                  // Marketing and contact history
+                  howDidYouKnowUs: row.nm_indicacao?.trim() || null,
+                  howDidYouKnowUsOther: null,
+                  lastVisitDate: row.dt_ultima_visita ? parseDate(row.dt_ultima_visita) : null,
+                  lastContactDate: row.dt_ultimo_contato ? parseDate(row.dt_ultimo_contato) : null,
+                  // Additional information in medical notes
+                  medicalNotes: [
+                    row.rg ? `RG: ${row.rg.trim()}` : null,
+                    row.fone_trab ? `Fone Trabalho: ${row.fone_trab.trim()}` : null
+                  ].filter(Boolean).join(' | ') || null,
+                  clinicId: req.user!.clinicId
                 };
 
                 // Validate required fields
-                if (!patientData.fullName || !patientData.phone) {
-                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing required fields (nome, telefone)`);
+                if (!patientData.fullName) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing required field (nm_paciente)`);
+                  failed++;
+                  continue;
+                }
+                
+                if (!patientData.phone) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing phone number (fone_res, celular, or fone_trab)`);
                   failed++;
                   continue;
                 }
 
                 const patient = await storage.createPatient(patientData);
-                if (row.id) {
-                  idMapping.set(`patient_${row.id}`, patient.id);
+                if (row.cd_paciente) {
+                  idMapping.set(`patient_${row.cd_paciente}`, patient.id);
                 }
                 imported++;
               } catch (error: any) {
