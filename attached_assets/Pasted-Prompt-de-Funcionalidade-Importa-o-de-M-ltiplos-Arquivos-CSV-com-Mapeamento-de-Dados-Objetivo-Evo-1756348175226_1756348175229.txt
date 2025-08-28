@@ -1,0 +1,74 @@
+Prompt de Funcionalidade: Importação de Múltiplos Arquivos CSV com Mapeamento de Dados
+Objetivo: Evoluir a ferramenta de importação de dados para suportar múltiplos tipos de arquivos CSV (Usuários, Tratamentos, Orçamentos e Movimentações), mapeando corretamente os dados dos arquivos para o esquema do banco de dados da aplicação.
+
+1. Ajustes na Interface do Usuário (Frontend)
+A página "Importar Dados" deve ser ajustada para refletir a nova capacidade:
+
+Seletor do Tipo de Dado: O campo de seleção (dropdown) deve agora conter as seguintes opções:
+
+Usuários (usuario.csv)
+
+Tratamentos (tratamento.csv)
+
+Orçamentos de Tratamentos (tratamento_orcamento.csv)
+
+Movimentações de Tratamentos (tratamento_movimentacao.csv)
+
+Instruções Dinâmicas: As instruções na tela e o link para baixar o template devem mudar dinamicamente com base na opção selecionada no seletor, mostrando as colunas corretas para cada tipo de arquivo.
+
+2. Lógica de Funcionamento (Backend)
+Esta é a parte crucial. O backend precisa entender a ordem de importação, as dependências entre os dados e como mapear cada coluna.
+
+A. Ordem e Dependência da Importação:
+A importação deve, idealmente, seguir uma ordem de dependência. Por exemplo, para importar Tratamentos, os Usuários e Pacientes referenciados já devem existir no banco. O sistema deve validar essas existências durante o processo.
+
+B. Manuseio de IDs Externos:
+Os arquivos CSV possuem uma coluna id. Este é o ID do sistema antigo. O nosso sistema irá gerar um novo ID para cada registro. No entanto, é essencial armazenar um mapa de "ID antigo para ID novo" durante a sessão de importação para conseguir vincular corretamente os registros (ex: vincular um tratamento_orcamento ao tratamento correto).
+
+C. Mapeamento Detalhado dos Dados:
+
+Abaixo está o mapeamento exato de cada arquivo CSV para as tabelas do banco de dados, conforme o esquema fornecido.
+
+1. Usuários (usuario.csv) -> Tabela User
+
+Coluna no CSV	Campo na Tabela User	Observações / Regras de Negócio
+id	- (Mapear)	Guardar este ID antigo para referência futura na importação de outros dados (ex: dentista_responsavel em Pacientes).
+nome	name	Mapeamento direto (String).
+nome_usuario	username	Mapeamento direto (String). Regra: Deve ser único.
+email	email	Mapeamento direto (String). Regra: Deve ser único e válido.
+senha	password	CRÍTICO: A senha do CSV está em texto plano. O backend DEVE aplicar um algoritmo de hash (ex: bcrypt) antes de salvar.
+funcao	role	Mapear os textos para o Enum Role do banco (ex: "Dentista" -> DENTIST, "Secretaria" -> SECRETARY, "Admin" -> ADMIN).
+id_clinica	clinicId	Chave estrangeira. O sistema deve verificar se uma Clinic com este ID já existe no banco antes de criar o usuário.
+
+Exportar para as Planilhas
+2. Tratamentos (tratamento.csv) -> Tabela Treatment
+
+Coluna no CSV	Campo na Tabela Treatment	Observações / Regras de Negócio
+id	- (Mapear)	Guardar este ID antigo para vincular orçamentos e movimentações.
+id_paciente	patientId	Chave estrangeira. O sistema deve usar o mapa de IDs para encontrar o novo ID do paciente correspondente ao ID antigo. Validação: O paciente deve existir.
+data_inicio	startDate	Converter a string de data (ex: "DD/MM/AAAA") para o formato DateTime do banco. Tratar sem conversão de fuso horário.
+situacao	status	Mapear os textos para o Enum TreatmentStatus (ex: "Em andamento" -> IN_PROGRESS, "Concluído" -> COMPLETED, "Cancelado" -> CANCELED).
+titulo	title	Mapeamento direto (String).
+
+Exportar para as Planilhas
+3. Orçamentos (tratamento_orcamento.csv) -> Tabela BudgetItem
+
+Coluna no CSV	Campo na Tabela BudgetItem	Observações / Regras de Negócio
+id	- (Mapear)	O sistema irá gerar um novo ID primário.
+id_tratamento	treatmentId	Chave estrangeira. Usar o mapa de IDs para encontrar o novo ID do tratamento correspondente ao ID antigo. Validação: O tratamento deve existir.
+descricao	description	Mapeamento direto (String).
+valor	value	Converter a string de valor (ex: "150,00") para o formato numérico/decimal (Decimal ou Float) do banco.
+
+Exportar para as Planilhas
+4. Movimentações (tratamento_movimentacao.csv) -> Tabela TreatmentMovement
+
+Coluna no CSV	Campo na Tabela TreatmentMovement	Observações / Regras de Negócio
+id	- (Mapear)	O sistema irá gerar um novo ID primário.
+id_tratamento	treatmentId	Chave estrangeira. Usar o mapa de IDs para encontrar o novo ID do tratamento correspondente ao ID antigo. Validação: O tratamento deve existir.
+data	date	Converter a string de data para o formato DateTime. Tratar sem conversão de fuso horário.
+descricao	description	Mapeamento direto (String).
+valor	value	Converter a string de valor para o formato numérico/decimal.
+foto	photoUrl	Mapeamento direto (String). O CSV deve conter a URL da imagem.
+
+Exportar para as Planilhas
+Por favor, implemente a ferramenta de importação seguindo estes mapeamentos e regras de negócio para garantir a integridade e o correto relacionamento dos dados.

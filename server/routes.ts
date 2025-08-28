@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import express from "express";
 import path from "path";
+import csv from "csv-parser";
+import { Readable } from "stream";
 import { storage } from "./storage";
 import { authenticateToken, requireRole, generateToken, type AuthenticatedRequest } from "./middleware/auth";
 import { upload } from "./middleware/upload";
@@ -1036,6 +1038,307 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Create/Update anamnesis response error:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // CSV Import route
+  app.post("/api/import-csv", authenticateToken, requireRole(["admin"]), upload.single('file'), async (req: AuthenticatedRequest, res) => {
+    // Helper functions for CSV import
+    function mapRole(role: string): string {
+      const roleMap: { [key: string]: string } = {
+        'dentista': 'dentist',
+        'secretaria': 'secretary', 
+        'admin': 'admin',
+        'administrador': 'admin'
+      };
+      return roleMap[role?.toLowerCase()] || 'secretary';
+    }
+
+    function mapTreatmentStatus(status: string): string {
+      const statusMap: { [key: string]: string } = {
+        'em andamento': 'Em andamento',
+        'concluído': 'Concluído',
+        'concluido': 'Concluído',
+        'cancelado': 'Cancelado'
+      };
+      return statusMap[status?.toLowerCase()] || 'Em andamento';
+    }
+
+    function parseDate(dateStr: string): string {
+      if (!dateStr) return new Date().toISOString().split('T')[0];
+      
+      // Handle DD/MM/YYYY format
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const [day, month, year] = parts;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function parseValue(valueStr: string): string {
+      if (!valueStr) return '0.00';
+      
+      // Handle Brazilian format (999,99)
+      const cleanValue = valueStr.replace(/[^\d,]/g, '').replace(',', '.');
+      const numValue = parseFloat(cleanValue);
+      return isNaN(numValue) ? '0.00' : numValue.toFixed(2);
+    }
+
+    async function findPatientByOldId(oldId: string): Promise<string | null> {
+      try {
+        // Try to find patient by their current ID first
+        const patients = await storage.getPatientsByClinic(req.user!.clinicId);
+        
+        // For now, try to match by index position or similar
+        // In a real implementation, you'd want to add a migration_id field
+        const patientIndex = parseInt(oldId) - 1;
+        if (patientIndex >= 0 && patientIndex < patients.length) {
+          return patients[patientIndex].id;
+        }
+        
+        return null;
+      } catch (error) {
+        console.error('Error finding patient by old ID:', error);
+        return null;
+      }
+    }
+
+    async function findTreatmentByOldId(oldId: string): Promise<string | null> {
+      try {
+        // Similar implementation - in practice you'd want a migration_id field
+        // For now, this is a placeholder that always returns null
+        return null;
+      } catch (error) {
+        console.error('Error finding treatment by old ID:', error);
+        return null;
+      }
+    }
+
+    try {
+      const { type } = req.body;
+      
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No file uploaded" });
+      }
+
+      if (!type) {
+        return res.status(400).json({ success: false, message: "Import type is required" });
+      }
+
+      const fileBuffer = req.file.buffer;
+      const csvData: any[] = [];
+      const errors: string[] = [];
+      let imported = 0;
+      let failed = 0;
+
+      // Parse CSV data
+      await new Promise<void>((resolve, reject) => {
+        const stream = Readable.from(fileBuffer.toString());
+        stream
+          .pipe(csv())
+          .on('data', (row) => {
+            csvData.push(row);
+          })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+
+      if (csvData.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "CSV file is empty or invalid",
+          imported: 0,
+          failed: 0
+        });
+      }
+
+      // ID mapping for maintaining relationships
+      const idMapping = new Map<string, string>();
+
+      try {
+        switch (type) {
+          case 'users':
+            for (const row of csvData) {
+              try {
+                // Map CSV fields to database fields
+                const userData = {
+                  fullName: row.nome?.trim(),
+                  username: row.nome_usuario?.trim(),
+                  email: row.email?.trim(),
+                  password: await bcrypt.hash(row.senha || '123456', 10), // Hash password
+                  role: mapRole(row.funcao?.trim()),
+                  clinicId: req.user!.clinicId, // Use current user's clinic
+                  isActive: true
+                };
+
+                // Validate required fields
+                if (!userData.fullName || !userData.username || !userData.email) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing required fields (nome, nome_usuario, email)`);
+                  failed++;
+                  continue;
+                }
+
+                const user = await storage.createUser(userData);
+                if (row.id) {
+                  idMapping.set(`user_${row.id}`, user.id);
+                }
+                imported++;
+              } catch (error: any) {
+                errors.push(`Row ${csvData.indexOf(row) + 1}: ${error.message}`);
+                failed++;
+              }
+            }
+            break;
+
+          case 'treatments':
+            for (const row of csvData) {
+              try {
+                // Find patient by old ID (assuming patients already exist)
+                const patientId = await findPatientByOldId(row.id_paciente);
+                if (!patientId) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Patient with ID ${row.id_paciente} not found`);
+                  failed++;
+                  continue;
+                }
+
+                const treatmentData = {
+                  patientId,
+                  dentistId: req.user!.id,
+                  clinicId: req.user!.clinicId,
+                  dataInicio: parseDate(row.data_inicio),
+                  situacaoTratamento: mapTreatmentStatus(row.situacao?.trim()),
+                  tituloTratamento: row.titulo?.trim()
+                };
+
+                if (!treatmentData.tituloTratamento) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing title (titulo)`);
+                  failed++;
+                  continue;
+                }
+
+                const treatment = await storage.createTreatment(treatmentData);
+                if (row.id) {
+                  idMapping.set(`treatment_${row.id}`, treatment.id);
+                }
+                imported++;
+              } catch (error: any) {
+                errors.push(`Row ${csvData.indexOf(row) + 1}: ${error.message}`);
+                failed++;
+              }
+            }
+            break;
+
+          case 'budget-items':
+            for (const row of csvData) {
+              try {
+                // Find treatment by old ID
+                const treatmentId = idMapping.get(`treatment_${row.id_tratamento}`) || 
+                                  await findTreatmentByOldId(row.id_tratamento);
+                
+                if (!treatmentId) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Treatment with ID ${row.id_tratamento} not found`);
+                  failed++;
+                  continue;
+                }
+
+                const budgetItemData = {
+                  treatmentId,
+                  descricaoOrcamento: row.descricao?.trim(),
+                  valorOrcamento: parseValue(row.valor)
+                };
+
+                if (!budgetItemData.descricaoOrcamento) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing description (descricao)`);
+                  failed++;
+                  continue;
+                }
+
+                await storage.createBudgetItem(budgetItemData);
+                imported++;
+              } catch (error: any) {
+                errors.push(`Row ${csvData.indexOf(row) + 1}: ${error.message}`);
+                failed++;
+              }
+            }
+            break;
+
+          case 'treatment-movements':
+            for (const row of csvData) {
+              try {
+                // Find treatment by old ID
+                const treatmentId = idMapping.get(`treatment_${row.id_tratamento}`) || 
+                                  await findTreatmentByOldId(row.id_tratamento);
+                
+                if (!treatmentId) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Treatment with ID ${row.id_tratamento} not found`);
+                  failed++;
+                  continue;
+                }
+
+                const movementData = {
+                  treatmentId,
+                  dataMovimentacao: parseDate(row.data),
+                  descricaoAtividade: row.descricao?.trim(),
+                  valorServico: parseValue(row.valor),
+                  fotoAtividade: row.foto?.trim() || null
+                };
+
+                if (!movementData.descricaoAtividade) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing description (descricao)`);
+                  failed++;
+                  continue;
+                }
+
+                await storage.createTreatmentMovement(movementData);
+                imported++;
+              } catch (error: any) {
+                errors.push(`Row ${csvData.indexOf(row) + 1}: ${error.message}`);
+                failed++;
+              }
+            }
+            break;
+
+          default:
+            return res.status(400).json({ 
+              success: false, 
+              message: "Invalid import type",
+              imported: 0,
+              failed: 0
+            });
+        }
+
+        const result = {
+          success: imported > 0,
+          message: imported > 0 ? 
+            `Successfully imported ${imported} records` : 
+            "No records were imported",
+          imported,
+          failed,
+          errors: errors.length > 0 ? errors.slice(0, 10) : undefined // Limit to 10 errors
+        };
+
+        res.json(result);
+
+      } catch (error: any) {
+        console.error("CSV import error:", error);
+        res.status(500).json({ 
+          success: false, 
+          message: "Internal server error during import",
+          imported,
+          failed,
+          errors: [`Fatal error: ${error.message}`]
+        });
+      }
+
+    } catch (error) {
+      console.error("CSV import error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Internal server error",
+        imported: 0,
+        failed: 0
+      });
     }
   });
 

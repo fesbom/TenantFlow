@@ -13,6 +13,7 @@ import {
   Stethoscope,
   ChevronLeft,
   ChevronRight,
+  Upload,
 } from "lucide-react";
 
 const navigation = [
@@ -21,6 +22,7 @@ const navigation = [
   { name: "Agendamentos", href: "/appointments", icon: Calendar, roles: ["admin", "dentist", "secretary"] },
   { name: "Prontuários", href: "/medical-records", icon: FileText, roles: ["admin", "dentist"] },
   { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"] },
+  { name: "Importar Dados", href: "/import-data", icon: Upload, roles: ["admin"] },
   { name: "Configurações", href: "/settings", icon: Settings, roles: ["admin"] },
 ];
 
@@ -33,7 +35,9 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleExpanded }: SidebarProps) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const authContext = useAuth();
+  const user = authContext?.user;
+  const logout = authContext?.logout;
 
   const filteredNavigation = navigation.filter(item =>
     item.roles.includes(user?.role || "")

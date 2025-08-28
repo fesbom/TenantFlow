@@ -14,9 +14,11 @@ import MedicalRecords from "@/pages/medical-records";
 import Anamnesis from "@/pages/anamnesis";
 import Budgets from "@/pages/budgets";
 import Settings from "@/pages/settings";
+import ImportData from "@/pages/import-data";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { isAuthenticated } = useAuth();
+  const authContext = useAuth();
+  const isAuthenticated = authContext?.isAuthenticated;
   
   if (!isAuthenticated) {
     return <Login />;
@@ -26,7 +28,8 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 function Router() {
-  const { isAuthenticated } = useAuth();
+  const authContext = useAuth();
+  const isAuthenticated = authContext?.isAuthenticated;
 
   return (
     <Switch>
@@ -46,6 +49,7 @@ function Router() {
           <Route path="/anamnesis" component={() => <ProtectedRoute component={Anamnesis} />} />
           <Route path="/budgets" component={() => <ProtectedRoute component={Budgets} />} />
           <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+          <Route path="/import-data" component={() => <ProtectedRoute component={ImportData} />} />
           <Route component={NotFound} />
         </>
       )}
