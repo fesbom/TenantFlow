@@ -1099,13 +1099,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const cleaned = dateStr.trim();
       
-      // Handle DD/MM/YYYY format
+      // Handle DD/MM/YYYY format with optional time component (09/05/1989 00:00:00)
       if (cleaned.includes('/')) {
-        const parts = cleaned.split('/');
+        // Split by space first to separate date and time parts
+        const dateTimeParts = cleaned.split(' ');
+        const datePart = dateTimeParts[0];
+        
+        const parts = datePart.split('/');
         if (parts.length === 3) {
           const [day, month, year] = parts;
           const fullYear = year.length === 2 ? `20${year}` : year;
-          return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          
+          // Validate the parsed components
+          const dayNum = parseInt(day, 10);
+          const monthNum = parseInt(month, 10);
+          const yearNum = parseInt(fullYear, 10);
+          
+          if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && yearNum >= 1900) {
+            return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          }
         }
       }
       
@@ -1115,10 +1127,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (parts.length === 3 && parts[0].length <= 2) {
           const [day, month, year] = parts;
           const fullYear = year.length === 2 ? `20${year}` : year;
-          return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          
+          // Validate the parsed components
+          const dayNum = parseInt(day, 10);
+          const monthNum = parseInt(month, 10);
+          const yearNum = parseInt(fullYear, 10);
+          
+          if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && yearNum >= 1900) {
+            return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          }
         }
       }
       
+      // If all parsing fails, return today's date as fallback
+      console.warn(`Unable to parse date: "${dateStr}", using today's date as fallback`);
       return new Date().toISOString().split('T')[0];
     }
 

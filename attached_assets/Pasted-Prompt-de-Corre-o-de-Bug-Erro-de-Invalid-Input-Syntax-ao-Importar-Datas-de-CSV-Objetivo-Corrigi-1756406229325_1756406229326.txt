@@ -1,0 +1,37 @@
+Prompt de Correção de Bug: Erro de "Invalid Input Syntax" ao Importar Datas de CSV
+Objetivo: Corrigir o erro de conversão de datas que está ocorrendo durante a importação de arquivos CSV, garantindo que o formato de data brasileiro (DD/MM/YYYY) seja corretamente reconhecido pelo sistema.
+
+Contexto: Ao executar a importação de um dos arquivos CSV (provavelmente paciente.csv ou tratamento.csv), o processo falha para várias linhas com um erro de sintaxe de data.
+
+Evidências do Problema:
+
+Formato Original no Arquivo CSV: A data na linha 1 do arquivo está no formato 09/05/1989 00:00:00.
+
+Erro Gerado pelo Sistema: Row 1: invalid input syntax for type date: "1989 00:00:00-05-09".
+
+Diagnóstico da Causa Raiz:
+O problema está na lógica do backend que faz a leitura (parsing) do arquivo CSV. O código não foi instruído a esperar por uma data no formato brasileiro (Dia/Mês/Ano) e, por padrão, está tentando interpretá-la em outro formato (provavelmente o americano, Mês/Dia/Ano), o que resulta na string de data "embaralhada" e inválida que é enviada ao banco de dados. O banco de dados, corretamente, rejeita essa string por não ser um formato de data válido.
+
+Ação Requerida (Solução):
+Por favor, revise o código no backend responsável por processar as colunas de data de todos os arquivos de importação (data_nascimento, data_inicio, data, etc.).
+
+Instrução:
+É necessário especificar explicitamente para a biblioteca ou função que faz a leitura da data que o formato de entrada esperado é "DD/MM/YYYY". A parte da hora (HH:mm:ss) também deve ser considerada.
+
+Exemplo Conceitual da Correção:
+
+JavaScript
+
+// A lógica atual provavelmente está fazendo algo genérico e incorreto como:
+// const dataDoBanco = new Date(valorDaColunaCsv);
+
+// A lógica precisa ser ajustada para usar uma função que entenda o formato específico:
+// Exemplo com uma biblioteca como date-fns ou moment.js:
+import { parse } from 'date-fns';
+
+const dataOriginalCsv = '09/05/1989 00:00:00';
+const formatoEsperado = 'dd/MM/yyyy HH:mm:ss'; // Define o formato brasileiro
+
+const dataCorreta = parse(dataOriginalCsv, formatoEsperado, new Date());
+// 'dataCorreta' agora é um objeto Date válido que pode ser salvo no banco.
+Por favor, aplique essa lógica de parsing de data explícita para todas as colunas de data nos diferentes arquivos de importação para garantir que o processo ocorra sem erros.

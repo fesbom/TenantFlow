@@ -536,7 +536,7 @@ export class DatabaseStorage implements IStorage {
 
   // Treatment methods
   async createTreatment(insertTreatment: InsertTreatment): Promise<Treatment> {
-    const [treatment] = await db.insert(treatments).values(insertTreatment).returning();
+    const [treatment] = await db.insert(treatments).values([insertTreatment]).returning();
     return treatment;
   }
 
