@@ -569,7 +569,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(treatments)
       .where(and(eq(treatments.id, id), eq(treatments.clinicId, clinicId)));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 
   // Budget Item methods
@@ -599,7 +599,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(budgetItems)
       .where(eq(budgetItems.id, id));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 
   // Budget Summary methods
@@ -681,7 +681,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(treatmentMovements)
       .where(eq(treatmentMovements.id, id));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 
   // Anamnesis responses for treatments

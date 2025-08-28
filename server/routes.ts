@@ -8,6 +8,9 @@ import csv from "csv-parser";
 import { Readable } from "stream";
 import { storage } from "./storage";
 import { authenticateToken, requireRole, generateToken, type AuthenticatedRequest } from "./middleware/auth";
+import { db } from "./db";
+import { users, patients, treatments, budgetItems, treatmentMovements } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import { upload, uploadCSV } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
 import {
@@ -1174,6 +1177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const errors: string[] = [];
       let imported = 0;
       let failed = 0;
+      let skipped = 0; // Already existing records
 
       // Parse CSV data with encoding detection
       await new Promise<void>((resolve, reject) => {
@@ -1195,7 +1199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           stream
             .pipe(csv({ 
               separator: ',', // Use comma separator
-              skipEmptyLines: true,
+
               trim: true
             }))
             .on('data', (row) => {
@@ -1235,6 +1239,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'patients':
             for (const row of csvData) {
               try {
+                // Check if record already exists by external ID
+                if (row.cd_paciente) {
+                  const existingPatient = await db.select()
+                    .from(patients)
+                    .where(eq(patients.externalId, row.cd_paciente.toString()))
+                    .limit(1);
+                  
+                  if (existingPatient.length > 0) {
+                    // Record already exists, skip it
+                    idMapping.set(`patient_${row.cd_paciente}`, existingPatient[0].id);
+                    skipped++;
+                    continue;
+                  }
+                }
+
                 // Map CSV fields to database fields based on actual CSV structure
                 const patientData = {
                   fullName: row.nm_paciente?.trim(),
@@ -1266,7 +1285,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     row.rg ? `RG: ${row.rg.trim()}` : null,
                     row.fone_trab ? `Fone Trabalho: ${row.fone_trab.trim()}` : null
                   ].filter(Boolean).join(' | ') || null,
-                  clinicId: req.user!.clinicId
+                  clinicId: req.user!.clinicId,
+                  externalId: row.cd_paciente ? row.cd_paciente.toString() : null
                 };
 
                 // Validate required fields
@@ -1297,6 +1317,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'users':
             for (const row of csvData) {
               try {
+                // Check if record already exists by external ID
+                if (row.id) {
+                  const existingUser = await db.select()
+                    .from(users)
+                    .where(eq(users.externalId, row.id.toString()))
+                    .limit(1);
+                  
+                  if (existingUser.length > 0) {
+                    // Record already exists, skip it
+                    idMapping.set(`user_${row.id}`, existingUser[0].id);
+                    skipped++;
+                    continue;
+                  }
+                }
+
                 // Map CSV fields to database fields
                 const userData = {
                   fullName: row.nome?.trim(),
@@ -1305,6 +1340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   password: await bcrypt.hash(row.senha || '123456', 10), // Hash password
                   role: mapRole(row.funcao?.trim()),
                   clinicId: req.user!.clinicId, // Use current user's clinic
+                  externalId: row.id ? row.id.toString() : null,
                   isActive: true
                 };
 
@@ -1330,6 +1366,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'treatments':
             for (const row of csvData) {
               try {
+                // Check if record already exists by external ID
+                if (row.id) {
+                  const existingTreatment = await db.select()
+                    .from(treatments)
+                    .where(eq(treatments.externalId, row.id.toString()))
+                    .limit(1);
+                  
+                  if (existingTreatment.length > 0) {
+                    // Record already exists, skip it
+                    idMapping.set(`treatment_${row.id}`, existingTreatment[0].id);
+                    skipped++;
+                    continue;
+                  }
+                }
+
                 // Find patient by old ID using mapping or fallback lookup
                 const patientId = idMapping.get(`patient_${row.id_paciente}`) || 
                                  await findPatientByOldId(row.id_paciente);
@@ -1345,7 +1396,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   clinicId: req.user!.clinicId,
                   dataInicio: parseDate(row.data_inicio),
                   situacaoTratamento: mapTreatmentStatus(row.situacao?.trim()),
-                  tituloTratamento: row.titulo?.trim()
+                  tituloTratamento: row.titulo?.trim(),
+                  externalId: row.id ? row.id.toString() : null
                 };
 
                 if (!treatmentData.tituloTratamento) {
@@ -1369,6 +1421,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'budget-items':
             for (const row of csvData) {
               try {
+                // Check if record already exists by external ID
+                if (row.id) {
+                  const existingBudgetItem = await db.select()
+                    .from(budgetItems)
+                    .where(eq(budgetItems.externalId, row.id.toString()))
+                    .limit(1);
+                  
+                  if (existingBudgetItem.length > 0) {
+                    // Record already exists, skip it
+                    skipped++;
+                    continue;
+                  }
+                }
+
                 // Find treatment by old ID
                 const treatmentId = idMapping.get(`treatment_${row.id_tratamento}`) || 
                                   await findTreatmentByOldId(row.id_tratamento);
@@ -1382,7 +1448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const budgetItemData = {
                   treatmentId,
                   descricaoOrcamento: row.descricao?.trim(),
-                  valorOrcamento: parseValue(row.valor)
+                  valorOrcamento: parseValue(row.valor),
+                  externalId: row.id ? row.id.toString() : null
                 };
 
                 if (!budgetItemData.descricaoOrcamento) {
@@ -1403,6 +1470,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'treatment-movements':
             for (const row of csvData) {
               try {
+                // Check if record already exists by external ID
+                if (row.id) {
+                  const existingMovement = await db.select()
+                    .from(treatmentMovements)
+                    .where(eq(treatmentMovements.externalId, row.id.toString()))
+                    .limit(1);
+                  
+                  if (existingMovement.length > 0) {
+                    // Record already exists, skip it
+                    skipped++;
+                    continue;
+                  }
+                }
+
                 // Find treatment by old ID
                 const treatmentId = idMapping.get(`treatment_${row.id_tratamento}`) || 
                                   await findTreatmentByOldId(row.id_tratamento);
@@ -1418,7 +1499,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   dataMovimentacao: parseDate(row.data),
                   descricaoAtividade: row.descricao?.trim(),
                   valorServico: parseValue(row.valor),
-                  fotoAtividade: row.foto?.trim() || null
+                  fotoAtividade: row.foto?.trim() || null,
+                  externalId: row.id ? row.id.toString() : null
                 };
 
                 if (!movementData.descricaoAtividade) {
@@ -1446,12 +1528,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const result = {
-          success: imported > 0,
-          message: imported > 0 ? 
-            `Successfully imported ${imported} records` : 
-            "No records were imported",
-          imported,
-          failed,
+          success: true,
+          message: `Import completed successfully!`,
+          summary: {
+            totalRows: csvData.length,
+            imported: imported,
+            skipped: skipped, // Already existing records
+            failed: failed
+          },
           errors: errors.length > 0 ? errors.slice(0, 10) : undefined // Limit to 10 errors
         };
 

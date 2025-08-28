@@ -1,0 +1,53 @@
+Prompt de Melhoria: Tornar a Importação CSV "Reiniciável" (Ignorar Registros Já Importados)
+Objetivo: Modificar a ferramenta de importação de dados para que ela possa ser reiniciada com segurança. Se o mesmo arquivo for processado novamente, o sistema deve identificar os registros que já foram importados e ignorá-los, evitando a duplicação de dados.
+
+Contexto: Durante a importação de um grande volume de dados, o processo pode ser interrompido por diversos motivos. Atualmente, se eu tentar rodar a importação novamente com o mesmo arquivo, ele criaria registros duplicados. Precisamos adicionar uma lógica de verificação para tornar o processo seguro e "reiniciável".
+
+Ação Requerida:
+A solução envolve duas etapas principais: primeiro, uma pequena alteração no banco de dados para armazenar a referência do sistema antigo e, segundo, uma atualização na lógica de importação.
+
+1. Passo 1: Adicionar Referência Externa no Banco de Dados (Pré-requisito)
+
+Para saber se um registro do CSV já foi importado, precisamos guardar o id original do sistema antigo em nossas novas tabelas.
+
+Instrução: Adicione uma nova coluna opcional e única (@unique) chamada externalId (do tipo Integer ou String, conforme o formato do id nos arquivos CSV) às seguintes tabelas do banco de dados:
+
+User
+
+Patient
+
+Treatment
+
+BudgetItem
+
+TreatmentMovement
+
+2. Passo 2: Atualizar a Lógica de Importação (Backend)
+
+A lógica de processamento de todos os arquivos CSV deve ser atualizada para incluir uma verificação antes da inserção.
+
+Novo Fluxo de Processamento para cada linha do CSV:
+
+a.  Ler o ID Externo: Para cada linha do arquivo, capture o valor da coluna id. Vamos chamá-lo de id_antigo.
+
+b.  Verificar Existência: Antes de tentar criar um novo registro, faça uma consulta na tabela correspondente (ex: na tabela Patient) para verificar se já existe algum registro que possua externalId == id_antigo.
+
+c.  Tomar a Decisão:
+* SE JÁ EXISTIR: O sistema deve ignorar completamente esta linha e pular para a próxima. Nenhum dado deve ser inserido ou atualizado.
+* SE NÃO EXISTIR: O sistema deve prosseguir com a validação e a criação do novo registro, como já faz. No momento da criação, ele deve salvar o id_antigo na nova coluna externalId.
+
+3. Passo 3: Ajustar o Relatório Final
+
+O relatório exibido para o usuário após a conclusão da importação deve ser atualizado para refletir essa nova lógica.
+
+Exemplo de Novo Resumo:
+
+"Importação Concluída!"
+
+"Total de linhas lidas no arquivo: 500"
+
+"Novos registros importados com sucesso: 150"
+
+"Registros já existentes (ignorados): 345"
+
+"Linhas com erros (ignoradas): 5"

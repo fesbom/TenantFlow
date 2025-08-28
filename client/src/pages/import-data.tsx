@@ -17,8 +17,14 @@ import Header from "@/components/layout/header";
 interface ImportResult {
   success: boolean;
   message: string;
-  imported: number;
-  failed: number;
+  summary?: {
+    totalRows: number;
+    imported: number;
+    skipped: number;
+    failed: number;
+  };
+  imported?: number; // Legacy field for backward compatibility
+  failed?: number; // Legacy field for backward compatibility
   errors?: string[];
 }
 
@@ -100,9 +106,11 @@ export default function ImportData() {
       setImportProgress(100);
       
       if (result.success) {
+        const importedCount = result.summary?.imported || result.imported || 0;
+        const skippedCount = result.summary?.skipped || 0;
         toast({
           title: "Importação realizada com sucesso!",
-          description: `${result.imported} registros importados`,
+          description: `${importedCount} novos registros importados, ${skippedCount} ignorados (já existentes)`,
         });
       } else {
         toast({
@@ -391,14 +399,24 @@ export default function ImportData() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-3 gap-4 text-sm">
                   <div className="space-y-1">
-                    <Label>Registros Importados</Label>
-                    <p className="text-2xl font-bold text-green-600">{importResult.imported}</p>
+                    <Label>Novos Importados</Label>
+                    <p className="text-2xl font-bold text-green-600">
+                      {importResult.summary?.imported || importResult.imported || 0}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Já Existentes (Ignorados)</Label>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {importResult.summary?.skipped || 0}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <Label>Registros com Erro</Label>
-                    <p className="text-2xl font-bold text-red-600">{importResult.failed}</p>
+                    <p className="text-2xl font-bold text-red-600">
+                      {importResult.summary?.failed || importResult.failed || 0}
+                    </p>
                   </div>
                 </div>
 

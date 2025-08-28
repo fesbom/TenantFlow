@@ -33,6 +33,7 @@ export const users = pgTable("users", {
   fullName: text("full_name").notNull(),
   role: text("role").notNull(), // 'admin', 'dentist', 'secretary'
   clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+  externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -68,6 +69,7 @@ export const patients = pgTable("patients", {
   lastVisitDate: date("last_visit_date"), // Data da Última Visita
   lastContactDate: date("last_contact_date"), // Último Contato
   
+  externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   medicalNotes: text("medical_notes"),
   clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -135,6 +137,7 @@ export const treatments = pgTable("treatments", {
   dataInicio: date("data_inicio").notNull(),
   situacaoTratamento: text("situacao_tratamento").default('Em andamento').notNull(), // 'Em andamento', 'Concluído', 'Cancelado'
   tituloTratamento: text("titulo_tratamento").notNull(),
+  externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -145,6 +148,7 @@ export const budgetItems = pgTable("budget_items", {
   treatmentId: varchar("treatment_id").notNull().references(() => treatments.id),
   descricaoOrcamento: text("descricao_orcamento").notNull(),
   valorOrcamento: decimal("valor_orcamento", { precision: 10, scale: 2 }).notNull(),
+  externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -167,6 +171,7 @@ export const treatmentMovements = pgTable("treatment_movements", {
   descricaoAtividade: text("descricao_atividade").notNull(),
   valorServico: decimal("valor_servico", { precision: 10, scale: 2 }).notNull(),
   fotoAtividade: text("foto_atividade"), // path para imagem
+  externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
