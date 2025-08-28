@@ -18,7 +18,7 @@ const storage = multer.diskStorage({
   },
 });
 
-const fileFilter = (req: any, file: any, cb: any) => {
+const imageFileFilter = (req: any, file: any, cb: any) => {
   // Accept only image files
   if (file.mimetype.startsWith("image/")) {
     cb(null, true);
@@ -27,10 +27,28 @@ const fileFilter = (req: any, file: any, cb: any) => {
   }
 };
 
+const csvFileFilter = (req: any, file: any, cb: any) => {
+  // Accept only CSV files
+  if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only CSV files are allowed"), false);
+  }
+};
+
 export const upload = multer({
   storage,
-  fileFilter,
+  fileFilter: imageFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
+
+// For CSV imports
+export const uploadCSV = multer({
+  storage: multer.memoryStorage(), // Store in memory for processing
+  fileFilter: csvFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for CSV files
   },
 });

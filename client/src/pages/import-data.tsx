@@ -32,6 +32,14 @@ const dataTypes = [
     requirements: "ID da clínica deve existir no sistema. Senhas serão criptografadas automaticamente."
   },
   {
+    value: "patients",
+    label: "Pacientes",
+    template: "paciente.csv",
+    description: "Importar dados de pacientes da clínica",
+    columns: ["id", "nome", "email", "cpf", "telefone", "data_nascimento", "genero", "estado_civil", "cep", "endereco", "numero", "bairro", "cidade", "estado"],
+    requirements: "Email e CPF devem ser únicos. Use formato DD/MM/AAAA para datas. Todos os campos de endereço são opcionais."
+  },
+  {
     value: "treatments", 
     label: "Tratamentos",
     template: "tratamento.csv",
@@ -163,6 +171,17 @@ export default function ImportData() {
         case 'senha': return '123456';
         case 'funcao': return 'Dentista';
         case 'id_clinica': return '1';
+        case 'cpf': return '123.456.789-00';
+        case 'telefone': return '(11) 99999-9999';
+        case 'data_nascimento': return '01/01/1980';
+        case 'genero': return 'Masculino';
+        case 'estado_civil': return 'Solteiro';
+        case 'cep': return '01234-567';
+        case 'endereco': return 'Rua das Flores, 123';
+        case 'numero': return '123';
+        case 'bairro': return 'Centro';
+        case 'cidade': return 'São Paulo';
+        case 'estado': return 'SP';
         case 'id_paciente': return '1';
         case 'data_inicio': case 'data': return '01/01/2024';
         case 'situacao': return 'Em andamento';

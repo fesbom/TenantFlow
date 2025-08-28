@@ -8,7 +8,7 @@ import csv from "csv-parser";
 import { Readable } from "stream";
 import { storage } from "./storage";
 import { authenticateToken, requireRole, generateToken, type AuthenticatedRequest } from "./middleware/auth";
-import { upload } from "./middleware/upload";
+import { upload, uploadCSV } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
 import {
   insertUserSchema,
@@ -1042,7 +1042,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // CSV Import route
-  app.post("/api/import-csv", authenticateToken, requireRole(["admin"]), upload.single('file'), async (req: AuthenticatedRequest, res) => {
+  app.post("/api/import-csv", authenticateToken, requireRole(["admin"]), uploadCSV.single('file'), async (req: AuthenticatedRequest, res) => {
     // Helper functions for CSV import
     function mapRole(role: string): string {
       const roleMap: { [key: string]: string } = {
@@ -1158,6 +1158,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         switch (type) {
+          case 'patients':
+            for (const row of csvData) {
+              try {
+                // Map CSV fields to database fields according to specification
+                const patientData = {
+                  fullName: row.nome?.trim(),
+                  email: row.email?.trim() || null,
+                  cpf: row.cpf?.trim() || null,
+                  phone: row.telefone?.trim(),
+                  birthDate: parseDate(row.data_nascimento),
+                  gender: row.genero?.trim() || null,
+                  maritalStatus: row.estado_civil?.trim() || null,
+                  howTheyFoundUs: row.como_nos_conheceu?.trim() || null,
+                  howTheyFoundUsOther: row.como_nos_conheceu_outros?.trim() || null,
+                  guardianName: row.nome_responsavel?.trim() || null,
+                  guardianCpf: row.cpf_responsavel?.trim() || null,
+                  lastVisitDate: row.data_ultima_visita ? parseDate(row.data_ultima_visita) : null,
+                  lastContactDate: row.data_ultimo_contato ? parseDate(row.data_ultimo_contato) : null,
+                  addressCep: row.cep?.trim() || null,
+                  addressStreet: row.endereco?.trim() || null,
+                  addressNumber: row.numero?.trim() || null,
+                  addressComplement: row.complemento?.trim() || null,
+                  addressNeighborhood: row.bairro?.trim() || null,
+                  addressCity: row.cidade?.trim() || null,
+                  addressState: row.estado?.trim() || null,
+                  responsibleDentistId: row.id_dentista_responsavel ? idMapping.get(`user_${row.id_dentista_responsavel}`) || null : null,
+                  clinicId: req.user!.clinicId,
+                  isActive: true
+                };
+
+                // Validate required fields
+                if (!patientData.fullName || !patientData.phone) {
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing required fields (nome, telefone)`);
+                  failed++;
+                  continue;
+                }
+
+                const patient = await storage.createPatient(patientData);
+                if (row.id) {
+                  idMapping.set(`patient_${row.id}`, patient.id);
+                }
+                imported++;
+              } catch (error: any) {
+                errors.push(`Row ${csvData.indexOf(row) + 1}: ${error.message}`);
+                failed++;
+              }
+            }
+            break;
+
           case 'users':
             for (const row of csvData) {
               try {
@@ -1194,8 +1243,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'treatments':
             for (const row of csvData) {
               try {
-                // Find patient by old ID (assuming patients already exist)
-                const patientId = await findPatientByOldId(row.id_paciente);
+                // Find patient by old ID using mapping or fallback lookup
+                const patientId = idMapping.get(`patient_${row.id_paciente}`) || 
+                                 await findPatientByOldId(row.id_paciente);
                 if (!patientId) {
                   errors.push(`Row ${csvData.indexOf(row) + 1}: Patient with ID ${row.id_paciente} not found`);
                   failed++;
