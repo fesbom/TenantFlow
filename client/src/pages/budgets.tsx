@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchablePatientSelect } from "@/components/ui/searchable-patient-select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
+import { formatDateBR } from "@/lib/date-formatter";
 import { Budget, Patient } from "@/types";
 import { Search, Plus, DollarSign, Edit, Trash2, Eye } from "lucide-react";
 
@@ -163,9 +164,6 @@ export default function Budgets() {
     return `R$ ${parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
-  };
 
   const filteredBudgets = budgets.filter(budget => {
     const patientName = getPatientName(budget.patientId).toLowerCase();
@@ -350,9 +348,9 @@ export default function Budgets() {
                           </TableCell>
                           <TableCell>{getStatusBadge(budget.status)}</TableCell>
                           <TableCell>
-                            {budget.validUntil ? formatDate(budget.validUntil) : "-"}
+                            {budget.validUntil ? formatDateBR(budget.validUntil) : "-"}
                           </TableCell>
-                          <TableCell>{formatDate(budget.createdAt)}</TableCell>
+                          <TableCell>{formatDateBR(budget.createdAt)}</TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
                               {budget.status === "pending" && (

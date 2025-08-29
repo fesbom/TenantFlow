@@ -1,0 +1,70 @@
+Prompt de Correção Global: Corrigir Exibição de Datas (-1 dia) em Todo o Sistema
+Objetivo: Padronizar a formatação de datas em todo o frontend da aplicação para corrigir o bug que exibe as datas com um dia a menos do que o valor real armazenado no banco de dados.
+
+Contexto: A investigação do bug dos "aniversariantes" revelou o problema real: a lógica do backend está correta, mas a exibição de datas em certas partes do frontend está incorreta. Uma data armazenada no banco como 29/08 é exibida em listas e labels como 28/08.
+
+Exemplo Concreto do Bug:
+
+Dado no Banco de Dados: A data de nascimento da paciente "LUCIANA RZATKI" é 1971-08-29.
+
+Exibido na Lista de Pacientes: 28/08/1971 (BUG)
+
+Exibido na Tela de Edição: 29/08/1971 (CORRETO)
+
+Diagnóstico Técnico da Causa Raiz:
+Este é um bug de fuso horário muito comum no JavaScript. O que acontece é:
+
+O backend envia a string de data pura, sem fuso horário (ex: "1971-08-29").
+
+O frontend, em alguns componentes (como listas), usa new Date("1971-08-29") para converter a string. O JavaScript, por padrão, interpreta essa string como meia-noite UTC daquele dia (1971-08-29T00:00:00.000Z).
+
+Ao formatar essa data para ser exibida na tela do usuário no Brasil (fuso UTC-3), o navegador "converte" o horário, resultando em 21:00 do dia anterior (1971-08-28T21:00:00.000-03:00).
+
+O formatador então extrai o dia 28, causando o erro visual.
+
+Ação Requerida (Solução Global):
+Precisamos de uma função de formatação de data padronizada e segura, que seja usada em toda a aplicação para exibir datas. Esta função não deve permitir que a conversão automática de fuso horário do navegador afete a data.
+
+Instrução:
+Crie uma função utilitária global para formatar datas e substitua todas as formatações de data existentes (em tabelas, labels, etc.) por chamadas a esta nova função.
+
+Lógica da Função de Formatação Correta:
+A forma mais segura de evitar o bug é tratar a string de data diretamente, sem a conversão problemática do new Date().
+
+JavaScript
+
+// Exemplo de função utilitária a ser criada e usada em todo o projeto
+
+function formatarDataBrasileira(dateString) {
+  // Recebe uma string como "YYYY-MM-DD"
+  if (!dateString) return '';
+
+  // Adiciona T00:00:00 para garantir que seja tratado como data local
+  // ao invés de UTC em alguns navegadores.
+  const data = new Date(dateString + 'T00:00:00');
+  
+  // Usa o toLocaleDateString com o fuso horário UTC para forçar a extração do dia correto.
+  return data.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC', // ESSENCIAL: Trata a data como se estivesse em UTC.
+  });
+}
+
+// Exemplo de uso:
+// formatarDataBrasileira("1971-08-29") // -> retorna "29/08/1971"
+Locais a serem corrigidos:
+Por favor, revise e aplique esta nova função de formatação em todos os locais onde datas são exibidas, incluindo (mas não se limitando a):
+
+Na lista de pacientes (coluna "Data de Nascimento").
+
+No dashboard (na lista de aniversariantes).
+
+Nas listas de agendamentos.
+
+Nos detalhes de tratamentos (data de início).
+
+No histórico de movimentações (coluna "Data").
+
+O objetivo final é que uma data armazenada no banco como 1971-08-29 seja sempre e consistentemente exibida como 29/08/1971 em toda a interface.

@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/api";
+import { formatDateBR } from "@/lib/date-formatter";
 import { User, Clinic } from "@/types";
 import { Settings, Plus, Edit, Trash2, Users, Shield, Building2, Upload } from "lucide-react";
 
@@ -271,9 +272,6 @@ export default function SettingsPage() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
-  };
 
   return (
     <div className="app-container bg-slate-50">

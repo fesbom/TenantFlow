@@ -258,9 +258,6 @@ export class DatabaseStorage implements IStorage {
         sql`EXTRACT(DAY FROM ${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`
       ));
     
-    console.log("=== BIRTHDAY QUERY DEBUG ===");
-    console.log("Generated SQL:", query.toSQL());
-    console.log("==============================");
     
     return await query;
   }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatDateBR } from "@/lib/date-formatter";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -175,9 +176,6 @@ export default function MedicalRecords() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
-  };
 
   const formatCurrency = (value: string | number) => {
     const numericValue = typeof value === 'string' ? parseFloat(value) : value;
@@ -288,7 +286,7 @@ export default function MedicalRecords() {
                             data-testid={`treatment-${treatment.id}`}
                           >
                             <div className="font-medium text-sm mb-1">{treatment.tituloTratamento}</div>
-                            <div className="text-xs text-gray-500 mb-2">Início: {formatDate(treatment.dataInicio)}</div>
+                            <div className="text-xs text-gray-500 mb-2">Início: {formatDateBR(treatment.dataInicio)}</div>
                             {getStatusBadge(treatment.situacaoTratamento)}
                           </div>
                         ))}
@@ -354,7 +352,7 @@ export default function MedicalRecords() {
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <label className="text-sm font-medium text-gray-700">Data de Início</label>
-                              <p className="text-sm">{formatDate(selectedTreatment.dataInicio)}</p>
+                              <p className="text-sm">{formatDateBR(selectedTreatment.dataInicio)}</p>
                             </div>
                             <div>
                               <label className="text-sm font-medium text-gray-700">Situação</label>
@@ -416,7 +414,7 @@ export default function MedicalRecords() {
                                     </div>
                                     {item.createdAt && (
                                       <div className="text-xs text-gray-400">
-                                        Respondido em: {formatDate(item.createdAt)}
+                                        Respondido em: {formatDateBR(item.createdAt)}
                                       </div>
                                     )}
                                   </div>
@@ -550,7 +548,7 @@ export default function MedicalRecords() {
                                   {treatmentMovements.map((movement) => (
                                     <TableRow key={movement.id}>
                                       <TableCell className="text-sm">
-                                        {formatDate(movement.dataMovimentacao)}
+                                        {formatDateBR(movement.dataMovimentacao)}
                                       </TableCell>
                                       <TableCell>
                                         <div>

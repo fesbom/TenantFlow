@@ -74,12 +74,6 @@ export interface BudgetItem {
   createdAt: string;
 }
 
-export interface DashboardStats {
-  totalPatients: number;
-  totalAppointments: number;
-  monthlyRevenue: number;
-  pendingAppointments: number;
-}
 
 export interface BudgetSummary {
   id: string;

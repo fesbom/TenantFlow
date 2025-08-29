@@ -12,6 +12,7 @@ import { apiRequest } from "@/lib/api";
 import PatientModal from "@/components/modals/patient-modal";
 import { Patient } from "@/types";
 import { Search, Plus, Edit, Trash2, Phone, Mail } from "lucide-react";
+import { formatDateBR } from "@/lib/date-formatter";
 
 export default function Patients() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -70,9 +71,6 @@ export default function Patients() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR');
-  };
 
   return (
     <div className="app-container bg-slate-50">
@@ -155,9 +153,9 @@ export default function Patients() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {patient.birthDate ? formatDate(patient.birthDate) : "-"}
+                            {patient.birthDate ? formatDateBR(patient.birthDate) : "-"}
                           </TableCell>
-                          <TableCell>{formatDate(patient.createdAt)}</TableCell>
+                          <TableCell>{formatDateBR(patient.createdAt)}</TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
                               <Button
