@@ -21,6 +21,7 @@ export const clinics = pgTable("clinics", {
   email: text("email").notNull().unique(),
   phone: text("phone"),
   address: text("address"),
+  logoUrl: text("logo_url"), // URL for clinic logo
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

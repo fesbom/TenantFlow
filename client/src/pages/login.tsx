@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,30 @@ export default function Login() {
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
+  const [branding, setBranding] = useState({
+    clinicName: "DentiCare",
+    logoUrl: null as string | null,
+  });
+
+  // Fetch branding when email changes (with debounce)
+  useEffect(() => {
+    if (loginForm.email && loginForm.email.includes('@')) {
+      const timeoutId = setTimeout(async () => {
+        try {
+          const response = await fetch(`/api/clinic/branding/${encodeURIComponent(loginForm.email)}`);
+          if (response.ok) {
+            const data = await response.json();
+            setBranding(data);
+          }
+        } catch (error) {
+          console.log('Could not fetch branding:', error);
+        }
+      }, 500); // Debounce 500ms
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [loginForm.email]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -45,7 +69,7 @@ export default function Login() {
       await login(loginForm.email, loginForm.password);
       toast({
         title: "Login realizado com sucesso!",
-        description: "Bem-vindo ao DentiCare",
+        description: `Bem-vindo ao ${branding.clinicName}`,
       });
     } catch (error) {
       toast({
@@ -127,10 +151,27 @@ export default function Login() {
       <div className="max-w-md w-full space-y-8">
         {/* Logo */}
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-primary rounded-xl flex items-center justify-center mb-4">
-            <Stethoscope className="h-8 w-8 text-white" />
+          <div className="mx-auto h-16 w-16 bg-primary rounded-xl flex items-center justify-center mb-4 overflow-hidden">
+            {branding.logoUrl ? (
+              <img
+                src={branding.logoUrl}
+                alt={`Logo ${branding.clinicName}`}
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                  const parent = (e.target as HTMLImageElement).parentElement;
+                  if (parent) {
+                    const stethoscope = document.createElement('div');
+                    stethoscope.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"></path><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"></path><circle cx="20" cy="10" r="2"></circle></svg>';
+                    parent.appendChild(stethoscope);
+                  }
+                }}
+              />
+            ) : (
+              <Stethoscope className="h-8 w-8 text-white" />
+            )}
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">DentiCare</h2>
+          <h2 className="text-3xl font-bold text-gray-900">{branding.clinicName}</h2>
           <p className="mt-2 text-sm text-gray-600">Sistema de Gestão Odontológica</p>
         </div>
 

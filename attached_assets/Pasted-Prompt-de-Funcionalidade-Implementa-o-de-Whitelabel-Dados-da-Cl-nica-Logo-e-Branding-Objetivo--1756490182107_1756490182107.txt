@@ -1,0 +1,55 @@
+Prompt de Funcionalidade: Implementação de Whitelabel (Dados da Clínica, Logo e Branding)
+Objetivo: Evoluir o sistema para um modelo whitelabel, permitindo que administradores de clínicas possam gerenciar os dados cadastrais, incluindo o upload de um logo. A identidade visual da clínica (nome e logo) deve ser refletida na tela de login e em todo o sistema após o login.
+
+Parte 1: Acesso do Administrador às Configurações da Clínica
+Problema: Atualmente, um usuário com a função "Administrador" não consegue editar os dados da clínica à qual pertence.
+
+Ação Requerida:
+
+Crie ou libere o acesso a uma página em "Configurações" chamada "Dados da Clínica".
+
+Esta página deve ser acessível apenas para usuários com a função de ADMIN.
+
+Nesta tela, o administrador deve poder visualizar e editar todos os campos existentes da sua clínica (Nome, CNPJ, Endereço, Número do WhatsApp, etc.).
+
+Parte 2: Funcionalidade de Upload do Logo da Clínica
+Ação Requerida (Banco de Dados):
+
+Na tabela Clinic, adicione uma nova coluna para armazenar a URL do logo.
+
+Nome da Coluna: logoUrl
+
+Tipo de Dado: String
+
+Restrições: Opcional (pode ser nulo).
+
+Ação Requerida (Interface):
+
+Na página "Dados da Clínica", adicione um componente para o upload do logo.
+
+Este componente deve exibir o logo atual (se houver um) e um botão "Alterar Logo" ou "Enviar Imagem".
+
+Ao fazer o upload, o arquivo de imagem (recomenda-se validar para aceitar apenas .png, .jpg, .svg) deve ser salvo em um serviço de armazenamento, e a URL pública da imagem deve ser gravada na coluna logoUrl da clínica.
+
+Parte 3: Aplicação do Whitelabel no Sistema
+A identidade visual da clínica deve substituir a marca padrão do sistema ("DentiCare" ou similar) nos seguintes locais:
+
+A) Na Tela de Login:
+
+Problema: A tela de login atualmente possui uma marca fixa.
+
+Ação Requerida: A tela de login deve ser modificada para carregar dinamicamente. Ela deve buscar os dados da clínica no banco de dados.
+
+Lógica:
+
+Se houver um logoUrl e um name cadastrados para a clínica, eles devem ser exibidos no lugar do logo e nome padrão do sistema.
+
+Se não houver dados de branding cadastrados, a tela de login deve continuar exibindo a marca padrão.
+
+B) Dentro do Sistema (Após o Login):
+
+Problema: Após o login, a marca exibida no topo da página ou na barra lateral ainda é a padrão.
+
+Ação Requerida: O layout principal da aplicação deve ser alterado para exibir dinamicamente o logoUrl e o name da clínica do usuário que está logado.
+
+Lógica: Assim que o usuário faz o login, os dados de branding da sua clínica devem ser carregados e ficar disponíveis em toda a aplicação (através de um Contexto, Redux, ou similar) para serem usados no cabeçalho/menu.

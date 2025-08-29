@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/api";
 import { User } from "@/types";
-import { Settings, Plus, Edit, Trash2, Users, Shield } from "lucide-react";
+import { Settings, Plus, Edit, Trash2, Users, Shield, Building2, Upload } from "lucide-react";
 
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -35,11 +36,38 @@ export default function SettingsPage() {
     role: "secretary" as "admin" | "dentist" | "secretary",
   });
 
+  const [clinicFormData, setClinicFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    logoUrl: "",
+  });
+
   // Fetch users
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
     enabled: currentUser?.role === "admin",
   });
+
+  // Fetch clinic data
+  const { data: clinic, isLoading: clinicLoading } = useQuery({
+    queryKey: ["/api/clinic"],
+    enabled: currentUser?.role === "admin",
+  });
+
+  // Load clinic data into form when it's fetched
+  useEffect(() => {
+    if (clinic) {
+      setClinicFormData({
+        name: clinic.name || "",
+        email: clinic.email || "",
+        phone: clinic.phone || "",
+        address: clinic.address || "",
+        logoUrl: clinic.logoUrl || "",
+      });
+    }
+  }, [clinic]);
 
   // Create user mutation
   const createUserMutation = useMutation({
@@ -112,6 +140,65 @@ export default function SettingsPage() {
     },
   });
 
+  // Update clinic mutation
+  const updateClinicMutation = useMutation({
+    mutationFn: async (data: typeof clinicFormData) => {
+      const response = await apiRequest("PUT", "/api/clinic", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clinic"] });
+      toast({
+        title: "Dados da clínica atualizados",
+        description: "Os dados da clínica foram atualizados com sucesso",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao atualizar dados da clínica",
+        description: error.message || "Não foi possível atualizar os dados da clínica",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Upload logo mutation
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('logo', file);
+      
+      const response = await fetch('/api/clinic/upload-logo', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clinic"] });
+      setClinicFormData({ ...clinicFormData, logoUrl: data.logoUrl });
+      toast({
+        title: "Logo atualizado",
+        description: "O logo da clínica foi atualizado com sucesso",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao fazer upload do logo",
+        description: error.message || "Não foi possível fazer upload do logo",
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       fullName: "",
@@ -154,6 +241,18 @@ export default function SettingsPage() {
     } else {
       // Create new user
       createUserMutation.mutate(formData);
+    }
+  };
+
+  const handleClinicSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateClinicMutation.mutate(clinicFormData);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      uploadLogoMutation.mutate(file);
     }
   };
 
@@ -413,70 +512,146 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              {/* System Settings */}
+              {/* Clinic Settings */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <Settings className="h-5 w-5" />
-                    <span>Configurações do Sistema</span>
+                    <Building2 className="h-5 w-5" />
+                    <span>Dados da Clínica</span>
                   </CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Gerencie as informações da sua clínica
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-4">
-                        <h3 className="font-medium text-gray-900">Informações da Clínica</h3>
-                        <div className="space-y-2">
-                          <Label htmlFor="clinicName">Nome da Clínica</Label>
-                          <Input
-                            id="clinicName"
-                            placeholder="Nome da clínica"
-                            disabled
-                            data-testid="input-clinic-name-settings"
-                          />
+                  {clinicLoading ? (
+                    <div className="text-center py-8 text-gray-500">Carregando dados da clínica...</div>
+                  ) : (
+                    <form onSubmit={handleClinicSubmit} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="clinicName">Nome da Clínica *</Label>
+                            <Input
+                              id="clinicName"
+                              value={clinicFormData.name}
+                              onChange={(e) => setClinicFormData({ ...clinicFormData, name: e.target.value })}
+                              placeholder="Nome da clínica"
+                              required
+                              data-testid="input-clinic-name"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="clinicEmail">Email da Clínica *</Label>
+                            <Input
+                              id="clinicEmail"
+                              type="email"
+                              value={clinicFormData.email}
+                              onChange={(e) => setClinicFormData({ ...clinicFormData, email: e.target.value })}
+                              placeholder="contato@clinica.com"
+                              required
+                              data-testid="input-clinic-email"
+                            />
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="clinicEmail">Email da Clínica</Label>
-                          <Input
-                            id="clinicEmail"
-                            type="email"
-                            placeholder="contato@clinica.com"
-                            disabled
-                            data-testid="input-clinic-email-settings"
-                          />
+
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="clinicPhone">Telefone</Label>
+                            <Input
+                              id="clinicPhone"
+                              value={clinicFormData.phone}
+                              onChange={(e) => setClinicFormData({ ...clinicFormData, phone: e.target.value })}
+                              placeholder="+55 11 99999-9999"
+                              data-testid="input-clinic-phone"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="clinicAddress">Endereço</Label>
+                            <Textarea
+                              id="clinicAddress"
+                              value={clinicFormData.address}
+                              onChange={(e) => setClinicFormData({ ...clinicFormData, address: e.target.value })}
+                              placeholder="Endereço completo da clínica"
+                              rows={3}
+                              data-testid="input-clinic-address"
+                            />
+                          </div>
                         </div>
                       </div>
 
+                      {/* Logo Upload Section */}
                       <div className="space-y-4">
-                        <h3 className="font-medium text-gray-900">Configurações do WhatsApp</h3>
-                        <div className="space-y-2">
-                          <Label htmlFor="whatsappToken">Token da API</Label>
-                          <Input
-                            id="whatsappToken"
-                            type="password"
-                            placeholder="••••••••••••••••"
-                            disabled
-                            data-testid="input-whatsapp-token"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="whatsappNumber">Número do WhatsApp</Label>
-                          <Input
-                            id="whatsappNumber"
-                            placeholder="+55 11 99999-9999"
-                            disabled
-                            data-testid="input-whatsapp-number"
-                          />
+                        <div className="flex items-start space-x-6">
+                          <div className="flex-1 space-y-4">
+                            <div>
+                              <Label>Logo da Clínica</Label>
+                              <p className="text-sm text-gray-600 mt-1">
+                                Faça upload do logo da sua clínica (PNG, JPG ou SVG)
+                              </p>
+                            </div>
+                            
+                            <div className="space-y-3">
+                              <div className="flex items-center space-x-3">
+                                <input
+                                  type="file"
+                                  id="logoUpload"
+                                  accept="image/*"
+                                  onChange={handleLogoUpload}
+                                  className="hidden"
+                                  data-testid="input-upload-logo"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => document.getElementById('logoUpload')?.click()}
+                                  disabled={uploadLogoMutation.isPending}
+                                  data-testid="button-upload-logo"
+                                >
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  {uploadLogoMutation.isPending ? "Fazendo upload..." : "Selecionar Arquivo"}
+                                </Button>
+                              </div>
+                              
+                              <div>
+                                <Label htmlFor="logoUrl">Ou informe URL da imagem</Label>
+                                <Input
+                                  id="logoUrl"
+                                  value={clinicFormData.logoUrl}
+                                  onChange={(e) => setClinicFormData({ ...clinicFormData, logoUrl: e.target.value })}
+                                  placeholder="https://exemplo.com/logo.png"
+                                  data-testid="input-clinic-logo-url"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {clinicFormData.logoUrl && (
+                            <div className="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border">
+                              <img
+                                src={clinicFormData.logoUrl}
+                                alt="Logo da clínica"
+                                className="max-w-full max-h-full object-contain"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="pt-4 border-t">
-                      <Button disabled data-testid="button-save-settings">
-                        Salvar Configurações
-                      </Button>
-                    </div>
-                  </div>
+                      <div className="pt-4 border-t">
+                        <Button 
+                          type="submit" 
+                          disabled={updateClinicMutation.isPending}
+                          data-testid="button-save-clinic"
+                        >
+                          {updateClinicMutation.isPending ? "Salvando..." : "Salvar Dados da Clínica"}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
                 </CardContent>
               </Card>
             </div>

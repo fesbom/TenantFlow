@@ -1,6 +1,7 @@
 import { Menu, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useBranding } from "@/contexts/branding-context";
 
 interface HeaderProps {
   title: string;
@@ -8,6 +9,7 @@ interface HeaderProps {
 }
 
 export default function Header({ title, onMenuClick }: HeaderProps) {
+  const { branding } = useBranding();
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 lg:px-6 sticky top-0 z-30">
       <div className="flex items-center justify-between">
@@ -44,9 +46,19 @@ export default function Header({ title, onMenuClick }: HeaderProps) {
           </Button>
           */}
           
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600" data-testid="text-clinic-name">
-              Clínica Odonto Plus
+          <div className="flex items-center space-x-3">
+            {branding.logoUrl && (
+              <img
+                src={branding.logoUrl}
+                alt={`Logo ${branding.clinicName}`}
+                className="h-8 w-8 object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            )}
+            <span className="text-sm text-gray-700 font-medium" data-testid="text-clinic-name">
+              {branding.clinicName}
             </span>
           </div>
         </div>

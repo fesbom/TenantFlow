@@ -9,7 +9,7 @@ import { Readable } from "stream";
 import { storage } from "./storage";
 import { authenticateToken, requireRole, generateToken, type AuthenticatedRequest } from "./middleware/auth";
 import { db } from "./db";
-import { users, patients, treatments, budgetItems, treatmentMovements } from "@shared/schema";
+import { users, patients, treatments, budgetItems, treatmentMovements, clinics } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { upload, uploadCSV } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
@@ -25,6 +25,7 @@ import {
   insertBudgetItemSchema,
   insertBudgetSummarySchema,
   insertTreatmentMovementSchema,
+  insertClinicSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -343,6 +344,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
+    }
+  });
+
+  // Clinic routes
+  app.get("/api/clinic", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const clinic = await storage.getClinicById(req.user!.clinicId);
+      if (!clinic) {
+        return res.status(404).json({ message: "Clinic not found" });
+      }
+      res.json(clinic);
+    } catch (error) {
+      console.error("Get clinic error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/clinic", authenticateToken, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      const clinicData = insertClinicSchema.parse(req.body);
+      const updatedClinic = await storage.updateClinic(req.user!.clinicId, clinicData);
+      res.json(updatedClinic);
+    } catch (error: any) {
+      console.error("Update clinic error:", error);
+      
+      // Handle specific database errors
+      if (error.code === '23505') {
+        if (error.constraint?.includes('email')) {
+          return res.status(400).json({ message: "Este email já está em uso por outra clínica." });
+        }
+        return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
+      }
+      
+      // Handle Zod validation errors
+      if (error.name === 'ZodError') {
+        const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
+      }
+      
+      res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
+    }
+  });
+
+  app.post("/api/clinic/upload-logo", authenticateToken, requireRole(["admin"]), upload.single('logo'), async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Nenhum arquivo foi enviado" });
+      }
+
+      const logoUrl = `/uploads/${req.file.filename}`;
+      
+      // Update clinic with new logo URL
+      const updatedClinic = await storage.updateClinic(req.user!.clinicId, { logoUrl });
+      
+      res.json({ logoUrl, clinic: updatedClinic });
+    } catch (error: any) {
+      console.error("Upload logo error:", error);
+      res.status(500).json({ message: "Erro ao fazer upload do logo" });
+    }
+  });
+
+  // Public route to get clinic branding for login page
+  app.get("/api/clinic/branding/:email", async (req, res) => {
+    try {
+      const { email } = req.params;
+      
+      // Find clinic by email to get branding info
+      const [clinic] = await db.select({ 
+        name: clinics.name, 
+        logoUrl: clinics.logoUrl 
+      }).from(clinics).where(eq(clinics.email, email)).limit(1);
+      
+      if (clinic) {
+        res.json({ 
+          clinicName: clinic.name,
+          logoUrl: clinic.logoUrl 
+        });
+      } else {
+        // Return default branding if no clinic found
+        res.json({ 
+          clinicName: "DentiCare",
+          logoUrl: null 
+        });
+      }
+    } catch (error) {
+      console.error("Get clinic branding error:", error);
+      // Return default branding on error
+      res.json({ 
+        clinicName: "DentiCare",
+        logoUrl: null 
+      });
     }
   });
 
