@@ -165,18 +165,10 @@ export default function SettingsPage() {
   // Upload logo mutation
   const uploadLogoMutation = useMutation({
     mutationFn: async (file: File) => {
-      console.log("=== FRONTEND UPLOAD DEBUG ===");
-      console.log("File to upload:", {
-        name: file.name,
-        size: file.size,
-        type: file.type
-      });
-      
       const formData = new FormData();
       formData.append('logo', file);
       
       const token = localStorage.getItem('dental_token');
-      console.log("Token found:", token ? "YES" : "NO");
       
       const response = await fetch('/api/clinic/upload-logo', {
         method: 'POST',
@@ -186,16 +178,12 @@ export default function SettingsPage() {
         body: formData,
       });
       
-      console.log("Response status:", response.status);
-      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-        console.log("Error response:", errorData);
         throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: Upload failed`);
       }
       
       const result = await response.json();
-      console.log("Upload success:", result);
       return result;
     },
     onSuccess: (data) => {
@@ -207,7 +195,6 @@ export default function SettingsPage() {
       });
     },
     onError: (error: any) => {
-      console.log("Upload mutation error:", error);
       toast({
         title: "Erro ao fazer upload do logo",
         description: error.message || "Não foi possível fazer upload do logo",

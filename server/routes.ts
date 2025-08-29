@@ -282,7 +282,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/dashboard/birthday-patients", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const today = new Date();
+      console.log("Birthday query - Today's date:", {
+        fullDate: today.toISOString(),
+        localDate: today.toLocaleDateString('pt-BR'),
+        day: today.getDate(),
+        month: today.getMonth() + 1
+      });
+      
       const patients = await storage.getBirthdayPatients(req.user!.clinicId, today);
+      console.log("Birthday patients found:", patients.map(p => ({
+        name: p.fullName,
+        birthDate: p.birthDate,
+        birthDay: new Date(p.birthDate).getDate(),
+        birthMonth: new Date(p.birthDate).getMonth() + 1
+      })));
+      
       res.json(patients);
     } catch (error) {
       console.error("Birthday patients error:", error);
@@ -389,38 +403,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/clinic/upload-logo", authenticateToken, requireRole(["admin"]), upload.single('logo'), async (req: AuthenticatedRequest, res) => {
     try {
-      console.log("=== UPLOAD DEBUG ===");
-      console.log("req.user:", req.user);
-      console.log("req.file:", req.file);
-      console.log("req.headers.authorization:", req.headers.authorization);
-      
       if (!req.file) {
-        console.log("ERROR: No file received");
         return res.status(400).json({ 
-          message: "Nenhum arquivo foi enviado",
-          debug: "req.file is null or undefined"
+          message: "Nenhum arquivo foi enviado"
         });
       }
 
       const logoUrl = `/uploads/${req.file.filename}`;
-      console.log("Generated logoUrl:", logoUrl);
       
       // Update clinic with new logo URL
       const updatedClinic = await storage.updateClinic(req.user!.clinicId, { logoUrl });
-      console.log("Clinic updated successfully:", updatedClinic);
       
       res.json({ logoUrl, clinic: updatedClinic });
     } catch (error: any) {
-      console.error("Upload logo error (detailed):", {
-        message: error.message,
-        stack: error.stack,
-        code: error.code,
-        name: error.name
-      });
+      console.error("Upload logo error:", error);
       res.status(500).json({ 
         message: "Erro ao fazer upload do logo",
-        error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        error: error.message
       });
     }
   });
