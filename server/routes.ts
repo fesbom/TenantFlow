@@ -389,19 +389,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/clinic/upload-logo", authenticateToken, requireRole(["admin"]), upload.single('logo'), async (req: AuthenticatedRequest, res) => {
     try {
+      console.log("=== UPLOAD DEBUG ===");
+      console.log("req.user:", req.user);
+      console.log("req.file:", req.file);
+      console.log("req.headers.authorization:", req.headers.authorization);
+      
       if (!req.file) {
-        return res.status(400).json({ message: "Nenhum arquivo foi enviado" });
+        console.log("ERROR: No file received");
+        return res.status(400).json({ 
+          message: "Nenhum arquivo foi enviado",
+          debug: "req.file is null or undefined"
+        });
       }
 
       const logoUrl = `/uploads/${req.file.filename}`;
+      console.log("Generated logoUrl:", logoUrl);
       
       // Update clinic with new logo URL
       const updatedClinic = await storage.updateClinic(req.user!.clinicId, { logoUrl });
+      console.log("Clinic updated successfully:", updatedClinic);
       
       res.json({ logoUrl, clinic: updatedClinic });
     } catch (error: any) {
-      console.error("Upload logo error:", error);
-      res.status(500).json({ message: "Erro ao fazer upload do logo" });
+      console.error("Upload logo error (detailed):", {
+        message: error.message,
+        stack: error.stack,
+        code: error.code,
+        name: error.name
+      });
+      res.status(500).json({ 
+        message: "Erro ao fazer upload do logo",
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 

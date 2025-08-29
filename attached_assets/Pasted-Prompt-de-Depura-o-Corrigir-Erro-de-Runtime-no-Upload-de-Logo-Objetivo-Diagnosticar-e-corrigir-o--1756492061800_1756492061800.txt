@@ -1,0 +1,46 @@
+Prompt de Depuração: Corrigir Erro de Runtime no Upload de Logo
+Objetivo: Diagnosticar e corrigir o erro de execução que ocorre ao tentar fazer o upload de um arquivo de imagem (PNG) para o logo da clínica, que persiste mesmo após as correções de código anteriores.
+
+Contexto: Olá. Vi que você corrigiu vários erros de tipagem e importação no código, e agradeço por isso. No entanto, o problema principal que relatei continua: ao tentar fazer o upload de um arquivo PNG, a operação falha com um erro.
+
+O foco agora não é mais em erros que impedem o código de rodar, mas sim em um erro que acontece durante a execução da funcionalidade. Precisamos descobrir por que o processo falha depois que o usuário seleciona um arquivo e clica em enviar.
+
+Plano de Ação para Depuração (Ação Requerida):
+Por favor, siga estes passos para identificar a causa raiz do problema.
+
+1. Melhorar o Retorno de Erros (Passo Mais Importante):
+Atualmente, o erro é genérico. Precisamos de uma mensagem clara.
+
+No Backend (server/routes.ts): Envolva a lógica do endpoint de upload em um bloco try...catch. No bloco catch, é crucial que você retorne uma mensagem de erro detalhada para o frontend.
+
+Exemplo: res.status(500).json({ message: 'Falha ao processar o upload no servidor.', error: err.message })
+
+No Frontend (client/src/pages/settings.tsx): Na função handleLogoUpload, certifique-se de que o erro retornado pela API está sendo capturado no bloco .catch() da requisição e sendo exibido de forma clara para o usuário (pode ser com um alert() ou um toast/notificação).
+
+Exemplo: .catch(error => alert('Erro: ' + error.response.data.message))
+
+2. Revisar a Configuração do Upload no Backend:
+
+Ação: Verifique a configuração do multer (ou qualquer biblioteca de upload que esteja sendo usada) no arquivo server/routes.ts.
+
+Pontos a confirmar:
+
+O destino (dest: 'uploads/') está correto e o diretório tem permissão de escrita?
+
+Existem limites de tamanho (fileSize) ou tipo de arquivo que possam estar bloqueando o PNG?
+
+3. Validar a Chave do FormData no Frontend:
+
+Ação: Verifique a função handleLogoUpload no arquivo client/src/pages/settings.tsx.
+
+Ponto a confirmar: A "chave" usada para adicionar o arquivo ao FormData (ex: formData.append('logoFile', file)) deve ser exatamente a mesma que o middleware multer espera no backend (ex: upload.single('logoFile')). Qualquer divergência aqui fará o upload falhar silenciosamente no backend.
+
+4. Adicionar Logs para Rastreamento:
+
+Adicione console.log em pontos estratégicos para seguir o fluxo do arquivo:
+
+No Frontend: Dê um console.log no objeto file antes de adicioná-lo ao FormData para garantir que ele é válido.
+
+No Backend: Dê um console.log no objeto req.file logo após a execução do middleware de upload. Se req.file for undefined, significa que o arquivo não chegou corretamente do frontend para o backend, e o problema provavelmente está no Passo 3.
+
+Por favor, siga estes passos de depuração. A prioridade é obter uma mensagem de erro clara que nos diga exatamente onde o processo está falhando.
