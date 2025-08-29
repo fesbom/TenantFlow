@@ -40,8 +40,8 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
     if (existingResponses.length > 0) {
       const responseMap = existingResponses.reduce((acc, response) => {
         acc[response.questionId] = {
-          response: response.resposta,
-          observations: response.observacoes || "",
+          response: response.response || "",
+          observations: response.observations || "",
         };
         return acc;
       }, {} as Record<string, { response: string; observations: string }>);
@@ -80,6 +80,32 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
     },
   });
 
+  const clearResponsesMutation = useMutation({
+    mutationFn: async () => {
+      if (!treatment) throw new Error("Treatment is required");
+      
+      // Send array with one empty response to trigger delete of existing responses
+      await apiRequest("POST", "/api/anamnesis/responses", { 
+        responses: [{ treatmentId: treatment.id, questionId: "", response: "", patientId: treatment.patientId }] 
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/anamnesis/responses/treatment", treatment?.id] });
+      setResponses({}); // Clear local state
+      toast({
+        title: "Respostas removidas",
+        description: "Todas as respostas da anamnese foram removidas",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Erro ao limpar respostas",
+        description: "Não foi possível remover as respostas da anamnese",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleResponseChange = (questionId: string, response: string) => {
     setResponses(prev => ({
       ...prev,
@@ -105,6 +131,12 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
     saveResponsesMutation.mutate();
   };
 
+  const handleClearResponses = () => {
+    if (window.confirm("Tem certeza que deseja apagar todas as respostas desta anamnese? Esta ação não pode ser desfeita.")) {
+      clearResponsesMutation.mutate();
+    }
+  };
+
   if (!treatment) return null;
 
   return (
@@ -113,6 +145,22 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
         <DialogHeader>
           <DialogTitle>Anamnese - {treatment.tituloTratamento}</DialogTitle>
         </DialogHeader>
+
+        {/* Check if there are existing responses to show clear button */}
+        {Object.keys(responses).length > 0 && (
+          <div className="flex justify-end border-b pb-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleClearResponses}
+              disabled={clearResponsesMutation.isPending}
+              className="text-red-600 border-red-300 hover:bg-red-50"
+              data-testid="button-clear-anamnesis"
+            >
+              {clearResponsesMutation.isPending ? "Limpando..." : "Limpar Respostas"}
+            </Button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <ScrollArea className="h-[60vh] pr-4">

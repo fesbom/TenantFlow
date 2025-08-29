@@ -27,6 +27,7 @@ export default function Header({ title, onMenuClick }: HeaderProps) {
         </div>
         
         <div className="flex items-center space-x-4">
+          {/* Temporarily hidden - notifications feature not implemented
           <Button
             variant="ghost"
             size="icon"
@@ -41,6 +42,7 @@ export default function Header({ title, onMenuClick }: HeaderProps) {
               3
             </Badge>
           </Button>
+          */}
           
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-600" data-testid="text-clinic-name">

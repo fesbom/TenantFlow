@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +16,7 @@ import TreatmentMovementModal from "@/components/modals/treatment-movement-modal
 import AnamnesisModal from "@/components/modals/anamnesis-modal";
 import BudgetDiscountModal from "@/components/modals/budget-discount-modal";
 import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement, AnamnesisResponse } from "@/types";
-import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit } from "lucide-react";
+import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit, Trash2 } from "lucide-react";
 
 export default function MedicalRecords() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -72,6 +74,52 @@ export default function MedicalRecords() {
 
   const hasAnamnesisResponses = anamnesisData.some(item => item.response);
 
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Delete budget item mutation
+  const deleteBudgetItemMutation = useMutation({
+    mutationFn: async (budgetItemId: string) => {
+      await apiRequest("DELETE", `/api/budget-items/${budgetItemId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/budget-items/treatment", selectedTreatment?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/budget-summary/treatment", selectedTreatment?.id] });
+      toast({
+        title: "Item excluído",
+        description: "Item do orçamento excluído com sucesso",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Erro ao excluir item",
+        description: "Não foi possível excluir o item do orçamento",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete treatment movement mutation
+  const deleteTreatmentMovementMutation = useMutation({
+    mutationFn: async (movementId: string) => {
+      await apiRequest("DELETE", `/api/treatment-movements/${movementId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/treatment-movements/treatment", selectedTreatment?.id] });
+      toast({
+        title: "Movimentação excluída",
+        description: "Movimentação excluída com sucesso",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Erro ao excluir movimentação",
+        description: "Não foi possível excluir a movimentação",
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredPatients = patients.filter(patient =>
     patient.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     patient.phone.includes(searchTerm)
@@ -113,6 +161,18 @@ export default function MedicalRecords() {
 
   const handleEditDiscount = () => {
     setIsBudgetDiscountModalOpen(true);
+  };
+
+  const handleDeleteBudgetItem = (item: BudgetItem) => {
+    if (window.confirm("Você tem certeza que deseja excluir este item do orçamento? Esta ação não pode ser desfeita.")) {
+      deleteBudgetItemMutation.mutate(item.id);
+    }
+  };
+
+  const handleDeleteTreatmentMovement = (movement: TreatmentMovement) => {
+    if (window.confirm("Você tem certeza que deseja excluir esta movimentação? Esta ação não pode ser desfeita.")) {
+      deleteTreatmentMovementMutation.mutate(movement.id);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -400,13 +460,25 @@ export default function MedicalRecords() {
                                         {formatCurrency(item.valorOrcamento)}
                                       </TableCell>
                                       <TableCell>
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          onClick={() => handleEditBudgetItem(item)}
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex space-x-1">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            onClick={() => handleEditBudgetItem(item)}
+                                            data-testid="button-edit-budget-item"
+                                          >
+                                            <Edit className="h-4 w-4" />
+                                          </Button>
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            onClick={() => handleDeleteBudgetItem(item)}
+                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            data-testid="button-delete-budget-item"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
                                       </TableCell>
                                     </TableRow>
                                   ))}
@@ -499,13 +571,25 @@ export default function MedicalRecords() {
                                         {formatCurrency(movement.valorServico)}
                                       </TableCell>
                                       <TableCell>
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          onClick={() => handleEditMovement(movement)}
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex space-x-1">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            onClick={() => handleEditMovement(movement)}
+                                            data-testid="button-edit-movement"
+                                          >
+                                            <Edit className="h-4 w-4" />
+                                          </Button>
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            onClick={() => handleDeleteTreatmentMovement(movement)}
+                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            data-testid="button-delete-movement"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
                                       </TableCell>
                                     </TableRow>
                                   ))}

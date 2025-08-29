@@ -1,0 +1,34 @@
+Prompt de Ajustes e Funcionalidades: Anamnese, Exclusão de Itens e UI
+Objetivo: Implementar correções e novas funcionalidades nos módulos de Tratamento (Anamnese) e Orçamento/Movimentação, além de um ajuste visual na interface principal para ocultar recursos não implementados.
+
+1. Correção Crítica: Anamnese Não Está Sendo Salva
+Problema: Ao preencher as respostas do formulário de Anamnese dentro de um tratamento e salvar, os dados não estão sendo persistidos no banco de dados. Ao reabrir o tratamento, os campos da anamnese aparecem em branco novamente.
+
+Ação Requerida: Revise o fluxo de salvamento do formulário de Tratamento. Garanta que, ao salvar o tratamento, as respostas da Anamnese sejam corretamente inseridas ou atualizadas na tabela correspondente (provavelmente AnamnesisResponse ou similar), com o vínculo correto ao tratamento em questão.
+
+2. Nova Funcionalidade: Exclusão de Itens de Orçamento e Movimentação
+Problema: Atualmente, não é possível remover um item individualmente da lista de "Orçamento" ou da "Movimentação" dentro de um tratamento, o que impede a correção de erros de lançamento.
+
+Ação Requerida:
+
+Interface: Na coluna "Ações" de cada linha, tanto na tabela de Orçamento quanto na de Movimentação, adicione um ícone de lixeira (ou um botão "Excluir").
+
+Confirmação: Ao clicar no ícone de exclusão, o sistema deve exibir uma janela de confirmação para evitar remoções acidentais (ex: "Você tem certeza que deseja excluir este item?").
+
+Lógica: Se o usuário confirmar, o registro correspondente deve ser permanentemente removido do banco de dados (das tabelas BudgetItem e TreatmentMovement).
+
+3. Nova Funcionalidade: Limpar Respostas da Anamnese
+Problema: Não há uma forma fácil de apagar todas as respostas de uma anamnese já preenchida para, por exemplo, refazê-la.
+
+Ação Requerida:
+
+Interface: Na aba "Anamnese" de um tratamento, adicione um botão com o texto "Limpar Respostas".
+
+Confirmação: Ao clicar neste botão, exiba uma mensagem de confirmação (ex: "Tem certeza que deseja apagar todas as respostas desta anamnese? Esta ação não pode ser desfeita.").
+
+Lógica: Se o usuário confirmar, o sistema deve apagar do banco de dados todos os registros de respostas associados àquela anamnese específica e limpar os campos na tela.
+
+4. Ajuste de Interface: Ocultar Ícone de Notificações
+Problema: Há um ícone de sino de notificações visível na interface (geralmente no topo) que indica notificações inexistentes, pois a funcionalidade ainda não foi implementada.
+
+Ação Requerida: Oculte temporariamente este ícone de sino da interface. Isso pode ser feito removendo o componente do layout principal ou aplicando uma classe CSS (display: none;). Esta é uma medida temporária até que a funcionalidade de notificações seja desenvolvida futuramente.
