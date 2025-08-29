@@ -39,6 +39,9 @@ export default function Dashboard() {
   // Fetch birthday patients
   const { data: birthdayPatients = [], isLoading: birthdaysLoading } = useQuery<Patient[]>({
     queryKey: ["/api/dashboard/birthday-patients"],
+    refetchOnWindowFocus: true, // Força a busca ao focar na aba
+    staleTime: 0, // Considera os dados sempre "velhos" para forçar re-fetch
+    cacheTime: 0, // Remove completamente o cache
   });
 
   const handleSendBirthdayMessage = async (patient: Patient) => {

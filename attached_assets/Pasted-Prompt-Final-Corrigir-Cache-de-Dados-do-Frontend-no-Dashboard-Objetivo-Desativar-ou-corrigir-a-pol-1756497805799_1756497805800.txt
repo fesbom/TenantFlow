@@ -1,0 +1,36 @@
+Prompt Final: Corrigir Cache de Dados do Frontend no Dashboard
+Objetivo: Desativar ou corrigir a política de cache da biblioteca de busca de dados no frontend para garantir que o dashboard sempre exiba os dados mais recentes fornecidos pela API.
+
+Contexto: O teste de controle provou que as alterações no backend não estão sendo refletidas no frontend. Precisamos forçar o componente do dashboard a buscar os dados novamente (re-fetch) em vez de usar uma versão em cache.
+
+Ação Requerida:
+Passo 1: Investigar e Corrigir a Biblioteca de Data Fetching no Frontend
+
+Instrução: Inspecione o código da página do dashboard em client/src/pages/dashboard.tsx. Identifique qual biblioteca ou hook está sendo usado para buscar os dados dos aniversariantes. As mais comuns são React Query (useQuery), SWR (useSWR), ou um useEffect com fetch/axios.
+
+Solução: Modifique a chamada que busca os dados para garantir que o cache seja invalidado ou que os dados sejam buscados novamente.
+
+Se você estiver usando React Query (useQuery):
+Adicione a opção refetchOnWindowFocus: true ou, para um teste mais agressivo, cacheTime: 0.
+
+Exemplo de Correção (React Query):
+
+JavaScript
+
+// Encontre a linha parecida com esta:
+const { data: birthdayPatients } = useQuery(['birthdayPatients'], fetchBirthdayPatients);
+
+// Altere para isto:
+const { data: birthdayPatients } = useQuery(['birthdayPatients'], fetchBirthdayPatients, {
+  refetchOnWindowFocus: true, // Força a busca ao focar na aba
+  staleTime: 300000, // Considera os dados "velhos" após 5 minutos
+});
+Se você estiver usando useEffect:
+Garanta que o useEffect que busca os dados seja re-executado quando necessário. Por enquanto, a correção pode envolver a limpeza do cache do navegador, mas o ideal é ajustar a lógica do hook.
+
+Passo 2: Restaurar a Lógica Correta no Backend
+
+Instrução: Agora que sabemos que o backend não era o problema, por favor, restaure o código da função getBirthdayPatients em server/storage.ts para a última versão correta (aquela que usa AT TIME ZONE 'America/Sao_Paulo'). O código de teste que busca os "últimos 5 pacientes" já cumpriu seu propósito e deve ser removido.
+
+Resumo:
+A prioridade é corrigir o cache do frontend. Uma vez que o dashboard passe a buscar os dados atualizados, o bug original dos aniversariantes (que já foi corrigido no backend) será resolvido como consequência.
