@@ -1,0 +1,56 @@
+Prompt de Correção Urgente: Lista de Aniversariantes Mostrando a Data de Amanhã
+Objetivo: Corrigir a consulta no backend (getBirthdayPatients) para que ela volte a filtrar corretamente os aniversariantes do dia atual (considerando o fuso horário do Brasil), revertendo a lógica incorreta que foi aplicada na última interação.
+
+Contexto: A correção global da exibição de datas funcionou, mas como efeito colateral, a lógica de filtragem dos aniversariantes no dashboard foi quebrada. Agora, em vez de mostrar os aniversariantes de hoje (29/08), a lista está mostrando os de amanhã (30/08).
+
+Diagnóstico da Causa Raiz:
+O erro está confinado à função getBirthdayPatients no arquivo server/storage.ts. A tentativa anterior de "corrigir" essa função provavelmente introduziu uma conversão de data incorreta que está adiantando a "data de hoje" em um dia para a consulta.
+
+A função de formatação formatarDataBrasileira que criamos é para ser usada apenas no frontend, para exibição. Sua lógica não deve ser usada para cálculos ou filtros no backend.
+
+Ação Requerida (A Solução Definitiva):
+Instrução: Por favor, substitua o conteúdo inteiro da função getBirthdayPatients em server/storage.ts pelo código correto e robusto abaixo. Esta versão usa SQL puro (através do helper do Drizzle) para garantir que não haja má interpretação do ORM.
+
+Substitua a função getBirthdayPatients por isto:
+
+TypeScript
+
+// No arquivo: server/storage.ts
+import { sql } from 'drizzle-orm';
+import { db } from './db'; // Ajuste o import do 'db' conforme seu projeto
+import { Patient } from '@/shared/schema'; // Ajuste o import do schema conforme seu projeto
+
+export async function getBirthdayPatients(clinicId: string): Promise<Patient[]> {
+  try {
+    // CONTEÚDO CORRETO E DEFINITIVO DA FUNÇÃO
+    const query = sql`
+      SELECT id, name, "birthDate"
+      FROM "Patient"
+      WHERE
+        "clinicId" = ${clinicId}
+        AND
+        EXTRACT(MONTH FROM "birthDate") = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
+        AND
+        EXTRACT(DAY FROM "birthDate") = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
+    `;
+
+    // A forma de executar e retornar pode variar um pouco com a sua configuração do Drizzle
+    const result: any = await db.execute(query);
+    
+    // Drizzle com node-postgres pode retornar em 'result.rows'
+    return result.rows || result;
+
+  } catch (error) {
+    console.error("Erro ao buscar aniversariantes:", error);
+    return [];
+  }
+}
+Por que este código resolve o problema:
+
+Usa SQL Direto: A instrução sql do Drizzle evita qualquer ambiguidade do ORM, executando a query exata que especificamos.
+
+Fuso Horário Apenas no NOW(): Ele aplica a conversão de fuso horário apenas na data atual (NOW()), que é a fonte da variabilidade.
+
+Comparação Pura: Ele compara o Mês e Dia da data de nascimento (que é um DATE puro, sem fuso) com o Mês e Dia da data atual já convertida para o fuso do Brasil.
+
+Esta é a abordagem mais segura e correta. Por favor, substitua a função inteira por este novo código. Isso fará com que a Luciana (aniversariante de hoje, 29/08) volte a aparecer e a lista funcione como esperado.

@@ -248,18 +248,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBirthdayPatients(clinicId: string, date: Date): Promise<Patient[]> {
-    const query = db
-      .select()
-      .from(patients)
-      .where(and(
-        eq(patients.clinicId, clinicId),
-        isNotNull(patients.birthDate),
-        sql`EXTRACT(MONTH FROM ${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-        sql`EXTRACT(DAY FROM ${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`
-      ));
-    
-    
-    return await query;
+    try {
+      // CORREÇÃO DEFINITIVA - Remove conversão de fuso horário incorreta do birthDate
+      // birthDate é um campo DATE puro, apenas NOW() precisa da conversão para fuso brasileiro
+      const result = await db.execute(sql`
+        SELECT *
+        FROM ${patients}
+        WHERE
+          ${patients.clinicId} = ${clinicId}
+          AND ${patients.birthDate} IS NOT NULL
+          AND EXTRACT(MONTH FROM ${patients.birthDate}) = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
+          AND EXTRACT(DAY FROM ${patients.birthDate}) = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
+      `);
+
+      return result as Patient[];
+    } catch (error) {
+      console.error("Erro ao buscar aniversariantes:", error);
+      return [];
+    }
   }
 
   // Appointment methods
