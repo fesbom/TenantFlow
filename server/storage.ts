@@ -249,21 +249,25 @@ export class DatabaseStorage implements IStorage {
 
   async getBirthdayPatients(clinicId: string, date: Date): Promise<Patient[]> {
     try {
-      // CORREÇÃO DEFINITIVA - Remove conversão de fuso horário incorreta do birthDate
-      // birthDate é um campo DATE puro, apenas NOW() precisa da conversão para fuso brasileiro
+      // TESTE DE CONTROLE - Ignorar datas, buscar os 5 pacientes mais recentes
+      console.log("--- EXECUTANDO QUERY DE TESTE: Buscando os 5 últimos pacientes cadastrados. ---");
+
       const result = await db.execute(sql`
         SELECT *
         FROM ${patients}
-        WHERE
-          ${patients.clinicId} = ${clinicId}
-          AND ${patients.birthDate} IS NOT NULL
-          AND EXTRACT(MONTH FROM ${patients.birthDate}) = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
-          AND EXTRACT(DAY FROM ${patients.birthDate}) = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
+        WHERE ${patients.clinicId} = ${clinicId}
+        ORDER BY ${patients.createdAt} DESC
+        LIMIT 5
       `);
+      
+      const patientsList = (result as any).rows || result;
+      
+      // Log para vermos o que o banco de dados realmente retornou
+      console.log("--- Resultado da query de teste:", patientsList.map((p: any) => ({ id: p.id, name: p.full_name, createdAt: p.created_at })));
+      return patientsList;
 
-      return result as Patient[];
     } catch (error) {
-      console.error("Erro ao buscar aniversariantes:", error);
+      console.error("--- Erro na query de TESTE dos aniversariantes:", error);
       return [];
     }
   }

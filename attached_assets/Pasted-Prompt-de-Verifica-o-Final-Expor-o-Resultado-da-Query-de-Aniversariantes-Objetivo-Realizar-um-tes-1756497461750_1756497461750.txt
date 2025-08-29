@@ -1,0 +1,51 @@
+Prompt de Verificação Final: Expor o Resultado da Query de Aniversariantes
+Objetivo: Realizar um teste conclusivo para verificar se as alterações no código do backend estão tendo efeito real na aplicação e se não há uma camada de cache interferindo.
+
+Contexto: Estamos em um impasse. Todas as tentativas de corrigir a lógica da query de aniversariantes falharam, mesmo com a implementação de soluções teoricamente corretas. Precisamos parar de ajustar a lógica de data e, em vez disso, fazer uma alteração drástica e inconfundível na função para provar que temos controle sobre o código que está sendo executado.
+
+Ação Requerida (Teste de Controle):
+Instrução: Quero que você modifique temporariamente a função getBirthdayPatients em server/storage.ts. A nova lógica deve ignorar completamente qualquer filtro de data. Em vez disso, ela deve simplesmente buscar e retornar os 5 pacientes mais recentemente cadastrados na clínica.
+
+Substitua o conteúdo inteiro da função getBirthdayPatients por este código de TESTE:
+
+TypeScript
+
+// No arquivo: server/storage.ts
+import { sql } from 'drizzle-orm';
+import { db } from './db'; // Ajuste o import do 'db' conforme seu projeto
+import { Patient } from '@/shared/schema'; // Ajuste o import do schema conforme seu projeto
+
+// INSTRUÇÃO: Substitua a função INTEIRA por este código de TESTE:
+export async function getBirthdayPatients(clinicId: string): Promise<Patient[]> {
+  try {
+    // Log para provar que a função correta foi chamada
+    console.log("--- EXECUTANDO QUERY DE TESTE: Buscando os 5 últimos pacientes cadastrados. ---");
+
+    const query = sql`
+      SELECT id, name, "birthDate"
+      FROM "Patient"
+      WHERE "clinicId" = ${clinicId}
+      ORDER BY id DESC -- Ordena pelos mais recentes
+      LIMIT 5
+    `;
+    
+    const result: any = await db.execute(query);
+    const patients = result.rows || result;
+    
+    // Log para vermos o que o banco de dados realmente retornou
+    console.log("--- Resultado da query de teste:", patients);
+    return patients;
+
+  } catch (error) {
+    console.error("--- Erro na query de TESTE dos aniversariantes:", error);
+    return [];
+  }
+}
+Objetivo Deste Teste:
+O objetivo aqui não é mostrar os aniversariantes corretos. O objetivo é provar que conseguimos alterar o resultado exibido no dashboard.
+
+Se a lista de aniversariantes no dashboard mudar e passar a exibir os 5 pacientes mais recentes, saberemos que o problema não é cache e que estamos editando o arquivo certo. Poderemos então, com confiança, reinserir a query de data correta.
+
+Se a lista de aniversariantes NÃO MUDAR e continuar mostrando os mesmos nomes de antes, teremos a prova definitiva de que o problema é uma camada de cache ou um problema de deploy no Replit, e precisaremos de uma nova estratégia para limpá-lo.
+
+Por favor, aplique esta alteração e me informe. Em seguida, vou acessar o dashboard para verificar o resultado deste teste.
