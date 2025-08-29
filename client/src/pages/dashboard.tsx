@@ -18,7 +18,14 @@ import {
   Cake,
   MessageCircle,
 } from "lucide-react";
-import { DashboardStats, Appointment, Patient } from "@/types";
+import { Appointment, Patient } from "@/types";
+
+interface DashboardStats {
+  activePatients: number;
+  todayAppointments: number;
+  monthlyRevenue: number;
+  attendanceRate: number;
+}
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -37,12 +44,12 @@ export default function Dashboard() {
   });
 
   // Fetch birthday patients
-  const { data: birthdayPatients = [], isLoading: birthdaysLoading } = useQuery<Patient[]>({
+  const { data: birthdayPatients = [], isLoading: birthdaysLoading } = useQuery({
     queryKey: ["/api/dashboard/birthday-patients"],
     refetchOnWindowFocus: true, // Força a busca ao focar na aba
     staleTime: 0, // Considera os dados sempre "velhos" para forçar re-fetch
-    cacheTime: 0, // Remove completamente o cache
-  });
+    gcTime: 0, // Remove completamente o cache (nova API do React Query)
+  }) as { data: Patient[], isLoading: boolean };
 
   const handleSendBirthdayMessage = async (patient: Patient) => {
     try {
@@ -54,7 +61,7 @@ export default function Dashboard() {
         },
         body: JSON.stringify({
           phone: patient.phone,
-          message: `🎉 Feliz aniversário, ${patient.fullName}! Desejamos um dia maravilhoso e muito especial! 🎂`,
+          message: `🎉 Feliz aniversário, ${patient.full_name}! Desejamos um dia maravilhoso e muito especial! 🎂`,
           type: "birthday",
         }),
       });
@@ -62,7 +69,7 @@ export default function Dashboard() {
       if (response.ok) {
         toast({
           title: "Mensagem enviada!",
-          description: `Mensagem de aniversário enviada para ${patient.fullName}`,
+          description: `Mensagem de aniversário enviada para ${patient.full_name}`,
         });
       }
     } catch (error) {
@@ -240,13 +247,13 @@ export default function Dashboard() {
                 ) : birthdayPatients.length === 0 ? (
                   <div className="text-center text-gray-500">Nenhum aniversariante hoje</div>
                 ) : (
-                  birthdayPatients.map((patient) => (
-                    <div key={patient.id} className="flex items-center space-x-3 p-3 bg-pink-50 rounded-lg border border-pink-200">
+                  birthdayPatients.map((patient: any) => (
+                      <div key={patient.id} className="flex items-center space-x-3 p-3 bg-pink-50 rounded-lg border border-pink-200">
                       <div className="h-10 w-10 bg-pink-100 rounded-full flex items-center justify-center">
                         <Cake className="h-5 w-5 text-pink-600" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{patient.fullName}</p>
+                        <p className="text-sm font-medium text-gray-900">{patient.full_name}</p>
                         <p className="text-xs text-gray-600">Aniversário hoje</p>
                       </div>
                       <Button
