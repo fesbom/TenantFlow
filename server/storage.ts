@@ -109,7 +109,7 @@ export interface IStorage {
   deleteBudget(id: string, clinicId: string): Promise<boolean>;
 
   // Treatment methods
-  createTreatment(treatment: InsertTreatment): Promise<Treatment>;
+  createTreatment(treatment: InsertTreatment & { clinicId: string; dentistId: string }): Promise<Treatment>;
   getTreatmentsByPatient(patientId: string, clinicId: string): Promise<Treatment[]>;
   getTreatmentById(id: string, clinicId: string): Promise<Treatment | undefined>;
   updateTreatment(id: string, updates: Partial<InsertTreatment>, clinicId: string): Promise<Treatment | undefined>;
@@ -535,7 +535,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Treatment methods
-  async createTreatment(insertTreatment: InsertTreatment): Promise<Treatment> {
+  async createTreatment(insertTreatment: InsertTreatment & { clinicId: string; dentistId: string }): Promise<Treatment> {
     const [treatment] = await db.insert(treatments).values([insertTreatment]).returning();
     return treatment;
   }

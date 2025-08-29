@@ -425,10 +425,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let updateData = insertPatientSchema.partial().parse(req.body);
       
       // Clean up empty fields - convert empty strings to null
-      const nullableFields = ['birthDate', 'lastVisitDate', 'lastContactDate', 'responsibleDentistId', 'cpf', 'email', 'birthCity', 'maritalStatus', 'cep', 'address', 'number', 'complement', 'neighborhood', 'city', 'state', 'responsibleName', 'responsibleCpf', 'howDidYouKnowUs', 'howDidYouKnowUsOther'];
+      const nullableFields = ['birthDate', 'lastVisitDate', 'lastContactDate', 'responsibleDentistId', 'cpf', 'email', 'birthCity', 'maritalStatus', 'cep', 'address', 'number', 'complement', 'neighborhood', 'city', 'state', 'responsibleName', 'responsibleCpf', 'howDidYouKnowUs', 'howDidYouKnowUsOther'] as const;
       nullableFields.forEach(field => {
-        if (updateData[field] === "" || updateData[field] === undefined) {
-          updateData[field] = null;
+        if ((updateData as any)[field] === "" || (updateData as any)[field] === undefined) {
+          (updateData as any)[field] = null;
         }
       });
       
@@ -1220,9 +1220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const stream = Readable.from(csvContent);
           stream
             .pipe(csv({ 
-              separator: ',', // Use comma separator
-
-              trim: true
+              separator: ',' // Use comma separator
             }))
             .on('data', (row) => {
               // Only add rows that have at least one non-empty value
