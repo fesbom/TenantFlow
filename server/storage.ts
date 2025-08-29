@@ -248,17 +248,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBirthdayPatients(clinicId: string, date: Date): Promise<Patient[]> {
-    const month = date.getMonth() + 1; // JavaScript months are 0-indexed
-    const day = date.getDate();
-    
     return await db
       .select()
       .from(patients)
       .where(and(
         eq(patients.clinicId, clinicId),
         isNotNull(patients.birthDate),
-        sql`EXTRACT(MONTH FROM ${patients.birthDate}) = ${month}`,
-        sql`EXTRACT(DAY FROM ${patients.birthDate}) = ${day}`
+        sql`EXTRACT(MONTH FROM ${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+        sql`EXTRACT(DAY FROM ${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`
       ));
   }
 

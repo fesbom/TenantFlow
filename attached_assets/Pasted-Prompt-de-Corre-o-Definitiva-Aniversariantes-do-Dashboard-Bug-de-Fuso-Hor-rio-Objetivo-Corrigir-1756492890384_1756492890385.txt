@@ -1,0 +1,34 @@
+Prompt de Correção Definitiva: Aniversariantes do Dashboard (Bug de Fuso Horário)
+Objetivo: Corrigir permanentemente o bug na lista de aniversariantes do dashboard para que ela exiba apenas os pacientes que fazem aniversário no dia atual, considerando o fuso horário do Brasil.
+
+Contexto: Olá. A tentativa anterior de corrigir a lista de aniversariantes não funcionou, e o problema persiste. A lista continua mostrando pacientes cujo aniversário foi ontem, como o caso da "LUCIANA RZATKI". A abordagem de adicionar logs não é suficiente; precisamos corrigir a lógica da consulta no banco de dados.
+
+Diagnóstico da Causa Raiz:
+O problema é um bug de fuso horário. A consulta ao banco de dados está comparando a "data de hoje" do servidor (que pode estar em UTC) com a "data de aniversário" do paciente sem forçar um fuso horário consistente. Isso faz com que, dependendo do horário, o sistema considere dias diferentes.
+
+Ação Requerida (A Solução Definitiva):
+Não adicione mais logs. Por favor, implemente a seguinte correção diretamente na função getBirthdayPatients no arquivo server/storage.ts.
+
+A consulta SQL (ou a lógica do ORM, como Drizzle, Prisma, etc.) deve ser modificada para que tanto a data atual quanto a data de nascimento do paciente sejam interpretadas e comparadas no mesmo fuso horário, que deve ser o do Brasil (America/Sao_Paulo).
+
+Instrução:
+Modifique a query para forçar a comparação de datas no fuso horário correto.
+
+Exemplo da Lógica SQL Correta (para PostgreSQL):
+
+SQL
+
+-- Este é um exemplo conceitual de como a consulta deve ser.
+-- Adapte para a sintaxe do seu ORM (Drizzle).
+
+SELECT * FROM "Patient"
+WHERE
+  EXTRACT(MONTH FROM "birthDate" AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
+  AND
+  EXTRACT(DAY FROM "birthDate" AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo');
+Explicação da Solução:
+A cláusula AT TIME ZONE 'America/Sao_Paulo' instrui o banco de dados a "converter" tanto a data de nascimento armazenada (birthDate) quanto a data e hora atual do servidor (NOW()) para o fuso horário de São Paulo antes de extrair o mês e o dia para a comparação.
+
+Isso garante que a comparação seja sempre feita com base no que é "hoje" no Brasil, independentemente de onde o servidor esteja localizado ou do seu fuso horário padrão.
+
+Por favor, aplique esta lógica de consulta explícita no backend. Isso resolverá o problema de forma definitiva e robusta.

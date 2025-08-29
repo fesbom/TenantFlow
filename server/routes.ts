@@ -282,21 +282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/dashboard/birthday-patients", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const today = new Date();
-      console.log("Birthday query - Today's date:", {
-        fullDate: today.toISOString(),
-        localDate: today.toLocaleDateString('pt-BR'),
-        day: today.getDate(),
-        month: today.getMonth() + 1
-      });
-      
       const patients = await storage.getBirthdayPatients(req.user!.clinicId, today);
-      console.log("Birthday patients found:", patients.map(p => ({
-        name: p.fullName,
-        birthDate: p.birthDate,
-        birthDay: new Date(p.birthDate).getDate(),
-        birthMonth: new Date(p.birthDate).getMonth() + 1
-      })));
-      
       res.json(patients);
     } catch (error) {
       console.error("Birthday patients error:", error);
