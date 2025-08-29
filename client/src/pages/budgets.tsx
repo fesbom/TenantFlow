@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchablePatientSelect } from "@/components/ui/searchable-patient-select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
 import { Budget, Patient } from "@/types";
@@ -215,22 +216,14 @@ export default function Budgets() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2 space-y-2">
                       <Label htmlFor="patientId">Paciente *</Label>
-                      <Select
+                      <SearchablePatientSelect
+                        patients={patients}
                         value={formData.patientId}
                         onValueChange={(value) => setFormData({ ...formData, patientId: value })}
+                        placeholder="Selecione um paciente"
+                        data-testid="select-patient"
                         required
-                      >
-                        <SelectTrigger data-testid="select-patient">
-                          <SelectValue placeholder="Selecione um paciente" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {patients.map((patient) => (
-                            <SelectItem key={patient.id} value={patient.id}>
-                              {patient.fullName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      />
                     </div>
 
                     <div className="md:col-span-2 space-y-2">

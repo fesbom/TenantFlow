@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchablePatientSelect } from "@/components/ui/searchable-patient-select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Appointment, Patient, User } from "@/types";
@@ -190,22 +191,14 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="patientId">Paciente *</Label>
-              <Select
+              <SearchablePatientSelect
+                patients={patients}
                 value={formData.patientId}
                 onValueChange={(value) => handleInputChange("patientId", value)}
+                placeholder="Selecione um paciente"
+                data-testid="select-appointment-patient"
                 required
-              >
-                <SelectTrigger data-testid="select-appointment-patient">
-                  <SelectValue placeholder="Selecione um paciente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {patients.map((patient) => (
-                    <SelectItem key={patient.id} value={patient.id}>
-                      {patient.fullName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             <div className="space-y-2">
