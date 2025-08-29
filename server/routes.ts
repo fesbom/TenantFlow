@@ -10,7 +10,7 @@ import { storage } from "./storage";
 import { authenticateToken, requireRole, generateToken, type AuthenticatedRequest } from "./middleware/auth";
 import { db } from "./db";
 import { users, patients, treatments, budgetItems, treatmentMovements, clinics } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, or, isNotNull, sql } from "drizzle-orm";
 import { upload, uploadCSV } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
 import {

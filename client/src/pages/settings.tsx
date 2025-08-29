@@ -15,7 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/api";
-import { User } from "@/types";
+import { User, Clinic } from "@/types";
 import { Settings, Plus, Edit, Trash2, Users, Shield, Building2, Upload } from "lucide-react";
 
 export default function SettingsPage() {
@@ -51,7 +51,7 @@ export default function SettingsPage() {
   });
 
   // Fetch clinic data
-  const { data: clinic, isLoading: clinicLoading } = useQuery({
+  const { data: clinic, isLoading: clinicLoading } = useQuery<Clinic>({
     queryKey: ["/api/clinic"],
     enabled: currentUser?.role === "admin",
   });

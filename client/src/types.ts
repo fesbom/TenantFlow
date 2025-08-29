@@ -25,3 +25,13 @@ export type {
   TreatmentMovement,
   InsertTreatmentMovement,
 } from "@/../../shared/schema";
+
+// Import specific types for internal use
+import type { User } from "@/../../shared/schema";
+
+// Auth types
+export interface AuthState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+}
