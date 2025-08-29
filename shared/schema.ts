@@ -43,8 +43,10 @@ export const patients = pgTable("patients", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   fullName: text("full_name").notNull(),
   cpf: text("cpf"),
+  rg: text("rg"), // Documento de Identidade (RG)
   email: text("email"),
   phone: text("phone").notNull(),
+  workPhone: text("work_phone"), // Fone de Trabalho
   birthDate: date("birth_date"),
   birthCity: text("birth_city"), // Cidade de Nascimento
   maritalStatus: text("marital_status"), // Estado Civil

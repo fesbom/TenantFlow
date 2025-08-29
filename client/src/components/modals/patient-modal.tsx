@@ -19,8 +19,10 @@ interface PatientModalProps {
 interface PatientFormData {
   fullName: string;
   cpf: string;
+  rg: string;
   email: string;
   phone: string;
+  workPhone: string;
   birthDate: string;
   birthCity: string;
   maritalStatus: string;
@@ -64,8 +66,10 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
   const [formData, setFormData] = useState<PatientFormData>({
     fullName: "",
     cpf: "",
+    rg: "",
     email: "",
     phone: "",
+    workPhone: "",
     birthDate: "",
     birthCity: "",
     maritalStatus: "",
@@ -98,8 +102,10 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
       setFormData({
         fullName: patient.fullName,
         cpf: patient.cpf || "",
+        rg: (patient as any).rg || "",
         email: patient.email || "",
         phone: patient.phone,
+        workPhone: (patient as any).workPhone || "",
         birthDate: patient.birthDate || "",
         birthCity: (patient as any).birthCity || "",
         maritalStatus: (patient as any).maritalStatus || "",
@@ -131,8 +137,10 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
       setFormData({
         fullName: "",
         cpf: "",
+        rg: "",
         email: "",
         phone: "",
+        workPhone: "",
         birthDate: "",
         birthCity: "",
         maritalStatus: "",
@@ -296,6 +304,17 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="rg">RG</Label>
+                <Input
+                  id="rg"
+                  value={formData.rg}
+                  onChange={(e) => handleInputChange("rg", e.target.value)}
+                  placeholder="00.000.000-0"
+                  data-testid="input-patient-rg"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="birthDate">Data de Nascimento</Label>
                 <Input
                   id="birthDate"
@@ -342,6 +361,17 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
                   placeholder="(11) 99999-9999"
                   required
                   data-testid="input-patient-phone"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="workPhone">Fone de Trabalho</Label>
+                <Input
+                  id="workPhone"
+                  value={formData.workPhone}
+                  onChange={(e) => handleInputChange("workPhone", e.target.value)}
+                  placeholder="(11) 3333-3333"
+                  data-testid="input-patient-workphone"
                 />
               </div>
 

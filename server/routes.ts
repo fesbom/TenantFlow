@@ -1279,7 +1279,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   fullName: row.nm_paciente?.trim(),
                   email: row.e_mail?.trim() || null,
                   cpf: row.cpf?.trim() || null,
-                  phone: row.fone_res?.trim() || row.celular?.trim() || row.fone_trab?.trim(),
+                  rg: row.rg?.trim() || null,
+                  phone: row.fone_res?.trim() || row.celular?.trim(),
+                  workPhone: row.fone_trab?.trim() || null,
                   birthDate: parseDate(row.dt_nascimento),
                   birthCity: row.naturalidade?.trim() || null,
                   maritalStatus: mapMaritalStatus(row.estado_civil?.trim()),
@@ -1301,10 +1303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   lastVisitDate: row.dt_ultima_visita ? parseDate(row.dt_ultima_visita) : null,
                   lastContactDate: row.dt_ultimo_contato ? parseDate(row.dt_ultimo_contato) : null,
                   // Additional information in medical notes
-                  medicalNotes: [
-                    row.rg ? `RG: ${row.rg.trim()}` : null,
-                    row.fone_trab ? `Fone Trabalho: ${row.fone_trab.trim()}` : null
-                  ].filter(Boolean).join(' | ') || null,
+                  medicalNotes: null, // RG and work phone now have dedicated fields
                   clinicId: req.user!.clinicId,
                   externalId: row.cd_paciente ? row.cd_paciente.toString() : null
                 };
@@ -1316,10 +1315,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   continue;
                 }
                 
-                if (!patientData.phone) {
+                if (!patientData.phone && !patientData.workPhone) {
                   errors.push(`Row ${csvData.indexOf(row) + 1}: Missing phone number (fone_res, celular, or fone_trab)`);
                   failed++;
                   continue;
+                }
+                
+                // If no residential phone, use work phone as primary
+                if (!patientData.phone && patientData.workPhone) {
+                  patientData.phone = patientData.workPhone;
+                  patientData.workPhone = null;
                 }
 
                 const patient = await storage.createPatient(patientData);
@@ -1579,6 +1584,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Internal server error",
         imported: 0,
         failed: 0
+      });
+    }
+  });
+
+  // Data migration route - migrate RG from medical notes to dedicated field
+  app.post("/api/migrate-rg-data", authenticateToken, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      let migrated = 0;
+      let processed = 0;
+      const errors: string[] = [];
+
+      // Get all patients with medical notes containing RG information
+      const patientsWithRG = await db.select()
+        .from(patients)
+        .where(and(
+          eq(patients.clinicId, req.user!.clinicId),
+          isNotNull(patients.medicalNotes),
+          or(
+            // RG pattern: "RG: xxxxxxx"
+            sql`${patients.medicalNotes} LIKE '%RG:%'`,
+            // Work phone pattern: "Fone Trabalho: xxxxxxx" 
+            sql`${patients.medicalNotes} LIKE '%Fone Trabalho:%'`
+          )
+        ));
+
+      for (const patient of patientsWithRG) {
+        try {
+          processed++;
+          let needsUpdate = false;
+          const updates: any = {};
+
+          if (patient.medicalNotes) {
+            let cleanedNotes = patient.medicalNotes;
+
+            // Extract RG if field is empty and notes contain RG
+            if (!patient.rg && patient.medicalNotes.includes('RG:')) {
+              const rgMatch = patient.medicalNotes.match(/RG:\s*([^|]+)/i);
+              if (rgMatch) {
+                updates.rg = rgMatch[1].trim();
+                cleanedNotes = cleanedNotes.replace(/RG:\s*[^|]+\s*(\|\s*)?/gi, '');
+                needsUpdate = true;
+              }
+            }
+
+            // Extract work phone if field is empty and notes contain work phone
+            if (!patient.workPhone && patient.medicalNotes.includes('Fone Trabalho:')) {
+              const workPhoneMatch = patient.medicalNotes.match(/Fone Trabalho:\s*([^|]+)/i);
+              if (workPhoneMatch) {
+                updates.workPhone = workPhoneMatch[1].trim();
+                cleanedNotes = cleanedNotes.replace(/Fone Trabalho:\s*[^|]+\s*(\|\s*)?/gi, '');
+                needsUpdate = true;
+              }
+            }
+
+            // Clean up the medical notes (remove empty pipes, trim spaces)
+            if (needsUpdate) {
+              cleanedNotes = cleanedNotes
+                .replace(/^\s*\|\s*/, '') // Remove leading pipe
+                .replace(/\s*\|\s*$/, '') // Remove trailing pipe
+                .replace(/\s*\|\s*\|\s*/g, ' | ') // Fix double pipes
+                .trim();
+              
+              updates.medicalNotes = cleanedNotes || null;
+
+              // Update the patient record
+              await db.update(patients)
+                .set(updates)
+                .where(eq(patients.id, patient.id));
+              
+              migrated++;
+            }
+          }
+        } catch (error: any) {
+          errors.push(`Patient ID ${patient.id}: ${error.message}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: "RG and work phone data migration completed",
+        processed,
+        migrated,
+        errors: errors.length > 0 ? errors.slice(0, 10) : []
+      });
+
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error during migration",
+        error: error.message
       });
     }
   });
