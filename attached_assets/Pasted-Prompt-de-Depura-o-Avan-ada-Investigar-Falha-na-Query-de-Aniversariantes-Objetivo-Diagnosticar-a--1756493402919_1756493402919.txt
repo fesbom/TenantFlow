@@ -1,0 +1,34 @@
+Prompt de Depuração Avançada: Investigar Falha na Query de Aniversariantes
+Objetivo: Diagnosticar a causa raiz pela qual a consulta de aniversariantes continua retornando resultados incorretos, mesmo após a implementação da lógica de fuso horário explícita.
+
+Contexto: Olá. Entendo perfeitamente que você aplicou a correção com AT TIME ZONE, que teoricamente seria a solução definitiva. No entanto, o problema persiste: hoje, dia 29 de Agosto, a paciente 'Luciana Rzatki' (cujo aniversário foi ontem, dia 28) continua aparecendo na lista.
+
+Isso significa que há um problema fundamental na forma como a data está armazenada, como o ORM (Drizzle) está gerando o SQL, ou no tipo de dado da coluna. Precisamos parar de tentar adivinhar a solução e, em vez disso, coletar evidências concretas.
+
+Ação Requerida: Executar os Seguintes 3 Passos de Diagnóstico
+Por favor, execute estas três investigações e me retorne os resultados.
+
+1. Expor o SQL Gerado pelo ORM (Passo Mais Importante):
+
+Ação: Modifique temporariamente a função getBirthdayPatients no backend. Em vez de executar a consulta, configure o Drizzle para apenas gerar e logar a string de SQL final que ele está enviando para o banco de dados.
+
+Por que isso é crucial: Precisamos ver o SQL exato que está sendo executado. Isso nos dirá se o ORM está traduzindo corretamente a nossa intenção de usar AT TIME ZONE 'America/Sao_Paulo' ou se está gerando uma consulta diferente.
+
+2. Verificar os Dados Brutos da Paciente em Questão:
+
+Ação: Execute uma consulta SQL direta no banco de dados para buscar o registro da paciente que está aparecendo incorretamente.
+
+Comando SQL a ser executado:
+
+SQL
+
+SELECT name, "birthDate" FROM "Patient" WHERE name ILIKE '%LUCIANA RZATKI%';
+Informação Necessária: Por favor, me informe o valor exato e completo que está na coluna "birthDate" para esta paciente.
+
+3. Confirmar o Tipo de Dado da Coluna no Schema:
+
+Ação: Verifique no arquivo de definição do schema do Drizzle (ou no arquivo de migração do banco) e me informe qual é o tipo de dado exato da coluna birthDate na tabela Patient.
+
+As opções são cruciais: É date, timestamp, timestamptz (timestamp with time zone), ou varchar (texto)? O comportamento da cláusula AT TIME ZONE muda drasticamente dependendo do tipo da coluna.
+
+Com estas três informações (o SQL gerado, o dado bruto da paciente e o tipo da coluna), teremos uma visão completa e poderemos identificar a causa raiz, seja ela no ORM, nos dados ou na estrutura da tabela.

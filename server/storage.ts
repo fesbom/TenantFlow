@@ -248,7 +248,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBirthdayPatients(clinicId: string, date: Date): Promise<Patient[]> {
-    return await db
+    const query = db
       .select()
       .from(patients)
       .where(and(
@@ -257,6 +257,12 @@ export class DatabaseStorage implements IStorage {
         sql`EXTRACT(MONTH FROM ${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`,
         sql`EXTRACT(DAY FROM ${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo') = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`
       ));
+    
+    console.log("=== BIRTHDAY QUERY DEBUG ===");
+    console.log("Generated SQL:", query.toSQL());
+    console.log("==============================");
+    
+    return await query;
   }
 
   // Appointment methods
