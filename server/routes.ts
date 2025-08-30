@@ -1252,6 +1252,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     async function findPatientByOldId(oldId: string): Promise<string | null> {
       try {
+        // DEBUG: Log what the function receives
+        console.log("3. Função findPatientByOldId RECEBEU o ID:", oldId);
+        
         // Find patient by external ID (cd_paciente from CSV)
         const existingPatient = await db.select()
           .from(patients)
@@ -1261,10 +1264,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ))
           .limit(1);
         
+        // DEBUG: Log the database query result
+        console.log(`4. Resultado da busca no banco para o ID ${oldId}:`, existingPatient);
+        
         if (existingPatient.length > 0) {
+          console.log(`5. Paciente encontrado! Retornando ID interno:`, existingPatient[0].id);
           return existingPatient[0].id;
         }
         
+        console.log(`6. Nenhum paciente encontrado com externalId: ${oldId}`);
         return null;
       } catch (error) {
         console.error('Error finding patient by old ID:', error);
@@ -1502,6 +1510,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'treatments':
             for (const row of csvData) {
               try {
+                // DEBUG: Log complete CSV row
+                console.log("1. Linha do CSV processada:", row);
+                
                 // Check if record already exists by external ID (cd_tratamento)
                 if (row.cd_tratamento) {
                   const existingTreatment = await db.select()
@@ -1520,6 +1531,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
                 }
 
+                // DEBUG: Log the patient ID being searched
+                const pacienteIdExterno = row.cd_paciente;
+                console.log("2. Buscando paciente com externalId:", pacienteIdExterno);
+                
                 // Find patient by cd_paciente from CSV using external ID lookup
                 const patientId = idMapping.get(`patient_${row.cd_paciente}`) || 
                                  await findPatientByOldId(row.cd_paciente);
