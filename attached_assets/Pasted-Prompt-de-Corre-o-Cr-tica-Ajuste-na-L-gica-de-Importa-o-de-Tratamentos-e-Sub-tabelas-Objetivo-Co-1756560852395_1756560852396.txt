@@ -1,0 +1,62 @@
+Prompt de Correção Crítica: Ajuste na Lógica de Importação de Tratamentos e Sub-tabelas
+Objetivo: Corrigir a lógica de importação para os arquivos tratamento.csv, tratamento_orcamento.csv e tratamento_movimentacao.csv para que eles resolvam corretamente as dependências (chaves estrangeiras), salvem seus próprios IDs externos e evitem a importação de registros duplicados.
+
+Contexto: Ao tentar importar o arquivo tratamento.csv, o sistema falha com o erro "Patient with ID undefined not found". Isso ocorre porque a rotina não está buscando o ID interno do paciente a partir do código do paciente (cd_paciente) fornecido no arquivo. Este mesmo problema de lógica precisa ser corrigido para as importações de Orçamentos e Movimentações, que dependem do ID do Tratamento.
+
+Ação Requerida:
+Por favor, revise e ajuste as três rotinas de importação a seguir:
+
+1. Ajustes na Importação de TRATAMENTOS (tratamento.csv)
+Correção (Resolução do Paciente):
+
+Ao processar uma linha, pegue o valor da coluna cd_paciente do CSV.
+
+Use este valor para fazer uma busca na tabela Patient do banco de dados, na coluna externalId.
+
+O ID interno retornado por esta busca deve ser usado para preencher o campo patientId ao criar o novo tratamento. Se nenhum paciente for encontrado, registre um erro para essa linha.
+
+Prevenção de Duplicidade e externalId:
+
+O identificador único deste registro no sistema antigo é a coluna cd_tratamento.
+
+Antes de inserir, verifique na tabela Treatment se já existe um registro com o externalId igual ao cd_tratamento da linha atual do CSV.
+
+Se já existir, ignore a linha e continue o processo.
+
+Se não existir, crie o novo registro de tratamento e salve o valor de cd_tratamento na coluna externalId da tabela Treatment.
+
+2. Ajustes na Importação de ORÇAMENTOS (tratamento_orcamento.csv)
+Correção (Resolução do Tratamento):
+
+Ao processar uma linha, pegue o valor da coluna cd_tratamento do CSV.
+
+Use este valor para buscar na tabela Treatment o registro onde externalId é igual ao cd_tratamento, obtendo assim o ID interno do tratamento para o campo treatmentId.
+
+Prevenção de Duplicidade e externalId (Chave Composta):
+
+A chave única deste registro no sistema antigo é a combinação das colunas cd_tratamento + sequencial.
+
+Crie um identificador único para o externalId concatenando estes dois valores. Exemplo: externalId = '12345-1' (para cd_tratamento=12345 e sequencial=1).
+
+Antes de inserir, verifique na tabela BudgetItem se já existe um registro com este externalId combinado.
+
+Se já existir, ignore a linha.
+
+Se não existir, crie o novo BudgetItem e salve a string combinada (ex: '12345-1') na coluna externalId.
+
+3. Ajustes na Importação de MOVIMENTAÇÕES (tratamento_movimentacao.csv)
+Correção (Resolução do Tratamento):
+
+A lógica é a mesma do orçamento: use a coluna cd_tratamento do CSV para encontrar o ID interno do tratamento na tabela Treatment consultando a coluna externalId.
+
+Prevenção de Duplicidade e externalId:
+
+O identificador único deste registro no sistema antigo é a coluna id.
+
+Antes de inserir, verifique na tabela TreatmentMovement se já existe um registro com o externalId igual ao id da linha atual do CSV.
+
+Se já existir, ignore a linha.
+
+Se não existir, crie a nova TreatmentMovement e salve o valor da coluna id do CSV na coluna externalId da tabela TreatmentMovement.
+
+Com essas três rotinas ajustadas, o processo de importação se tornará robusto, interligado e seguro contra duplicações.

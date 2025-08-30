@@ -1252,14 +1252,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     async function findPatientByOldId(oldId: string): Promise<string | null> {
       try {
-        // Try to find patient by their current ID first
-        const patients = await storage.getPatientsByClinic(req.user!.clinicId);
+        // Find patient by external ID (cd_paciente from CSV)
+        const existingPatient = await db.select()
+          .from(patients)
+          .where(and(
+            eq(patients.externalId, oldId.toString()),
+            eq(patients.clinicId, req.user!.clinicId)
+          ))
+          .limit(1);
         
-        // For now, try to match by index position or similar
-        // In a real implementation, you'd want to add a migration_id field
-        const patientIndex = parseInt(oldId) - 1;
-        if (patientIndex >= 0 && patientIndex < patients.length) {
-          return patients[patientIndex].id;
+        if (existingPatient.length > 0) {
+          return existingPatient[0].id;
         }
         
         return null;
@@ -1271,8 +1274,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     async function findTreatmentByOldId(oldId: string): Promise<string | null> {
       try {
-        // Similar implementation - in practice you'd want a migration_id field
-        // For now, this is a placeholder that always returns null
+        // Find treatment by external ID (cd_tratamento from CSV)
+        const existingTreatment = await db.select()
+          .from(treatments)
+          .where(and(
+            eq(treatments.externalId, oldId.toString()),
+            eq(treatments.clinicId, req.user!.clinicId)
+          ))
+          .limit(1);
+        
+        if (existingTreatment.length > 0) {
+          return existingTreatment[0].id;
+        }
+        
         return null;
       } catch (error) {
         console.error('Error finding treatment by old ID:', error);
@@ -1488,26 +1502,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'treatments':
             for (const row of csvData) {
               try {
-                // Check if record already exists by external ID
-                if (row.id) {
+                // Check if record already exists by external ID (cd_tratamento)
+                if (row.cd_tratamento) {
                   const existingTreatment = await db.select()
                     .from(treatments)
-                    .where(eq(treatments.externalId, row.id.toString()))
+                    .where(and(
+                      eq(treatments.externalId, row.cd_tratamento.toString()),
+                      eq(treatments.clinicId, req.user!.clinicId)
+                    ))
                     .limit(1);
                   
                   if (existingTreatment.length > 0) {
                     // Record already exists, skip it
-                    idMapping.set(`treatment_${row.id}`, existingTreatment[0].id);
+                    idMapping.set(`treatment_${row.cd_tratamento}`, existingTreatment[0].id);
                     skipped++;
                     continue;
                   }
                 }
 
-                // Find patient by old ID using mapping or fallback lookup
-                const patientId = idMapping.get(`patient_${row.id_paciente}`) || 
-                                 await findPatientByOldId(row.id_paciente);
+                // Find patient by cd_paciente from CSV using external ID lookup
+                const patientId = idMapping.get(`patient_${row.cd_paciente}`) || 
+                                 await findPatientByOldId(row.cd_paciente);
                 if (!patientId) {
-                  errors.push(`Row ${csvData.indexOf(row) + 1}: Patient with ID ${row.id_paciente} not found`);
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Patient with ID ${row.cd_paciente} not found`);
                   failed++;
                   continue;
                 }
@@ -1519,7 +1536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   dataInicio: parseDate(row.data_inicio),
                   situacaoTratamento: mapTreatmentStatus(row.situacao?.trim()),
                   tituloTratamento: row.titulo?.trim(),
-                  externalId: row.id ? row.id.toString() : null
+                  externalId: row.cd_tratamento ? row.cd_tratamento.toString() : null
                 };
 
                 if (!treatmentData.tituloTratamento) {
@@ -1529,8 +1546,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
 
                 const treatment = await storage.createTreatment(treatmentData);
-                if (row.id) {
-                  idMapping.set(`treatment_${row.id}`, treatment.id);
+                if (row.cd_tratamento) {
+                  idMapping.set(`treatment_${row.cd_tratamento}`, treatment.id);
                 }
                 imported++;
               } catch (error: any) {
@@ -1543,11 +1560,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'budget-items':
             for (const row of csvData) {
               try {
-                // Check if record already exists by external ID
-                if (row.id) {
+                // Create composite external ID from cd_tratamento + sequencial
+                const compositeExternalId = row.cd_tratamento && row.sequencial ? 
+                  `${row.cd_tratamento}-${row.sequencial}` : null;
+
+                // Check if record already exists by composite external ID
+                if (compositeExternalId) {
                   const existingBudgetItem = await db.select()
                     .from(budgetItems)
-                    .where(eq(budgetItems.externalId, row.id.toString()))
+                    .where(eq(budgetItems.externalId, compositeExternalId))
                     .limit(1);
                   
                   if (existingBudgetItem.length > 0) {
@@ -1557,12 +1578,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
                 }
 
-                // Find treatment by old ID
-                const treatmentId = idMapping.get(`treatment_${row.id_tratamento}`) || 
-                                  await findTreatmentByOldId(row.id_tratamento);
+                // Find treatment by cd_tratamento from CSV using external ID lookup
+                const treatmentId = idMapping.get(`treatment_${row.cd_tratamento}`) || 
+                                  await findTreatmentByOldId(row.cd_tratamento);
                 
                 if (!treatmentId) {
-                  errors.push(`Row ${csvData.indexOf(row) + 1}: Treatment with ID ${row.id_tratamento} not found`);
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Treatment with ID ${row.cd_tratamento} not found`);
                   failed++;
                   continue;
                 }
@@ -1571,7 +1592,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   treatmentId,
                   descricaoOrcamento: row.descricao?.trim(),
                   valorOrcamento: parseValue(row.valor),
-                  externalId: row.id ? row.id.toString() : null
+                  externalId: compositeExternalId
                 };
 
                 if (!budgetItemData.descricaoOrcamento) {
@@ -1592,7 +1613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'treatment-movements':
             for (const row of csvData) {
               try {
-                // Check if record already exists by external ID
+                // Check if record already exists by external ID (using the 'id' column)
                 if (row.id) {
                   const existingMovement = await db.select()
                     .from(treatmentMovements)
@@ -1606,12 +1627,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   }
                 }
 
-                // Find treatment by old ID
-                const treatmentId = idMapping.get(`treatment_${row.id_tratamento}`) || 
-                                  await findTreatmentByOldId(row.id_tratamento);
+                // Find treatment by cd_tratamento from CSV using external ID lookup
+                const treatmentId = idMapping.get(`treatment_${row.cd_tratamento}`) || 
+                                  await findTreatmentByOldId(row.cd_tratamento);
                 
                 if (!treatmentId) {
-                  errors.push(`Row ${csvData.indexOf(row) + 1}: Treatment with ID ${row.id_tratamento} not found`);
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Treatment with ID ${row.cd_tratamento} not found`);
                   failed++;
                   continue;
                 }
