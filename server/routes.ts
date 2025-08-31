@@ -1502,7 +1502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'treatments':
             for (const row of csvData) {
               try {
-                // Check if record already exists by external ID (cd_tratamento)
+                // Step 1: Check for duplicates FIRST - verify if treatment already exists
                 if (row.cd_tratamento) {
                   const existingTreatment = await db.select()
                     .from(treatments)
@@ -1513,22 +1513,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     .limit(1);
                   
                   if (existingTreatment.length > 0) {
-                    // Record already exists, skip it
+                    // Treatment already exists - silently skip and count as existing
                     idMapping.set(`treatment_${row.cd_tratamento}`, existingTreatment[0].id);
                     skipped++;
-                    continue;
+                    continue; // Skip to next row without any error
                   }
                 }
 
-                // Find patient by cd_paciente from CSV using external ID lookup
+                // Step 2: Treatment doesn't exist, proceed to find patient and create new treatment
                 const patientId = idMapping.get(`patient_${row.cd_paciente}`) || 
                                  await findPatientByOldId(row.cd_paciente);
+                
                 if (!patientId) {
                   errors.push(`Row ${csvData.indexOf(row) + 1}: Patient with ID ${row.cd_paciente} not found`);
                   failed++;
                   continue;
                 }
 
+                // Create new treatment with external ID from CSV
                 const treatmentData = {
                   patientId,
                   dentistId: req.user!.id,
@@ -1539,12 +1541,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   externalId: row.cd_tratamento ? row.cd_tratamento.toString() : null
                 };
 
-                // Title is now handled with fallback, no need for validation
-
                 const treatment = await storage.createTreatment(treatmentData);
+                
+                // Store in mapping for potential use by dependent imports
                 if (row.cd_tratamento) {
                   idMapping.set(`treatment_${row.cd_tratamento}`, treatment.id);
                 }
+                
                 imported++;
               } catch (error: any) {
                 errors.push(`Row ${csvData.indexOf(row) + 1}: ${error.message}`);

@@ -1,0 +1,36 @@
+Prompt Refinado: Ajustar Lógica de Duplicidade na Importação de Tratamentos
+Objetivo: Ajustar a rotina de importação do arquivo tratamento.csv para que a verificação de duplicidade de tratamentos funcione de forma idempotente (seja reiniciável), ignorando registros que já existem em vez de causar um erro, e prosseguindo com a criação dos que ainda não foram importados.
+
+Contexto: A importação de orçamentos e movimentações está falhando com o erro Treatment with ID X not found porque a importação principal de tratamento.csv não está conseguindo criar os registros. A lógica de verificação de duplicidade para tratamentos precisa ser refinada para permitir que o processo seja executado múltiplas vezes sem falhas.
+
+Ação Requerida:
+Instrução: Modifique a lógica de importação para o arquivo tratamento.csv no backend (em server/routes.ts) para seguir exatamente este fluxo para cada linha do arquivo:
+
+1. Verificar Duplicidade de Tratamento (Primeiro Passo):
+
+Pegue o valor da coluna cd_tratamento.
+
+Verifique na tabela Treatment se já existe um registro com o externalId igual a este valor.
+
+Se JÁ EXISTIR: A rotina deve silenciosamente ignorar esta linha e pular para a próxima. No relatório final, ela deve ser contada como "Registro já existente". Não deve gerar nenhum erro.
+
+Se NÃO EXISTIR: Prossiga para o passo seguinte.
+
+2. Buscar Paciente e Criar o Novo Tratamento:
+
+Pegue o valor da coluna cd_paciente.
+
+Busque o patientId interno na tabela Patient (onde externalId é igual ao cd_paciente). Se o paciente não for encontrado, aí sim, registre um erro para esta linha e continue.
+
+Se o paciente for encontrado, crie o novo registro na tabela Treatment.
+
+Ao criar este novo tratamento, salve o valor de cd_tratamento do CSV na coluna externalId do novo registro.
+
+Por que esta lógica resolve o problema:
+Esta abordagem garante duas coisas essenciais:
+
+É Reiniciável: Você pode rodar a mesma importação várias vezes. Na primeira vez, ela criará os tratamentos. Nas vezes seguintes, ela identificará que eles já existem e simplesmente os ignorará, sem causar erros.
+
+Desbloqueia as Outras Importações: Ao criar os tratamentos que realmente estão faltando, ela permite que as importações de Orçamentos e Movimentações (que dependem desses dados) finalmente encontrem os registros de que precisam, resolvendo o erro Treatment with ID X not found.
+
+Observação: Como antes, nenhuma alteração é necessária nas rotinas de importação de orçamentos e movimentações. A correção na importação de tratamentos resolverá o problema em cascata.
