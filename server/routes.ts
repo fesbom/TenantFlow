@@ -1426,12 +1426,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   continue;
                 }
                 
-                if (!patientData.phone && !patientData.workPhone) {
-                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing phone number (fone_res, celular, or fone_trab)`);
-                  failed++;
-                  continue;
-                }
-                
                 // If no residential phone, use work phone as primary
                 if (!patientData.phone && patientData.workPhone) {
                   patientData.phone = patientData.workPhone;
