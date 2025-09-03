@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Calendar, momentLocalizer, View, Views } from "react-big-calendar";
-import moment from "moment";
+import { Calendar, momentLocalizer, View, Views,dateFnsLocalizer } from "react-big-calendar";
+import { format, parse, startOfWeek, getDay } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,10 +15,15 @@ import { Appointment, Patient, User } from "@/types";
 import AppointmentModal from "@/components/modals/appointment-modal";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter } from "lucide-react";
 
+
 // Configure moment for Portuguese
-import 'moment/locale/pt-br';
-moment.locale('pt-br');
+import moment from "moment";
 const localizer = momentLocalizer(moment);
+import 'moment/locale/pt-br';
+moment.updateLocale('pt-br', {
+  weekdaysShort: ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'],
+})
+moment.locale('pt-br');
 
 interface CalendarEvent {
   id: string;
@@ -34,7 +40,7 @@ interface CalendarViewProps {
 export default function CalendarView({ className = "" }: CalendarViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   // State management
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentView, setCurrentView] = useState<View>(Views.WEEK);
@@ -104,7 +110,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
       // NO TIMEZONE CONVERSION - Create date as if it's already local
       // Database has "2025-08-25T16:00:00.000Z" → force it to be treated as "16:00" local
       const appointmentDate = new Date(appointment.scheduledDate);
-      
+
       // Force the calendar to interpret this as local time by creating a new Date 
       // with the UTC values used as if they were local values
       const start = new Date(
@@ -116,7 +122,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
         appointmentDate.getUTCSeconds()
       );
       const end = new Date(start.getTime() + (appointment.duration || 60) * 60000); // duration in minutes
-      
+
       return {
         id: appointment.id,
         title: `${getPatientName(appointment.patientId)} - ${getDentistName(appointment.dentistId)}`,
@@ -152,7 +158,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
   const handleNavigate = (action: 'PREV' | 'NEXT' | 'TODAY') => {
     const newDate = new Date(currentDate);
-    
+
     if (action === 'TODAY') {
       setCurrentDate(new Date());
     } else if (action === 'PREV') {
@@ -189,9 +195,9 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
       completed: "bg-green-100 border-green-500 text-green-800",
       cancelled: "bg-red-100 border-red-500 text-red-800",
     };
-    
+
     const colorClass = statusColors[appointment.status as keyof typeof statusColors] || statusColors.scheduled;
-    
+
     return (
       <div className={`p-1 rounded border-l-4 text-xs ${colorClass} h-full overflow-hidden`}>
         <div className="font-medium truncate">{getPatientName(appointment.patientId)}</div>
@@ -208,7 +214,36 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
       default: return "Agenda";
     }
   };
+  
+  const locales = {
+    'pt-BR': ptBR,
+  }
 
+  const localizer = dateFnsLocalizer({
+    format,
+    parse,
+    startOfWeek,
+    getDay,
+    locales,
+  })
+  
+  const formats = {
+    // cabeçalho das colunas (seg, ter, qua...)
+    weekdayFormat: (date: Date) => moment(date).format("ddd"),
+
+    // cabeçalho quando estiver em view=week ou view=day
+    dayHeaderFormat: (date: Date) => moment(date).format("ddd DD/MM"),
+
+    // cabeçalho do mês (set 2025)
+    monthHeaderFormat: (date: Date) => moment(date).format("MMM YYYY"),
+
+    // (opcional) outras personalizações
+    timeGutterFormat: (date: Date) => moment(date).format("HH:mm"),
+    eventTimeRangeFormat: ({ start, end }: any) =>
+      `${moment(start).format("HH:mm")} - ${moment(end).format("HH:mm")}`,
+  }
+
+  
   const formatCurrentDate = () => {
     if (currentView === Views.MONTH) {
       return moment(currentDate).format('MMMM YYYY');
@@ -231,7 +266,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
               <CalendarIcon className="h-5 w-5" />
               <span>Agenda - {getViewName()}</span>
             </CardTitle>
-            
+
             <div className="flex flex-col lg:flex-row gap-4">
               {/* Dentist Filter */}
               <div className="flex items-center space-x-2">
@@ -250,7 +285,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               {/* View Buttons */}
               <div className="flex border rounded-lg">
                 <Button
@@ -283,7 +318,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
               </div>
             </div>
           </div>
-          
+
           {/* Navigation */}
           <div className="flex items-center justify-between pt-4">
             <div className="flex items-center space-x-2">
@@ -312,17 +347,17 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-            
+
             <div className="text-lg font-medium text-gray-900">
               {formatCurrentDate()}
             </div>
-            
+
             <div className="flex items-center space-x-2 text-sm text-gray-600">
               <span>{filteredAppointments.length} agendamento{filteredAppointments.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent>
           {appointmentsLoading ? (
             <div className="h-96 flex items-center justify-center text-gray-500">
@@ -332,7 +367,10 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
           ) : (
             <div className="h-[600px]">
               <Calendar
+                toolbar={false}
                 localizer={localizer}
+                culture="pt-BR"
+                formats={formats}
                 events={calendarEvents}
                 startAccessor="start"
                 endAccessor="end"
@@ -348,7 +386,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                 showMultiDayTimes={true}
                 step={30}
                 timeslots={2}
-                min={new Date(2024, 0, 1, 8, 0)} // 8:00 AM
+                min={new Date(2024, 0, 1, 7, 0)} // 8:00 AM
                 max={new Date(2024, 0, 1, 20, 0)} // 8:00 PM
                 timezone="local"
                 components={{
@@ -370,7 +408,6 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                   showMore: (total) => `+ ${total} mais`,
                 }}
                 formats={{
-                  dayHeaderFormat: (date) => moment(date).format('dddd DD/MM'),
                   dayRangeHeaderFormat: ({ start, end }) =>
                     `${moment(start).format('DD/MM')} - ${moment(end).format('DD/MM/YYYY')}`,
                   monthHeaderFormat: (date) => moment(date).format('MMMM YYYY'),
