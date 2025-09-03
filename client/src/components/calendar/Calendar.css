@@ -1,0 +1,23 @@
+/* Torna as linhas horizontais mais finas e claras */
+.rbc-day-slot .rbc-time-slot:not(.rbc-time-slot-gt-1) {
+  border-bottom-color: #ccc;
+  border-bottom-width: 1px;
+}
+
+/* Garante que as linhas verticais apareçam em todo o grid e se estendam até o fim */
+.rbc-day-bg {
+  border-right-color: #ccc;
+  border-right-width: 1px;
+  height: 100%; /* Esta linha força a altura total do contêiner pai */
+}
+
+/* Adiciona a linha vertical na primeira coluna */
+.rbc-day-bg:first-child {
+  border-left-color: #ccc;
+  border-left-width: 1px;
+}
+
+/* Ajusta a cor de fundo do dia atual para combinar */
+.rbc-today {
+  background-color: #f3f9ff;
+}
