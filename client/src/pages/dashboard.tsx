@@ -17,6 +17,8 @@ import {
   Receipt,
   Cake,
   MessageCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Appointment, Patient } from "@/types";
 
@@ -27,9 +29,20 @@ interface DashboardStats {
   attendanceRate: number;
 }
 
+interface PaginatedBirthdayResponse {
+  data: Patient[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
+}
+
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [birthdayPage, setBirthdayPage] = useState(1);
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
 
@@ -43,13 +56,16 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/today-appointments"],
   });
 
-  // Fetch birthday patients
-  const { data: birthdayPatients = [], isLoading: birthdaysLoading } = useQuery({
-    queryKey: ["/api/dashboard/birthday-patients"],
-    refetchOnWindowFocus: true, // Força a busca ao focar na aba
-    staleTime: 0, // Considera os dados sempre "velhos" para forçar re-fetch
-    gcTime: 0, // Remove completamente o cache (nova API do React Query)
-  }) as { data: Patient[], isLoading: boolean };
+  // Fetch birthday patients with pagination
+  const { data: birthdayData, isLoading: birthdaysLoading } = useQuery<PaginatedBirthdayResponse>({
+    queryKey: ["/api/dashboard/birthday-patients", { page: birthdayPage, pageSize: 5 }],
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+    gcTime: 0,
+  });
+
+  const birthdayPatients = birthdayData?.data || [];
+  const birthdayPagination = birthdayData?.pagination;
 
   const handleSendBirthdayMessage = async (patient: Patient) => {
     try {
@@ -61,7 +77,7 @@ export default function Dashboard() {
         },
         body: JSON.stringify({
           phone: patient.phone,
-          message: `🎉 Feliz aniversário, ${patient.full_name}! Desejamos um dia maravilhoso e muito especial! 🎂`,
+          message: `🎉 Feliz aniversário, ${patient.fullName}! Desejamos um dia maravilhoso e muito especial! 🎂`,
           type: "birthday",
         }),
       });
@@ -69,7 +85,7 @@ export default function Dashboard() {
       if (response.ok) {
         toast({
           title: "Mensagem enviada!",
-          description: `Mensagem de aniversário enviada para ${patient.full_name}`,
+          description: `Mensagem de aniversário enviada para ${patient.fullName}`,
         });
       }
     } catch (error) {
@@ -247,26 +263,60 @@ export default function Dashboard() {
                 ) : birthdayPatients.length === 0 ? (
                   <div className="text-center text-gray-500">Nenhum aniversariante hoje</div>
                 ) : (
-                  birthdayPatients.map((patient: any) => (
+                  <>
+                    {birthdayPatients.map((patient: Patient) => (
                       <div key={patient.id} className="flex items-center space-x-3 p-3 bg-pink-50 rounded-lg border border-pink-200">
-                      <div className="h-10 w-10 bg-pink-100 rounded-full flex items-center justify-center">
-                        <Cake className="h-5 w-5 text-pink-600" />
+                        <div className="h-10 w-10 bg-pink-100 rounded-full flex items-center justify-center">
+                          <Cake className="h-5 w-5 text-pink-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">{patient.fullName}</p>
+                          <p className="text-xs text-gray-600">Aniversário hoje</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleSendBirthdayMessage(patient)}
+                          className="text-primary hover:text-primary/80"
+                          data-testid={`birthday-message-${patient.id}`}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{patient.full_name}</p>
-                        <p className="text-xs text-gray-600">Aniversário hoje</p>
+                    ))}
+
+                    {/* Pagination Controls */}
+                    {birthdayPagination && birthdayPagination.totalPages > 1 && (
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="text-xs text-gray-600">
+                          {birthdayPatients.length} de {birthdayPagination.totalCount} aniversariantes
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setBirthdayPage(p => Math.max(1, p - 1))}
+                            disabled={birthdayPage === 1}
+                            data-testid="button-prev-birthday-page"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <span className="text-xs text-gray-600">
+                            {birthdayPagination.page}/{birthdayPagination.totalPages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setBirthdayPage(p => Math.min(birthdayPagination.totalPages, p + 1))}
+                            disabled={birthdayPage === birthdayPagination.totalPages}
+                            data-testid="button-next-birthday-page"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleSendBirthdayMessage(patient)}
-                        className="text-primary hover:text-primary/80"
-                        data-testid={`birthday-message-${patient.id}`}
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
