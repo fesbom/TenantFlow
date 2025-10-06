@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -11,22 +11,47 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
 import PatientModal from "@/components/modals/patient-modal";
 import { Patient } from "@/types";
-import { Search, Plus, Edit, Trash2, Phone, Mail } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDateBR } from "@/lib/date-formatter";
+
+interface PaginatedResponse {
+  data: Patient[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
+}
 
 export default function Patients() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch patients
-  const { data: patients = [], isLoading } = useQuery<Patient[]>({
-    queryKey: ["/api/patients"],
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1); // Reset to first page on search
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fetch patients with pagination and search
+  const { data, isLoading } = useQuery<PaginatedResponse>({
+    queryKey: ["/api/patients", { page: currentPage, pageSize: 10, search: debouncedSearch }],
   });
+
+  const patients = data?.data || [];
+  const pagination = data?.pagination;
 
   // Delete patient mutation
   const deletePatientMutation = useMutation({
@@ -48,12 +73,6 @@ export default function Patients() {
       });
     },
   });
-
-  const filteredPatients = patients.filter(patient =>
-    patient.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.phone.includes(searchTerm) ||
-    (patient.email && patient.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
 
   const handleAddPatient = () => {
     setSelectedPatient(null);
@@ -111,77 +130,113 @@ export default function Patients() {
             <CardContent>
               {isLoading ? (
                 <div className="text-center py-8 text-gray-500">Carregando pacientes...</div>
-              ) : filteredPatients.length === 0 ? (
+              ) : patients.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  {searchTerm ? "Nenhum paciente encontrado" : "Nenhum paciente cadastrado"}
+                  {debouncedSearch ? "Nenhum paciente encontrado" : "Nenhum paciente cadastrado"}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Contato</TableHead>
-                        <TableHead>Data de Nascimento</TableHead>
-                        <TableHead>Cadastrado em</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredPatients.map((patient) => (
-                        <TableRow key={patient.id} data-testid={`patient-row-${patient.id}`}>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{patient.fullName}</div>
-                              {patient.cpf && (
-                                <div className="text-sm text-gray-500">CPF: {patient.cpf}</div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="flex items-center text-sm">
-                                <Phone className="h-3 w-3 mr-1 text-gray-400" />
-                                {patient.phone}
-                              </div>
-                              {patient.email && (
-                                <div className="flex items-center text-sm text-gray-500">
-                                  <Mail className="h-3 w-3 mr-1 text-gray-400" />
-                                  {patient.email}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {patient.birthDate ? formatDateBR(patient.birthDate) : "-"}
-                          </TableCell>
-                          <TableCell>{formatDateBR(patient.createdAt)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditPatient(patient)}
-                                data-testid={`button-edit-${patient.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeletePatient(patient.id)}
-                                className="text-red-600 hover:text-red-700"
-                                data-testid={`button-delete-${patient.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Contato</TableHead>
+                          <TableHead>Data de Nascimento</TableHead>
+                          <TableHead>Cadastrado em</TableHead>
+                          <TableHead>Ações</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {patients.map((patient) => (
+                          <TableRow key={patient.id} data-testid={`patient-row-${patient.id}`}>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{patient.fullName}</div>
+                                {patient.cpf && (
+                                  <div className="text-sm text-gray-500">CPF: {patient.cpf}</div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div className="flex items-center text-sm">
+                                  <Phone className="h-3 w-3 mr-1 text-gray-400" />
+                                  {patient.phone}
+                                </div>
+                                {patient.email && (
+                                  <div className="flex items-center text-sm text-gray-500">
+                                    <Mail className="h-3 w-3 mr-1 text-gray-400" />
+                                    {patient.email}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {patient.birthDate ? formatDateBR(patient.birthDate) : "-"}
+                            </TableCell>
+                            <TableCell>{formatDateBR(patient.createdAt)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditPatient(patient)}
+                                  data-testid={`button-edit-${patient.id}`}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeletePatient(patient.id)}
+                                  className="text-red-600 hover:text-red-700"
+                                  data-testid={`button-delete-${patient.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  {pagination && pagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-gray-600">
+                        Mostrando {patients.length} de {pagination.totalCount} pacientes
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          data-testid="button-prev-page"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Anterior
+                        </Button>
+                        <span className="text-sm text-gray-600">
+                          Página {pagination.page} de {pagination.totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                          disabled={currentPage === pagination.totalPages}
+                          data-testid="button-next-page"
+                        >
+                          Próxima
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
