@@ -34,9 +34,11 @@ export default function MedicalRecords() {
   const [selectedMovement, setSelectedMovement] = useState<TreatmentMovement | null>(null);
 
   // Fetch patients
-  const { data: patients = [] } = useQuery<Patient[]>({
-    queryKey: ["/api/patients"],
+  const { data: patientsResponse } = useQuery<{ data: Patient[]; pagination: any }>({
+    queryKey: ["/api/patients", { page: 1, pageSize: 5000 }],
   });
+  
+  const patients = patientsResponse?.data || [];
 
   // Fetch treatments for selected patient
   const { data: treatments = [], isLoading: treatmentsLoading } = useQuery<Treatment[]>({
@@ -559,7 +561,7 @@ export default function MedicalRecords() {
                                                 src={movement.fotoAtividade} 
                                                 alt="Foto da atividade" 
                                                 className="w-16 h-16 object-cover rounded border cursor-pointer"
-                                                onClick={() => window.open(movement.fotoAtividade, '_blank')}
+                                                onClick={() => movement.fotoAtividade && window.open(movement.fotoAtividade, '_blank')}
                                               />
                                             </div>
                                           )}

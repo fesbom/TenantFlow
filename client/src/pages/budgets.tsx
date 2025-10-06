@@ -42,9 +42,11 @@ export default function Budgets() {
   });
 
   // Fetch patients for selection
-  const { data: patients = [] } = useQuery<Patient[]>({
-    queryKey: ["/api/patients"],
+  const { data: patientsResponse } = useQuery<{ data: Patient[]; pagination: any }>({
+    queryKey: ["/api/patients", { page: 1, pageSize: 5000 }],
   });
+  
+  const patients = patientsResponse?.data || [];
 
   // Create budget mutation
   const createBudgetMutation = useMutation({
@@ -215,7 +217,6 @@ export default function Budgets() {
                     <div className="md:col-span-2 space-y-2">
                       <Label htmlFor="patientId">Paciente *</Label>
                       <SearchablePatientSelect
-                        patients={patients}
                         value={formData.patientId}
                         onValueChange={(value) => setFormData({ ...formData, patientId: value })}
                         placeholder="Selecione um paciente"
