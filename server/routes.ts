@@ -446,8 +446,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Patient routes
   app.get("/api/patients", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const patients = await storage.getPatientsByClinic(req.user!.clinicId);
-      res.json(patients);
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = parseInt(req.query.pageSize as string) || 50;
+      const search = (req.query.search as string)?.trim() || '';
+
+      // Validate and sanitize pagination parameters
+      const validPage = Math.max(1, page);
+      const validPageSize = Math.min(Math.max(1, pageSize), 100); // Max 100 per page
+      const offset = (validPage - 1) * validPageSize;
+
+      // Build where conditions
+      const whereConditions = search
+        ? and(
+            eq(patients.clinicId, req.user!.clinicId),
+            or(
+              sql`LOWER(${patients.fullName}) LIKE LOWER(${'%' + search + '%'})`,
+              sql`${patients.cpf} LIKE ${search + '%'}`,
+              sql`${patients.phone} LIKE ${'%' + search + '%'}`
+            )
+          )
+        : eq(patients.clinicId, req.user!.clinicId);
+
+      // Get total count for pagination
+      const [{ count: totalCount }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(patients)
+        .where(whereConditions);
+
+      const totalPages = Math.ceil(totalCount / validPageSize);
+
+      // Get paginated results
+      const patientsData = await db
+        .select()
+        .from(patients)
+        .where(whereConditions)
+        .orderBy(patients.fullName)
+        .limit(validPageSize)
+        .offset(offset);
+
+      res.json({
+        data: patientsData,
+        pagination: {
+          page: validPage,
+          pageSize: validPageSize,
+          totalCount,
+          totalPages
+        }
+      });
     } catch (error) {
       console.error("Get patients error:", error);
       res.status(500).json({ message: "Internal server error" });

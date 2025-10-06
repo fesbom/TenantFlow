@@ -1,0 +1,33 @@
+**Assunto:** Implementar Paginação e Busca Server-Side para Otimizar Performance Crítica
+
+**Prompt:**
+
+Aja como um desenvolvedor de software sênior, especialista em React, Node.js e otimização de performance. A sua tarefa é resolver problemas críticos de lentidão em três áreas da aplicação, que se tornaram inutilizáveis devido ao grande volume de dados.
+
+A solução deve ser implementada com **paginação e busca do lado do servidor (server-side)** para garantir que a aplicação permaneça rápida e escalável, independentemente do número de registos.
+
+**Requisitos Detalhados:**
+
+**1. Telas de Listagem Principal (Pacientes e Tratamentos):**
+* **Problema:** As páginas `Pacientes` e `Tratamentos` carregam todos os registos de uma só vez.
+* **Solução:**
+    * **Backend (API):** Modifique os endpoints `GET /api/patients` e `GET /api/treatments` para aceitarem `page`, `pageSize` e `search` como parâmetros de consulta. A API deve usar estes parâmetros para fazer uma consulta paginada e filtrada ao banco de dados. A resposta deve incluir os dados da página e o total de páginas.
+    * **Frontend (UI):** Nas duas páginas, adicione um campo de busca e controlos de paginação (botões "Anterior"/"Próximo"). A busca de dados deve ser refatorada para usar os novos parâmetros, atualizando a lista dinamicamente.
+
+**2. Modal de Agendamento (Seleção de Pacientes):**
+* **Problema:** O seletor de pacientes dentro do modal de "Novo/Editar Agendamento" está a carregar todos os 7400 pacientes, causando lentidão extrema ao abrir o modal.
+* **Solução:** Transforme o componente de seleção de pacientes num **"Searchable Select" assíncrono**.
+    * **Backend (API):** Garanta que o endpoint `GET /api/patients` filtre os resultados quando receber o parâmetro `search`. Ele deve retornar apenas os pacientes cujo nome corresponda ao termo pesquisado.
+    * **Frontend (UI):** Modifique o componente do seletor de pacientes para que ele **não carregue a lista inteira no início**. Em vez disso, ele deve fazer uma chamada à API para `GET /api/patients?search=...` à medida que o utilizador digita no campo de busca, exibindo os resultados retornados.
+
+**3. Dashboard (Lista de Aniversariantes):**
+* **Problema:** Se houver muitos aniversariantes no mesmo dia, a lista no dashboard pode ficar muito longa e lenta.
+* **Solução:**
+    * **Backend (API):** Modifique o endpoint `GET /api/dashboard/birthday-patients` para aceitar os parâmetros `page` e `pageSize`.
+    * **Frontend (UI):** No componente do dashboard, adicione controlos de paginação simples (botões "Anterior" e "Próximo") abaixo da lista de aniversariantes se o número total de aniversariantes for maior que o limite por página (ex: 10).
+
+**Diretrizes de Qualidade e Segurança (Aplicar em toda a implementação):**
+* **Código Limpo e Organizado:** Siga as melhores práticas de mercado. Use componentes reutilizáveis, separe a lógica da apresentação (UI), e mantenha os ficheiros focados numa única responsabilidade. O código deve ser legível e de fácil manutenção.
+* **Segurança em Primeiro Lugar:** Toda a entrada de dados do utilizador (termos de busca) deve ser rigorosamente validada e sanitizada no backend para prevenir ataques como SQL Injection. Utilize sempre os construtores de query parametrizados do seu ORM (Drizzle) e nunca concatene strings para formar queries SQL.
+* **Performance:** No backend, garanta que as colunas usadas para busca (como `name`) possuam índices no banco de dados para acelerar as consultas. No frontend, utilize uma técnica de **"debounce"** nos campos de busca para evitar o envio de requisições à API a cada tecla digitada, disparando a busca apenas após uma pequena pausa na digitação do utilizador.
+* **Transparência:** Adicione comentários concisos apenas onde a lógica for particularmente complexa, explicando o "porquê" da sua abordagem, não o "o quê".
