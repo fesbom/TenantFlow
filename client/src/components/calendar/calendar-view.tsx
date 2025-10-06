@@ -406,15 +406,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                   time: "Hora",
                   event: "Evento",
                   noEventsInRange: "Não há eventos neste período",
-                  showMore: (total) => `+ ${total} mais`,
-                }}
-                formats={{
-                  dayRangeHeaderFormat: ({ start, end }) =>
-                    `${moment(start).format('DD/MM')} - ${moment(end).format('DD/MM/YYYY')}`,
-                  monthHeaderFormat: (date) => moment(date).format('MMMM YYYY'),
-                  timeGutterFormat: (date) => moment(date).format('HH:mm'),
-                  eventTimeRangeFormat: ({ start, end }) =>
-                    `${moment(start).format('HH:mm')} - ${moment(end).format('HH:mm')}`,
+                  showMore: (total: number) => `+ ${total} mais`,
                 }}
               />
             </div>

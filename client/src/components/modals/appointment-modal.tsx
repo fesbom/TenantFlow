@@ -57,7 +57,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
       
       if (typeof appointmentDate === 'string') {
         // If it's already a string like "2025-08-25T16:00:00.000Z", strip the Z and use as-is
-        formattedDateTime = appointmentDate.replace(/Z$/, '').slice(0, 16);
+        formattedDateTime = (appointmentDate as string).replace(/Z$/, '').slice(0, 16);
       } else {
         // If it's a Date object, convert to local string without timezone conversion
         const date = new Date(appointmentDate);
