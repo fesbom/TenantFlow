@@ -281,9 +281,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/birthday-patients", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = parseInt(req.query.pageSize as string) || 10;
+
+      // Validate and sanitize pagination parameters
+      const validPage = Math.max(1, page);
+      const validPageSize = Math.min(Math.max(1, pageSize), 50); // Max 50 per page
+      const offset = (validPage - 1) * validPageSize;
+
       const today = new Date();
-      const patients = await storage.getBirthdayPatients(req.user!.clinicId, today);
-      res.json(patients);
+      
+      // Query birthday patients with pagination using Brazil timezone
+      const whereCondition = and(
+        eq(patients.clinicId, req.user!.clinicId),
+        sql`TO_CHAR(${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo', 'MM-DD') = TO_CHAR(${today.toISOString()}::timestamptz AT TIME ZONE 'America/Sao_Paulo', 'MM-DD')`
+      );
+
+      // Get total count
+      const [{ count: totalCount }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(patients)
+        .where(whereCondition);
+
+      const totalPages = Math.ceil(totalCount / validPageSize);
+
+      // Get paginated results
+      const birthdayPatients = await db
+        .select()
+        .from(patients)
+        .where(whereCondition)
+        .orderBy(patients.fullName)
+        .limit(validPageSize)
+        .offset(offset);
+
+      res.json({
+        data: birthdayPatients,
+        pagination: {
+          page: validPage,
+          pageSize: validPageSize,
+          totalCount,
+          totalPages
+        }
+      });
     } catch (error) {
       console.error("Birthday patients error:", error);
       res.status(500).json({ message: "Internal server error" });
