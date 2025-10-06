@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchablePatientSelect } from "@/components/ui/searchable-patient-select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Appointment, Patient, User } from "@/types";
+import { Appointment, User } from "@/types";
 
 interface AppointmentModalProps {
   isOpen: boolean;
@@ -41,11 +41,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
     notes: "",
   });
 
-  // Fetch patients and dentists
-  const { data: patients = [] } = useQuery<Patient[]>({
-    queryKey: ["/api/patients"],
-  });
-
+  // Fetch dentists only (patients are loaded asynchronously in SearchablePatientSelect)
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
   });
@@ -192,7 +188,6 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
             <div className="space-y-2">
               <Label htmlFor="patientId">Paciente *</Label>
               <SearchablePatientSelect
-                patients={patients}
                 value={formData.patientId}
                 onValueChange={(value) => handleInputChange("patientId", value)}
                 placeholder="Selecione um paciente"
