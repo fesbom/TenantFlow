@@ -1,0 +1,35 @@
+**Assunto:** Corrigir Erros de Exibição de Dados Após Implementação da Paginação
+
+**Prompt:**
+
+Aja como um desenvolvedor de software sênior. Após a implementação da paginação, surgiram três bugs críticos que precisam ser corrigidos. A causa raiz é a mesma para todos: a API agora retorna um objeto (`{ data: [], totalPages: X }`) em vez de um array simples, e o frontend não foi ajustado para lidar com este novo formato.
+
+**Requisitos de Correção:**
+
+**1. Erro no Agendamento (`patients.find is not a function`):**
+* **Ficheiro:** `client/src/components/calendar/calendar-view.tsx`.
+* **Problema:** A `useQuery` para `/api/patients` está a atribuir o objeto de resposta inteiro à variável `patients`.
+* **Solução:** Modifique a `useQuery` para extrair corretamente o array de dentro da resposta da API. Garanta que a variável `patients` contenha apenas a lista de pacientes (o valor de `data.data`).
+
+    **Exemplo da Correção:**
+    ```javascript
+    // Lógica atual (incorreta):
+    const { data: patients = [] } = useQuery<ApiResponse>({ queryKey: ["/api/patients"] });
+
+    // Lógica a ser implementada (correta):
+    const { data: patientsResponse } = useQuery<ApiResponse>({ queryKey: ["/api/patients"] });
+    const patients = patientsResponse?.data || [];
+    ```
+
+**2. Lista de Pacientes em Branco:**
+* **Ficheiro:** `client/src/pages/patients.tsx` (ou similar).
+* **Problema:** A mesma falha da agenda. A página está a tentar iterar sobre um objeto em vez de um array, resultando numa lista vazia.
+* **Solução:** Aplique exatamente a mesma correção do item 1. Localize a `useQuery` que busca os pacientes e ajuste-a para extrair o array de `data.data` antes de passar para a tabela ou lista.
+
+**3. Aniversariantes Não Aparecem no Dashboard:**
+* **Ficheiro:** `client/src/pages/dashboard.tsx`.
+* **Problema:** O componente de aniversariantes provavelmente também depende da lista de pacientes e está a receber o objeto incorreto.
+* **Solução:** Verifique a `useQuery` que busca os dados para os aniversariantes (`/api/dashboard/birthday-patients`). Se ela também foi alterada para retornar um objeto paginado, aplique a mesma correção, garantindo que o componente receba um array para processar.
+
+**Diretriz de Qualidade:**
+Ao aplicar as correções, certifique-se de que os estados de carregamento (`isLoading`) são tratados corretamente e que o código verifica se os dados existem antes de tentar aceder a propriedades como `.data` ou `.find()`, para evitar novos erros de runtime.

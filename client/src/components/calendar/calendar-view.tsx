@@ -56,9 +56,11 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
     queryKey: ["/api/appointments"],
   });
 
-  const { data: patients = [] } = useQuery<Patient[]>({
-    queryKey: ["/api/patients"],
+  const { data: patientsResponse } = useQuery<{ data: Patient[]; pagination: any }>({
+    queryKey: ["/api/patients", { page: 1, pageSize: 5000 }],
   });
+  
+  const patients = patientsResponse?.data || [];
 
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
