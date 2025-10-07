@@ -1,43 +1,47 @@
 /**
- * Função utilitária global para formatação segura de datas
- * Corrige o bug de fuso horário que causava exibição incorreta de datas (-1 dia)
+ * Formata uma data para o padrão dd/mm/aaaa.
+ * Lida com strings de data (ex: '2023-10-27') e timestamps completos (ex: '2023-10-27T10:00:00.000Z').
+ * Usa UTC para evitar problemas de fuso horário.
  */
-
-export function formatDateBR(dateString: string | Date | null | undefined): string {
-  if (!dateString) return '';
-  
-  let dateToFormat: Date;
-  
-  if (typeof dateString === 'string') {
-    // Adiciona T00:00:00 para garantir que seja tratado como data local
-    // ao invés de UTC em alguns navegadores
-    dateToFormat = new Date(dateString + 'T00:00:00');
-  } else {
-    dateToFormat = dateString;
+export function formatDateBR(dateInput: string | Date | null | undefined): string {
+  // 1. Retorna um traço se a data de entrada for nula, indefinida ou vazia.
+  if (!dateInput) {
+    return "-";
   }
-  
-  // Usa o toLocaleDateString com o fuso horário UTC para forçar a extração do dia correto
-  return dateToFormat.toLocaleDateString('pt-BR', {
+
+  const date = new Date(dateInput);
+
+  // 2. Verifica se a data criada a partir do input é válida.
+  if (isNaN(date.getTime())) {
+    return "Data Inválida";
+  }
+
+  // 3. Formata a data, usando UTC para evitar que o fuso horário mude o dia.
+  return date.toLocaleDateString('pt-BR', {
     day: '2-digit',
-    month: '2-digit', 
+    month: '2-digit',
     year: 'numeric',
-    timeZone: 'UTC', // ESSENCIAL: Trata a data como se estivesse em UTC
+    timeZone: 'UTC', // Essencial para consistência
   });
 }
 
-export function formatDateTimeBR(dateString: string | Date | null | undefined): string {
-  if (!dateString) return '';
-  
-  let dateToFormat: Date;
-  
-  if (typeof dateString === 'string') {
-    // Para datetime, não adiciona T00:00:00 pois já tem horário
-    dateToFormat = new Date(dateString);
-  } else {
-    dateToFormat = dateString;
+/**
+ * Formata uma data e hora para o padrão dd/mm/aaaa hh:mm.
+ * Lida com timestamps completos. O fuso horário será o do navegador do usuário.
+ */
+export function formatDateTimeBR(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) {
+    return "-";
   }
-  
-  return dateToFormat.toLocaleDateString('pt-BR', {
+
+  const date = new Date(dateInput);
+
+  if (isNaN(date.getTime())) {
+    return "Data Inválida";
+  }
+
+  // Para data e hora, geralmente queremos o horário local do usuário, então não usamos UTC.
+  return date.toLocaleString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -46,18 +50,22 @@ export function formatDateTimeBR(dateString: string | Date | null | undefined): 
   });
 }
 
-export function formatDateShortBR(dateString: string | Date | null | undefined): string {
-  if (!dateString) return '';
-  
-  let dateToFormat: Date;
-  
-  if (typeof dateString === 'string') {
-    dateToFormat = new Date(dateString + 'T00:00:00');
-  } else {
-    dateToFormat = dateString;
+/**
+ * Formata uma data para o padrão curto dd/mm.
+ * Usa UTC para evitar problemas de fuso horário.
+ */
+export function formatDateShortBR(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) {
+    return "-";
   }
-  
-  return dateToFormat.toLocaleDateString('pt-BR', {
+
+  const date = new Date(dateInput);
+
+  if (isNaN(date.getTime())) {
+    return "Data Inválida";
+  }
+
+  return date.toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     timeZone: 'UTC',

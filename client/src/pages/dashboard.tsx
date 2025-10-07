@@ -56,9 +56,31 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/today-appointments"],
   });
 
-  // Fetch birthday patients with pagination
+  // Fetch birthday patients with pagination --- CÓDIGO CORRIGIDO AQUI ---
   const { data: birthdayData, isLoading: birthdaysLoading } = useQuery<PaginatedBirthdayResponse>({
     queryKey: ["/api/dashboard/birthday-patients", { page: birthdayPage, pageSize: 5 }],
+    queryFn: async ({ queryKey }) => {
+      // queryKey aqui é o array: ["/api/...", { page: ..., pageSize: ... }]
+      const [_key, params] = queryKey as [string, { page: number; pageSize: number }];
+
+      // Construímos a URL com os parâmetros
+      const url = `${_key}?page=${params.page}&pageSize=${params.pageSize}`;
+
+      const response = await fetch(url, {
+        headers: {
+          // Não se esqueça de enviar o token de autorização, se sua API exigir
+          Authorization: `Bearer ${localStorage.getItem("dental_token")}`,
+        },
+      });
+
+      if (!response.ok) {
+        // Se a resposta não for bem-sucedida, lançamos um erro
+        throw new Error("A resposta da rede não foi bem-sucedida");
+      }
+
+      // Retornamos os dados em formato JSON
+      return response.json();
+    },
     refetchOnWindowFocus: true,
     staleTime: 0,
     gcTime: 0,
@@ -145,16 +167,16 @@ export default function Dashboard() {
 
   return (
     <div className="app-container bg-slate-50">
-      <Sidebar 
-        isOpen={sidebarOpen} 
+      <Sidebar
+        isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         isExpanded={sidebarExpanded}
         onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
       />
-      
+
       <div className="main-content">
         <Header title="Dashboard" onMenuClick={() => setSidebarOpen(true)} />
-        
+
         <main className="p-6 flex-grow">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -164,7 +186,10 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                      <p className="text-3xl font-bold text-gray-900" data-testid={`stat-${stat.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <p
+                        className="text-3xl font-bold text-gray-900"
+                        data-testid={`stat-${stat.title.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
                         {statsLoading ? "..." : stat.value}
                       </p>
                     </div>
@@ -195,7 +220,7 @@ export default function Dashboard() {
                     variant="ghost"
                     className="w-full justify-start h-auto p-3 hover:bg-gray-50"
                     onClick={() => setLocation(action.href)}
-                    data-testid={`action-${action.title.toLowerCase().replace(/\s+/g, '-')}`}
+                    data-testid={`action-${action.title.toLowerCase().replace(/\s+/g, "-")}`}
                   >
                     <div className={`h-8 w-8 ${action.bgColor} rounded-lg flex items-center justify-center mr-3`}>
                       <action.icon className={`h-4 w-4 ${action.color}`} />
@@ -223,9 +248,9 @@ export default function Dashboard() {
                     <div key={appointment.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                       <div className="text-center">
                         <div className="text-sm font-medium text-gray-900">
-                          {new Date(appointment.scheduledDate).toLocaleTimeString('pt-BR', {
-                            hour: '2-digit',
-                            minute: '2-digit',
+                          {new Date(appointment.scheduledDate).toLocaleTimeString("pt-BR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
                           })}
                         </div>
                       </div>
@@ -235,9 +260,11 @@ export default function Dashboard() {
                       </div>
                       <Badge
                         variant={
-                          appointment.status === "completed" ? "default" :
-                          appointment.status === "in_progress" ? "secondary" :
-                          "outline"
+                          appointment.status === "completed"
+                            ? "default"
+                            : appointment.status === "in_progress"
+                            ? "secondary"
+                            : "outline"
                         }
                         className="text-xs"
                       >
@@ -265,7 +292,10 @@ export default function Dashboard() {
                 ) : (
                   <>
                     {birthdayPatients.map((patient: Patient) => (
-                      <div key={patient.id} className="flex items-center space-x-3 p-3 bg-pink-50 rounded-lg border border-pink-200">
+                      <div
+                        key={patient.id}
+                        className="flex items-center space-x-3 p-3 bg-pink-50 rounded-lg border border-pink-200"
+                      >
                         <div className="h-10 w-10 bg-pink-100 rounded-full flex items-center justify-center">
                           <Cake className="h-5 w-5 text-pink-600" />
                         </div>
@@ -295,7 +325,7 @@ export default function Dashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setBirthdayPage(p => Math.max(1, p - 1))}
+                            onClick={() => setBirthdayPage((p) => Math.max(1, p - 1))}
                             disabled={birthdayPage === 1}
                             data-testid="button-prev-birthday-page"
                           >
@@ -307,7 +337,7 @@ export default function Dashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setBirthdayPage(p => Math.min(birthdayPagination.totalPages, p + 1))}
+                            onClick={() => setBirthdayPage((p) => Math.min(birthdayPagination.totalPages, p + 1))}
                             disabled={birthdayPage === birthdayPagination.totalPages}
                             data-testid="button-next-birthday-page"
                           >

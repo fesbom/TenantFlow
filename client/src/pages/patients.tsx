@@ -45,10 +45,32 @@ export default function Patients() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Fetch patients with pagination and search
+  // Fetch patients with pagination and search --- CÓDIGO CORRIGIDO AQUI ---
   const { data, isLoading } = useQuery<PaginatedResponse>({
     queryKey: ["/api/patients", { page: currentPage, pageSize: 10, search: debouncedSearch }],
+    queryFn: async ({ queryKey }) => {
+      const [_key, params] = queryKey as [string, { page: number; pageSize: number; search: string }];
+
+      const searchParams = new URLSearchParams();
+      searchParams.append('page', params.page.toString());
+      searchParams.append('pageSize', params.pageSize.toString());
+      if (params.search) {
+        searchParams.append('search', params.search);
+      }
+
+      const response = await fetch(`${_key}?${searchParams.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("dental_token")}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('A resposta da rede não foi bem-sucedida');
+      }
+      return response.json();
+    },
   });
+
 
   const patients = data?.data || [];
   const pagination = data?.pagination;
@@ -93,16 +115,16 @@ export default function Patients() {
 
   return (
     <div className="app-container bg-slate-50">
-      <Sidebar 
-        isOpen={sidebarOpen} 
+      <Sidebar
+        isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         isExpanded={sidebarExpanded}
         onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
       />
-      
+
       <div className="main-content">
         <Header title="Pacientes" onMenuClick={() => setSidebarOpen(true)} />
-        
+
         <main className="p-4 lg:p-6 flex-grow">
           {/* Search and Actions */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
