@@ -6,10 +6,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SearchablePatientSelect } from "@/components/ui/searchable-patient-select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import { Appointment, User } from "@/types";
+import { apiRequest } from "@/lib/queryClient"; // Supondo que você ainda use isso para mutações
+import { Appointment, Patient, User } from "@/types";
+import { Search, Loader2 } from "lucide-react";
+
+// Função de busca genérica
+const fetchData = async (url: string) => {
+    const response = await fetch(url, {
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
+    });
+    if (!response.ok) throw new Error('A resposta da rede não foi bem-sucedida');
+    return response.json();
+};
+
+interface PaginatedPatientsResponse {
+    data: Patient[];
+}
 
 interface AppointmentModalProps {
   isOpen: boolean;
@@ -17,6 +30,7 @@ interface AppointmentModalProps {
   appointment?: Appointment | null;
   initialDateTime?: Date;
   onDelete?: (appointment: Appointment) => void;
+  dentists: User[];
 }
 
 interface AppointmentFormData {
@@ -28,141 +42,104 @@ interface AppointmentFormData {
   notes: string;
 }
 
-export default function AppointmentModal({ isOpen, onClose, appointment, initialDateTime, onDelete }: AppointmentModalProps) {
+export default function AppointmentModal({ 
+    isOpen, 
+    onClose, 
+    appointment, 
+    initialDateTime, 
+    onDelete,
+    dentists
+}: AppointmentModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const [patientSearchTerm, setPatientSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+
   const [formData, setFormData] = useState<AppointmentFormData>({
-    patientId: "",
-    dentistId: "",
-    scheduledDate: "",
-    duration: 60,
-    procedure: "",
-    notes: "",
+    patientId: "", dentistId: "", scheduledDate: "", duration: 60, procedure: "", notes: "",
   });
-
-  // Fetch dentists only (patients are loaded asynchronously in SearchablePatientSelect)
-  const { data: users = [] } = useQuery<User[]>({
-    queryKey: ["/api/users"],
-  });
-
-  const dentists = users.filter(user => user.role === "dentist");
 
   useEffect(() => {
-    if (appointment) {
-      // NO TIMEZONE CONVERSION - Use date as literal value
-      // Database has "2025-08-25T16:00:00" → display exactly "16:00"
-      const appointmentDate = appointment.scheduledDate;
-      let formattedDateTime = "";
-      
-      if (typeof appointmentDate === 'string') {
-        // If it's already a string like "2025-08-25T16:00:00.000Z", strip the Z and use as-is
-        formattedDateTime = (appointmentDate as string).replace(/Z$/, '').slice(0, 16);
-      } else {
-        // If it's a Date object, convert to local string without timezone conversion
-        const date = new Date(appointmentDate);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-      }
-      
-      setFormData({
-        patientId: appointment.patientId,
-        dentistId: appointment.dentistId,
-        scheduledDate: formattedDateTime,
-        duration: appointment.duration || 60,
-        procedure: appointment.procedure || "",
-        notes: appointment.notes || "",
-      });
-    } else {
-      // For new appointments - use the clicked time as-is
-      let formattedDateTime = "";
-      if (initialDateTime) {
-        const year = initialDateTime.getFullYear();
-        const month = String(initialDateTime.getMonth() + 1).padStart(2, '0');
-        const day = String(initialDateTime.getDate()).padStart(2, '0');
-        const hours = String(initialDateTime.getHours()).padStart(2, '0');
-        const minutes = String(initialDateTime.getMinutes()).padStart(2, '0');
-        formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-      }
-      
-      setFormData({
-        patientId: "",
-        dentistId: "",
-        scheduledDate: formattedDateTime,
-        duration: 60,
-        procedure: "",
-        notes: "",
-      });
-    }
-  }, [appointment, initialDateTime]);
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(patientSearchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [patientSearchTerm]);
 
-  const createAppointmentMutation = useMutation({
-    mutationFn: async (data: AppointmentFormData) => {
-      // NO TIMEZONE CONVERSION - Send exactly what user typed
-      // User enters 16:00 → save exactly 16:00
-      const requestData = {
-        ...data,
-        scheduledDate: data.scheduledDate, // Send as literal string "2025-08-25T16:00"
-      };
-      
-      const response = await apiRequest("POST", "/api/appointments", requestData);
-      return response.json();
-    },
+  const { data: patientsResponse, isLoading: patientsLoading } = useQuery<PaginatedPatientsResponse>({
+      queryKey: ['/api/patients', { search: debouncedSearchTerm, pageSize: 20 }],
+      queryFn: ({ queryKey }) => {
+          const [_key, params] = queryKey as [string, { search: string, pageSize: number }];
+          const searchParams = new URLSearchParams({ pageSize: params.pageSize.toString() });
+          if (params.search) {
+              searchParams.append('search', params.search);
+          }
+          return fetchData(`${_key}?${searchParams.toString()}`);
+      },
+      enabled: isOpen,
+  });
+  const foundPatients = patientsResponse?.data || [];
+
+  useEffect(() => {
+    if (isOpen) {
+        if (appointment) {
+            const appointmentDate = new Date(appointment.scheduledDate);
+            const formattedDateTime = `${appointmentDate.getFullYear()}-${String(appointmentDate.getMonth() + 1).padStart(2, '0')}-${String(appointmentDate.getDate()).padStart(2, '0')}T${String(appointmentDate.getHours()).padStart(2, '0')}:${String(appointmentDate.getMinutes()).padStart(2, '0')}`;
+            setFormData({
+                patientId: appointment.patientId, dentistId: appointment.dentistId, scheduledDate: formattedDateTime,
+                duration: appointment.duration || 60, procedure: appointment.procedure || "", notes: appointment.notes || "",
+            });
+        } else {
+            let formattedDateTime = "";
+            if (initialDateTime) {
+                const d = initialDateTime;
+                formattedDateTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            }
+            setFormData({
+                patientId: "", dentistId: "", scheduledDate: formattedDateTime, duration: 60, procedure: "", notes: "",
+            });
+        }
+        setPatientSearchTerm("");
+        setDebouncedSearchTerm("");
+    }
+  }, [appointment, initialDateTime, isOpen]);
+
+  const mutationOptions = {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/today-appointments"] });
-      toast({
-        title: "Agendamento criado",
-        description: "Agendamento criado com sucesso",
-      });
       onClose();
     },
     onError: () => {
+      const isUpdate = !!appointment;
       toast({
-        title: "Erro ao criar agendamento",
-        description: "Não foi possível criar o agendamento",
+        title: `Erro ao ${isUpdate ? 'atualizar' : 'criar'} agendamento`,
         variant: "destructive",
       });
     },
+  };
+
+  const createAppointmentMutation = useMutation({
+    mutationFn: (data: AppointmentFormData) => apiRequest("POST", "/api/appointments", data), // Assumindo que apiRequest é para mutações
+    ...mutationOptions,
+    onSuccess: () => {
+        mutationOptions.onSuccess();
+        toast({ title: "Agendamento criado com sucesso" });
+    }
   });
 
   const updateAppointmentMutation = useMutation({
-    mutationFn: async (data: AppointmentFormData) => {
-      // NO TIMEZONE CONVERSION - Send exactly what user typed  
-      // User enters 16:00 → save exactly 16:00
-      const requestData = {
-        ...data,
-        scheduledDate: data.scheduledDate, // Send as literal string "2025-08-25T16:00"
-      };
-      
-      const response = await apiRequest("PUT", `/api/appointments/${appointment!.id}`, requestData);
-      return response.json();
-    },
+    mutationFn: (data: AppointmentFormData) => apiRequest("PUT", `/api/appointments/${appointment!.id}`, data), // Assumindo que apiRequest é para mutações
+    ...mutationOptions,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/today-appointments"] });
-      toast({
-        title: "Agendamento atualizado",
-        description: "Agendamento atualizado com sucesso",
-      });
-      onClose();
-    },
-    onError: () => {
-      toast({
-        title: "Erro ao atualizar agendamento",
-        description: "Não foi possível atualizar o agendamento",
-        variant: "destructive",
-      });
-    },
+        mutationOptions.onSuccess();
+        toast({ title: "Agendamento atualizado com sucesso" });
+    }
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (appointment) {
       updateAppointmentMutation.mutate(formData);
     } else {
@@ -178,44 +155,64 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-screen overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {appointment ? "Editar Agendamento" : "Novo Agendamento"}
-          </DialogTitle>
+          <DialogTitle>{appointment ? "Editar Agendamento" : "Novo Agendamento"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="patientId">Paciente *</Label>
-              <SearchablePatientSelect
+              <Select
                 value={formData.patientId}
                 onValueChange={(value) => handleInputChange("patientId", value)}
-                placeholder="Selecione um paciente"
-                data-testid="select-appointment-patient"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dentistId">Dentista *</Label>
-              <Select
-                value={formData.dentistId}
-                onValueChange={(value) => handleInputChange("dentistId", value)}
                 required
               >
-                <SelectTrigger data-testid="select-appointment-dentist">
-                  <SelectValue placeholder="Selecione um dentista" />
+                <SelectTrigger data-testid="select-appointment-patient">
+                  <SelectValue placeholder="Selecione um paciente" />
                 </SelectTrigger>
                 <SelectContent>
-                  {dentists.map((dentist) => (
-                    <SelectItem key={dentist.id} value={dentist.id}>
-                      {dentist.fullName}
+                  <div className="p-2">
+                      <div className="relative">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                          <Input 
+                              placeholder="Buscar paciente pelo nome..."
+                              className="pl-8"
+                              value={patientSearchTerm}
+                              onChange={(e) => setPatientSearchTerm(e.target.value)}
+                          />
+                      </div>
+                  </div>
+                  {patientsLoading && (
+                      <div className="flex items-center justify-center p-2 text-sm text-gray-500">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Buscando...
+                      </div>
+                  )}
+                  {!patientsLoading && foundPatients.map((patient) => (
+                    <SelectItem key={patient.id} value={patient.id}>
+                      {patient.fullName}
                     </SelectItem>
                   ))}
+                   {!patientsLoading && foundPatients.length === 0 && (
+                      <div className="text-center text-sm text-gray-500 p-2">
+                          {debouncedSearchTerm ? "Nenhum paciente encontrado." : "Digite para buscar um paciente."}
+                      </div>
+                   )}
                 </SelectContent>
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="dentistId">Dentista *</Label>
+              <Select value={formData.dentistId} onValueChange={(value) => handleInputChange("dentistId", value)} required>
+                <SelectTrigger><SelectValue placeholder="Selecione um dentista" /></SelectTrigger>
+                <SelectContent>
+                  {dentists.map((dentist) => ( <SelectItem key={dentist.id} value={dentist.id}>{dentist.fullName}</SelectItem> ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* --- CAMPOS RESTAURADOS --- */}
             <div className="space-y-2">
               <Label htmlFor="scheduledDate">Data e Hora *</Label>
               <Input
@@ -233,9 +230,7 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
               <Input
                 id="duration"
                 type="number"
-                min="15"
-                max="480"
-                step="15"
+                min="15" max="480" step="15"
                 value={formData.duration}
                 onChange={(e) => handleInputChange("duration", parseInt(e.target.value))}
                 data-testid="input-appointment-duration"
@@ -266,40 +261,22 @@ export default function AppointmentModal({ isOpen, onClose, appointment, initial
             </div>
           </div>
 
+          {/* --- BOTÕES RESTAURADOS --- */}
           <div className="flex justify-between pt-4 border-t">
             {appointment && onDelete && (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => {
-                  onDelete(appointment);
-                  onClose();
-                }}
-                data-testid="button-delete-appointment"
-              >
+              <Button type="button" variant="destructive" onClick={() => { if(appointment) onDelete(appointment); onClose(); }}>
                 Excluir
               </Button>
             )}
-            
+
             <div className="flex space-x-3 ml-auto">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                data-testid="button-cancel-appointment"
-              >
+              <Button type="button" variant="outline" onClick={onClose}>
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                disabled={createAppointmentMutation.isPending || updateAppointmentMutation.isPending}
-                data-testid="button-save-appointment"
-              >
+              <Button type="submit" disabled={createAppointmentMutation.isPending || updateAppointmentMutation.isPending}>
                 {createAppointmentMutation.isPending || updateAppointmentMutation.isPending
                   ? "Salvando..."
-                  : appointment
-                  ? "Atualizar"
-                  : "Criar Agendamento"}
+                  : appointment ? "Atualizar" : "Criar Agendamento"}
               </Button>
             </div>
           </div>
