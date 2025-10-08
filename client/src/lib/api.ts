@@ -40,6 +40,7 @@ export const apiRequest = async (
 export const uploadFiles = async (
   url: string,
   formData: FormData,
+  method: string = 'POST',
 ): Promise<Response> => {
   const token = getAuthToken();
   
@@ -50,7 +51,7 @@ export const uploadFiles = async (
   }
 
   const response = await fetch(`${API_BASE}${url}`, {
-    method: 'POST',
+    method,
     headers,
     body: formData,
     credentials: 'include',

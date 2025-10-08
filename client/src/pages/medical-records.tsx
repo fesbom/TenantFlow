@@ -155,7 +155,14 @@ export default function MedicalRecords() {
 
   const handleOpenAnamnesis = () => setIsAnamnesisModalOpen(true);
   const handleCreateBudgetItem = () => setIsBudgetItemModalOpen(true);
-  const handleCreateMovement = () => setIsTreatmentMovementModalOpen(true);
+  const handleCreateMovement = () => {
+    setSelectedMovement(null);
+    setIsTreatmentMovementModalOpen(true);
+  };
+  const handleEditMovement = (movement: TreatmentMovement) => {
+    setSelectedMovement(movement);
+    setIsTreatmentMovementModalOpen(true);
+  };
 
 
   const getStatusBadge = (status: string) => {
@@ -330,7 +337,7 @@ export default function MedicalRecords() {
                                 <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Região</TableHead><TableHead>Dente</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {treatmentMovements.map(mov => (
-                                        <TableRow key={mov.id} data-testid={`row-movement-${mov.id}`}><TableCell>{formatDateBR(mov.dataMovimentacao)}</TableCell><TableCell>{mov.descricaoAtividade}</TableCell><TableCell>{mov.region || "-"}</TableCell><TableCell>{mov.toothNumber || "-"}</TableCell><TableCell className="text-right">{formatCurrency(mov.valorServico)}</TableCell></TableRow>
+                                        <TableRow key={mov.id} data-testid={`row-movement-${mov.id}`} onClick={() => handleEditMovement(mov)} className="cursor-pointer hover:bg-gray-50"><TableCell>{formatDateBR(mov.dataMovimentacao)}</TableCell><TableCell>{mov.descricaoAtividade}</TableCell><TableCell>{mov.region || "-"}</TableCell><TableCell>{mov.toothNumber || "-"}</TableCell><TableCell className="text-right">{formatCurrency(mov.valorServico)}</TableCell></TableRow>
                                     ))}
                                 </TableBody>
                             </Table>

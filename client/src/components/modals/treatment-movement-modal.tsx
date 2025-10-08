@@ -130,7 +130,7 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
         formDataToSend.append("photo", selectedFile);
       }
 
-      const response = await uploadFiles(`/api/treatment-movements/${movement.id}`, formDataToSend);
+      const response = await uploadFiles(`/api/treatment-movements/${movement.id}`, formDataToSend, 'PUT');
       return response.json();
     },
     onSuccess: () => {
