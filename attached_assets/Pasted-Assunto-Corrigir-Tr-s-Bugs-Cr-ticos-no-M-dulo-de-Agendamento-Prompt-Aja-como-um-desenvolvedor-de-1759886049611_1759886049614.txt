@@ -1,0 +1,71 @@
+Assunto: Corrigir Três Bugs Críticos no Módulo de Agendamento
+
+Prompt:
+
+Aja como um desenvolvedor de software sênior. Foram identificados três bugs críticos na funcionalidade de agendamento que precisam de correção imediata. Por favor, implemente as soluções descritas abaixo, seguindo as melhores práticas de código, segurança e organização.
+
+Bug 1: Campo "Paciente" em Branco na Edição de Agendamento
+Problema: Ao abrir a janela (modal) para editar um agendamento existente, o campo de seleção do paciente aparece em branco, embora o agendamento tenha um paciente associado.
+
+Causa Raiz: A lógica no useEffect do componente AppointmentModal não está a carregar ou a definir corretamente o patientId no estado do formulário (formData) quando um agendamento existente é passado para o modal.
+
+Ação Requerida:
+
+Ficheiro a ser modificado: client/src/components/modals/appointment-modal.tsx.
+
+Correção: Revise o useEffect que é executado quando a prop appointment muda. Garanta que, ao preencher o formData com os dados de um agendamento existente, o campo patientId seja corretamente populado. Verifique se o componente SearchablePatientSelect está a receber e a exibir corretamente o valor inicial que lhe é passado.
+
+Bug 2: Erro de Fuso Horário (-3 horas) na Exibição da Hora
+Problema: A hora exibida no calendário e no modal de edição está sempre 3 horas adiantada em relação à hora que foi salva (e que está correta no banco de dados). Por exemplo, um agendamento para as 11:00 é exibido às 08:00.
+
+Causa Raiz: Este é um bug de conversão de fuso horário no frontend. O JavaScript está a pegar a data/hora guardada em UTC no banco de dados e a convertê-la automaticamente para o fuso horário local do navegador (Brasil, UTC-3), subtraindo 3 horas.
+
+Ação Requerida (Solução Definitiva):
+
+Ficheiro 1 a ser modificado: client/src/components/calendar/calendar-view.tsx.
+
+Correção: Na função useMemo que cria os calendarEvents, a conversão da data deve ser ajustada. Em vez de usar new Date(appointment.scheduledDate) diretamente, crie a data de forma a ignorar a conversão de fuso horário, tratando a hora UTC como se fosse a hora local.
+
+Ficheiro 2 a ser modificado: client/src/components/modals/appointment-modal.tsx.
+
+Correção: Aplique a mesma lógica de tratamento de data no useEffect ao formatar a data para ser exibida no campo datetime-local.
+
+Exemplo da Lógica de Conversão Correta a ser usada em ambos os ficheiros:
+
+// Recebe uma data string como "2025-09-03T11:00:00.000Z"
+const dataDoBanco = new Date(appointment.scheduledDate);
+
+// Cria uma nova data usando os componentes UTC como se fossem locais
+const dataCorretaParaExibicao = new Date(
+  dataDoBanco.getUTCFullYear(),
+  dataDoBanco.getUTCMonth(),
+  dataDoBanco.getUTCDate(),
+  dataDoBanco.getUTCHours(),
+  dataDoBanco.getUTCMinutes()
+);
+// Use 'dataCorretaParaExibicao' para o 'start' e 'end' do calendário e para o valor do input no modal.
+
+Bug 3: Erro ao Tentar Excluir um Agendamento
+Problema: A funcionalidade de exclusão de agendamento não está a funcionar e provavelmente exibe um erro genérico.
+
+Causa Raiz: A falha pode estar na forma como a exclusão é chamada no frontend ou na falta de um tratamento de erro detalhado no backend.
+
+Ação Requerida:
+
+Backend (server/routes.ts):
+
+Correção: Revise o endpoint DELETE /api/appointments/:id. Garanta que ele tenha um bloco try...catch robusto. Se um erro ocorrer (ex: agendamento não encontrado), ele deve retornar uma resposta JSON clara com o motivo da falha (ex: res.status(404).json({ message: "Agendamento não encontrado" })).
+
+Frontend (client/src/components/calendar/calendar-view.tsx):
+
+Correção: Revise a função deleteAppointmentMutation. No onError, modifique a chamada toast para exibir a mensagem de erro específica retornada pela API, em vez de um texto genérico.
+
+Exemplo da Correção no onError do Frontend:
+
+onError: (error: any) => {
+  toast({
+    title: "Erro ao excluir",
+    description: error.message || "Não foi possível excluir o agendamento.", // Usa a mensagem da API
+    variant: "destructive",
+  });
+},

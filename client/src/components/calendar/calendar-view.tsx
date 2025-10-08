@@ -91,15 +91,24 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
-      if (!response.ok) throw new Error('Falha ao excluir agendamento');
-      return response.json();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Falha ao excluir agendamento' }));
+        throw new Error(errorData.message || 'Falha ao excluir agendamento');
+      }
+      return response.status === 204 ? {} : response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
-      toast({ title: "Agendamento excluído" });
+      toast({ title: "Agendamento excluído", description: "O agendamento foi removido com sucesso." });
       setAppointmentToDelete(null);
     },
-    onError: () => toast({ title: "Erro ao excluir", variant: "destructive" }),
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro ao excluir", 
+        description: error.message || "Não foi possível excluir o agendamento.",
+        variant: "destructive" 
+      });
+    },
   });
 
   const getPatientName = (patientId: string) => {
@@ -119,7 +128,15 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
   const calendarEvents: CalendarEvent[] = useMemo(() => {
     return filteredAppointments.map(appointment => {
-      const start = new Date(appointment.scheduledDate);
+      // Fix timezone: treat UTC time as local time (no conversion)
+      const dataDoBanco = new Date(appointment.scheduledDate);
+      const start = new Date(
+        dataDoBanco.getUTCFullYear(),
+        dataDoBanco.getUTCMonth(),
+        dataDoBanco.getUTCDate(),
+        dataDoBanco.getUTCHours(),
+        dataDoBanco.getUTCMinutes()
+      );
       const end = new Date(start.getTime() + (appointment.duration || 60) * 60000);
       return {
         id: appointment.id,

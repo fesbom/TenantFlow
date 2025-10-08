@@ -79,13 +79,36 @@ export default function AppointmentModal({
       },
       enabled: isOpen,
   });
-  const foundPatients = patientsResponse?.data || [];
+  
+  // Fetch the current patient when editing (to display in the select)
+  const { data: currentPatientResponse } = useQuery<Patient>({
+      queryKey: ['/api/patients', appointment?.patientId],
+      queryFn: () => fetchData(`/api/patients/${appointment?.patientId}`),
+      enabled: isOpen && !!appointment?.patientId,
+  });
+  
+  // Combine current patient with search results, avoiding duplicates
+  const foundPatients = (() => {
+      const searchResults = patientsResponse?.data || [];
+      if (currentPatientResponse && !searchResults.find(p => p.id === currentPatientResponse.id)) {
+          return [currentPatientResponse, ...searchResults];
+      }
+      return searchResults;
+  })();
 
   useEffect(() => {
     if (isOpen) {
         if (appointment) {
-            const appointmentDate = new Date(appointment.scheduledDate);
-            const formattedDateTime = `${appointmentDate.getFullYear()}-${String(appointmentDate.getMonth() + 1).padStart(2, '0')}-${String(appointmentDate.getDate()).padStart(2, '0')}T${String(appointmentDate.getHours()).padStart(2, '0')}:${String(appointmentDate.getMinutes()).padStart(2, '0')}`;
+            // Fix timezone: treat UTC time as local time (no conversion)
+            const dataDoBanco = new Date(appointment.scheduledDate);
+            const dataCorretaParaExibicao = new Date(
+              dataDoBanco.getUTCFullYear(),
+              dataDoBanco.getUTCMonth(),
+              dataDoBanco.getUTCDate(),
+              dataDoBanco.getUTCHours(),
+              dataDoBanco.getUTCMinutes()
+            );
+            const formattedDateTime = `${dataCorretaParaExibicao.getFullYear()}-${String(dataCorretaParaExibicao.getMonth() + 1).padStart(2, '0')}-${String(dataCorretaParaExibicao.getDate()).padStart(2, '0')}T${String(dataCorretaParaExibicao.getHours()).padStart(2, '0')}:${String(dataCorretaParaExibicao.getMinutes()).padStart(2, '0')}`;
             setFormData({
                 patientId: appointment.patientId, dentistId: appointment.dentistId, scheduledDate: formattedDateTime,
                 duration: appointment.duration || 60, procedure: appointment.procedure || "", notes: appointment.notes || "",

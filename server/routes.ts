@@ -768,12 +768,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const deleted = await storage.deleteAppointment(req.params.id, req.user!.clinicId);
       if (!deleted) {
-        return res.status(404).json({ message: "Appointment not found" });
+        return res.status(404).json({ message: "Agendamento não encontrado" });
       }
       res.status(204).send();
     } catch (error) {
       console.error("Delete appointment error:", error);
-      res.status(500).json({ message: "Internal server error" });
+      res.status(500).json({ message: "Erro ao excluir agendamento. Por favor, tente novamente." });
     }
   });
 
