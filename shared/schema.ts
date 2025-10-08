@@ -174,6 +174,8 @@ export const treatmentMovements = pgTable("treatment_movements", {
   descricaoAtividade: text("descricao_atividade").notNull(),
   valorServico: decimal("valor_servico", { precision: 10, scale: 2 }).notNull(),
   fotoAtividade: text("foto_atividade"), // path para imagem
+  region: text("region"), // Região tratada (opcional)
+  toothNumber: text("tooth_number"), // Número do dente (opcional)
   externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

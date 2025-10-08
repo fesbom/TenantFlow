@@ -1,0 +1,57 @@
+**Assunto:** Implementar e Importar Campos de "Região" e "Dente" na Movimentação do Tratamento
+
+**Prompt:**
+
+Aja como um desenvolvedor de software sénior, especialista em React, Node.js e rotinas de importação de dados. A sua tarefa é implementar uma melhoria crucial no prontuário clínico do DentiCare, com atenção especial à atualização da rotina de importação.
+
+**User Story:** Como dentista, eu quero registar a **região** e o **número do dente** em cada movimentação de um tratamento, para ter um histórico clínico preciso e detalhado.
+
+**Requisitos Detalhado:**
+
+A implementação deve ser dividida em quatro partes: Banco de Dados, Backend (API), Frontend (UI) e a atualização detalhada da rotina de Importação.
+
+**1. Banco de Dados:**
+* Na tabela `TreatmentMovement`, adicione duas novas colunas:
+    * `region` (tipo: `String`, opcional/nullable)
+    * `toothNumber` (tipo: `String`, opcional/nullable)
+* **Reforço:** Certifique-se de que a tabela `TreatmentMovement` possui a coluna `externalId` (tipo: `String`, única), que será usada para armazenar o `id` do sistema antigo e evitar duplicidade.
+
+**2. Backend (API):**
+* Atualize o schema de validação (`insertTreatmentMovementSchema`) para incluir os novos campos opcionais `region` e `toothNumber`.
+* Modifique os endpoints `POST /api/treatment-movements` (criação) e `PUT /api/treatment-movements/:id` (atualização) para que eles aceitem e salvem os dados nestas novas colunas.
+
+**3. Frontend (UI):**
+* No formulário de criação/edição de uma "Movimentação de Tratamento", adicione dois novos campos de **texto simples (`<Input>`)**:
+    * **Região:** Um campo de texto para o dentista descrever a região tratada.
+    * **Número do Dente:** Um campo de texto para o dentista inserir um ou mais números de dentes.
+* Na tabela que exibe o "Histórico de Movimentações", adicione colunas para exibir as novas informações de "Região" e "Dente".
+
+**4. Atualização Detalhada da Rotina de Importação (`tratamento_movimentacao.csv`):**
+* A rotina de importação deve estar preparada para processar um arquivo CSV com as seguintes colunas: `cd_tratamento, dt_movto, dente, regiao, ds_movto, in_ultimo_movto, ds_arquivo, id`.
+* Implemente o seguinte fluxo lógico para **cada linha** do arquivo:
+
+    **a. Verificação de Duplicidade (Idempotência):**
+    * Pegue o valor da coluna `id` do CSV. Este é o identificador único da movimentação no sistema antigo.
+    * Antes de prosseguir, verifique na tabela `TreatmentMovement` se já existe um registo com `externalId` igual a este `id`.
+    * **Se já existir**, a rotina deve **silenciosamente ignorar esta linha** e pular para a próxima. No relatório final, esta linha deve ser contabilizada como "Registro já existente".
+
+    **b. Resolução da Chave Estrangeira (Tratamento):**
+    * **Se o registo não for duplicado**, pegue o valor da coluna `cd_tratamento` do CSV.
+    * Use este valor para fazer uma busca na tabela `Treatment` (na coluna `externalId`) para encontrar o ID interno do tratamento (`treatmentId`).
+    * Se o tratamento correspondente não for encontrado, registe um erro para esta linha (ex: "Tratamento com ID externo [cd_tratamento] não encontrado") e pule para a próxima.
+
+    **c. Mapeamento e Criação do Registo:**
+    * Se o tratamento for encontrado, crie um novo registo na tabela `TreatmentMovement`, mapeando os dados da seguinte forma:
+        * `id` (do CSV) -> Salvar em `externalId` (no Banco de Dados)
+        * `dt_movto` -> Salvar em `date` (aplicar função de parsing de data)
+        * `dente` -> Salvar em `toothNumber`
+        * `regiao` -> Salvar em `region`
+        * `ds_movto` -> Salvar em `description`
+        * `ds_arquivo` -> Salvar em `photoUrl`
+        * A coluna `in_ultimo_movto` pode ser **ignorada** por agora.
+
+**Diretrizes de Qualidade e Segurança (Aplicar em toda a implementação):**
+* **Código Limpo e Organizado:** Siga as melhores práticas de mercado. Use componentes reutilizáveis, separe a lógica da apresentação (UI), e mantenha os ficheiros focados numa única responsabilidade.
+* **Segurança em Primeiro Lugar:** Toda a entrada de dados do utilizador deve ser validada e sanitizada no backend para prevenir ataques.
+* **Performance:** A alteração não deve impactar a performance de carregamento do prontuário.
+* **Transparência:** Adicione comentários apenas onde a lógica for complexa, explicando o "porquê" da implementação, não o "o quê".
