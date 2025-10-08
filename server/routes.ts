@@ -1698,7 +1698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     .limit(1);
                   
                   if (existingMovement.length > 0) {
-                    // Record already exists, skip it
+                    // Record already exists, skip it silently
                     skipped++;
                     continue;
                   }
@@ -1709,22 +1709,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
                                   await findTreatmentByOldId(row.cd_tratamento);
                 
                 if (!treatmentId) {
-                  errors.push(`Row ${csvData.indexOf(row) + 1}: Treatment with ID ${row.cd_tratamento} not found`);
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Tratamento com ID externo ${row.cd_tratamento} não encontrado`);
                   failed++;
                   continue;
                 }
 
                 const movementData = {
                   treatmentId,
-                  dataMovimentacao: parseDate(row.data),
-                  descricaoAtividade: row.descricao?.trim(),
-                  valorServico: parseValue(row.valor),
-                  fotoAtividade: row.foto?.trim() || null,
+                  dataMovimentacao: parseDate(row.dt_movto),
+                  descricaoAtividade: row.ds_movto?.trim(),
+                  valorServico: parseValue(row.valor || '0'),
+                  fotoAtividade: row.ds_arquivo?.trim() || null,
+                  region: row.regiao?.trim() || null,
+                  toothNumber: row.dente?.trim() || null,
                   externalId: row.id ? row.id.toString() : null
                 };
 
                 if (!movementData.descricaoAtividade) {
-                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing description (descricao)`);
+                  errors.push(`Row ${csvData.indexOf(row) + 1}: Missing description (ds_movto)`);
                   failed++;
                   continue;
                 }
