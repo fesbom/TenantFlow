@@ -62,7 +62,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   // --- TODAS AS CHAMADAS useQuery CORRIGIDAS ---
   const { data: appointments = [], isLoading: appointmentsLoading } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
-    queryFn: ({ queryKey }) => fetchData(queryKey[0]),
+    queryFn: ({ queryKey }) => fetchData(queryKey[0] as string),
   });
 
   const { data: patientsResponse, isLoading: patientsLoading } = useQuery<PaginatedPatientsResponse>({
@@ -80,7 +80,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
-    queryFn: ({ queryKey }) => fetchData(queryKey[0]),
+    queryFn: ({ queryKey }) => fetchData(queryKey[0] as string),
   });
 
   const dentists = users.filter(user => user.role === "dentist");
@@ -200,8 +200,8 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
 
   const formats = {
-    weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'ddd', culture),
-    dayHeaderFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'ddd DD/MM', culture),
+    weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'eee', culture),
+    dayHeaderFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'eee dd/MM', culture),
     monthHeaderFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'MMMM yyyy', culture),
     timeGutterFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'HH:mm', culture),
   };
@@ -321,7 +321,6 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
         appointment={selectedAppointment}
         initialDateTime={newAppointmentSlot?.start}
         onDelete={handleDeleteAppointment}
-        patients={patients}
         dentists={dentists}
       />
 
