@@ -327,10 +327,10 @@ export default function MedicalRecords() {
                           </div>
                           {treatmentMovements.length > 0 ? (
                             <Table>
-                                <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader>
+                                <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Região</TableHead><TableHead>Dente</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {treatmentMovements.map(mov => (
-                                        <TableRow key={mov.id}><TableCell>{formatDateBR(mov.dataMovimentacao)}</TableCell><TableCell>{mov.descricaoAtividade}</TableCell><TableCell className="text-right">{formatCurrency(mov.valorServico)}</TableCell></TableRow>
+                                        <TableRow key={mov.id} data-testid={`row-movement-${mov.id}`}><TableCell>{formatDateBR(mov.dataMovimentacao)}</TableCell><TableCell>{mov.descricaoAtividade}</TableCell><TableCell>{mov.region || "-"}</TableCell><TableCell>{mov.toothNumber || "-"}</TableCell><TableCell className="text-right">{formatCurrency(mov.valorServico)}</TableCell></TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
