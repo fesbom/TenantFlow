@@ -92,6 +92,8 @@ export interface TreatmentMovement {
   descricaoAtividade: string;
   valorServico: string;
   fotoAtividade?: string;
+  region?: string;
+  toothNumber?: string;
   createdAt: string;
 }
 

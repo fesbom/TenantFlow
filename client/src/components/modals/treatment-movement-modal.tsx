@@ -22,6 +22,8 @@ interface TreatmentMovementFormData {
   dataMovimentacao: string;
   descricaoAtividade: string;
   valorServico: string;
+  region?: string;
+  toothNumber?: string;
 }
 
 export default function TreatmentMovementModal({ isOpen, onClose, treatment, movement }: TreatmentMovementModalProps) {
@@ -33,6 +35,8 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
     dataMovimentacao: "",
     descricaoAtividade: "",
     valorServico: "",
+    region: "",
+    toothNumber: "",
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -45,6 +49,8 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
         dataMovimentacao: movement.dataMovimentacao,
         descricaoAtividade: movement.descricaoAtividade,
         valorServico: movement.valorServico,
+        region: movement.region || "",
+        toothNumber: movement.toothNumber || "",
       });
       if (movement.fotoAtividade) {
         setPreviewUrl(movement.fotoAtividade);
@@ -55,6 +61,8 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
         dataMovimentacao: new Date().toISOString().split('T')[0],
         descricaoAtividade: "",
         valorServico: "",
+        region: "",
+        toothNumber: "",
       });
     }
     setSelectedFile(null);
@@ -69,6 +77,13 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
       formDataToSend.append("dataMovimentacao", data.dataMovimentacao);
       formDataToSend.append("descricaoAtividade", data.descricaoAtividade);
       formDataToSend.append("valorServico", data.valorServico);
+      
+      if (data.region) {
+        formDataToSend.append("region", data.region);
+      }
+      if (data.toothNumber) {
+        formDataToSend.append("toothNumber", data.toothNumber);
+      }
 
       if (selectedFile) {
         formDataToSend.append("photo", selectedFile);
@@ -103,6 +118,13 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
       formDataToSend.append("dataMovimentacao", data.dataMovimentacao);
       formDataToSend.append("descricaoAtividade", data.descricaoAtividade);
       formDataToSend.append("valorServico", data.valorServico);
+      
+      if (data.region) {
+        formDataToSend.append("region", data.region);
+      }
+      if (data.toothNumber) {
+        formDataToSend.append("toothNumber", data.toothNumber);
+      }
 
       if (selectedFile) {
         formDataToSend.append("photo", selectedFile);
@@ -232,6 +254,30 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
               placeholder="0,00"
               data-testid="input-movement-value"
               required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="region">Região (opcional)</Label>
+            <Input
+              id="region"
+              type="text"
+              value={formData.region || ""}
+              onChange={(e) => handleInputChange('region', e.target.value)}
+              placeholder="Ex: Superior direita, Inferior esquerda..."
+              data-testid="input-movement-region"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="toothNumber">Número do Dente (opcional)</Label>
+            <Input
+              id="toothNumber"
+              type="text"
+              value={formData.toothNumber || ""}
+              onChange={(e) => handleInputChange('toothNumber', e.target.value)}
+              placeholder="Ex: 16, 21, 36-37..."
+              data-testid="input-movement-tooth"
             />
           </div>
 
