@@ -1,0 +1,57 @@
+**Assunto:** Corrigir Múltiplos Bugs na Tela de Edição de Utilizadores
+
+**Prompt:**
+
+Aja como um desenvolvedor full-stack sênior. A sua tarefa é corrigir três bugs críticos na funcionalidade de **edição de utilizadores**.
+
+**Instruções de Execução:**
+* Foque-se apenas na implementação do código conforme os requisitos abaixo. **Não execute testes funcionais**, pois estes serão realizados por mim.
+* Ao me retornar o código modificado, forneça sempre o **ficheiro completo**, e não apenas o trecho que foi alterado.
+
+---
+
+### **Bug 1: Campo "Senha" Obrigatório na Edição**
+
+* **User Story:** Como administrador, ao editar os dados de um utilizador (como nome ou função), eu não quero ser obrigado a digitar a senha novamente, para que o processo seja mais rápido e eu não altere a senha acidentalmente.
+
+* **Requisitos Técnicos:**
+    1.  **Backend (API - `PUT /api/users/:id`):**
+        * Altere a lógica de atualização do utilizador. Se o campo `password` for recebido como uma string vazia, `null` ou `undefined`, ele **não deve ser atualizado** no banco de dados.
+        * A senha só deve ser atualizada se uma nova senha (uma string com conteúdo) for enviada na requisição. Quando isso acontecer, a nova senha deve ser "hasheada" antes de ser salva.
+    2.  **Frontend (UI - Formulário de Edição de Utilizador):**
+        * Remova o atributo `required` do campo `<Input>` da senha.
+        * Altere o `placeholder` do campo da senha para: "Deixe em branco para não alterar".
+
+---
+
+### **Bug 2: Campo "Duração Padrão" com Validação Incorreta**
+
+* **User Story:** Como administrador, ao definir a "Duração Padrão da Consulta" para um dentista, eu quero poder inserir **qualquer número inteiro de minutos**.
+
+* **Requisitos Técnicos:**
+    1.  **Frontend (UI - Formulário de Edição de Utilizador):**
+        * Localize o `<Input type="number">` para o campo "Duração Padrão da Consulta".
+        * **Remova o atributo `step="15"`** deste campo e altere-o para `step="1"`, para permitir que qualquer valor inteiro seja inserido.
+
+---
+
+### **Bug 3: Erro Genérico na Edição de Utilizador em Produção (Diagnóstico)**
+
+* **User Story:** Como administrador, se ocorrer um erro ao tentar salvar a edição de um utilizador, eu quero ver uma **mensagem clara que explique o problema** (ex: "Email já em uso"), em vez de um erro genérico.
+
+* **Requisitos Técnicos:**
+    1.  **Backend (API - `PUT /api/users/:id`):**
+        * **Implemente um tratamento de erros detalhado (`try...catch`)** nesta rota.
+        * Adicione um `console.log(req.body)` no início da função para registar os dados que estão a ser recebidos.
+        * Dentro do bloco `catch`, adicione uma lógica para identificar o tipo de erro:
+            * Se for um erro de validação do Zod, retorne uma mensagem especificando quais campos falharam (ex: `Dados inválidos: 'email' precisa ser um email válido.`).
+            * Se for um erro de violação de constraint do banco de dados (ex: email ou username duplicado), retorne uma mensagem amigável (ex: `O email informado já está em uso por outro utilizador.`).
+            * Para qualquer outro erro, retorne uma mensagem de erro do servidor, mas inclua o `error.message` para depuração.
+
+    2.  **Frontend (UI - Formulário de Edição de Utilizador):**
+        * Na lógica que trata o erro ao submeter o formulário (`onError`), garanta que a notificação (`toast`) exiba a **mensagem de erro específica** que foi retornada pela API, em vez de um texto fixo.
+
+**Diretrizes de Qualidade e Segurança (Aplicar em toda a implementação):**
+* **Código Limpo e Organizado:** Siga as melhores práticas de mercado.
+* **Segurança:** A lógica de atualização da senha no backend deve ser tratada com cuidado. Valide e sanitize todas as entradas de dados no backend.
+* **Transparência:** Adicione comentários se a lógica de tratamento de erros for complexa.

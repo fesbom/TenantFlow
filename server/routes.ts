@@ -390,10 +390,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       
-      const updateData = insertUserSchema.partial().parse(req.body);
+      // Log dos dados recebidos para depuração
+      console.log("PUT /api/users/:id - Request body:", req.body);
       
-      if (updateData.password) {
+      const parsedData = insertUserSchema.partial().parse(req.body);
+      
+      // Cria uma cópia mutável para permitir modificações
+      const updateData = { ...parsedData };
+      
+      // Só atualiza a senha se uma nova senha for fornecida (não vazia, null ou undefined)
+      if (updateData.password && updateData.password.trim() !== '') {
         updateData.password = await bcrypt.hash(updateData.password, 10);
+      } else {
+        // Remove o campo password do updateData para não atualizar
+        delete updateData.password;
       }
       
       const updatedUser = await storage.updateUser(id, updateData);
@@ -407,6 +417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Update user error:", error);
       
+      // Tratamento de erro de violação de constraint (duplicação)
       if (error.code === '23505') {
         if (error.constraint?.includes('username')) {
           return res.status(400).json({ message: "Este nome de usuário já está em uso. Escolha outro." });
@@ -417,12 +428,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
       }
       
+      // Tratamento de erro de validação Zod
       if (error.name === 'ZodError') {
         const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
       }
       
-      res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
+      // Erro genérico do servidor com mensagem de depuração
+      res.status(500).json({ message: `Erro interno do servidor: ${error.message}` });
     }
   });
 

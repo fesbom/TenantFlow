@@ -99,6 +99,10 @@ export default function SettingsPage() {
   const updateUserMutation = useMutation({
     mutationFn: async (data: typeof formData & { id: string }) => {
       const response = await apiRequest("PUT", `/api/users/${data.id}`, data);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Erro ao atualizar usuário" }));
+        throw new Error(errorData.message || "Não foi possível atualizar os dados do usuário");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -110,10 +114,10 @@ export default function SettingsPage() {
       resetForm();
       setIsModalOpen(false);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Erro ao atualizar usuário",
-        description: "Não foi possível atualizar os dados do usuário",
+        description: error.message || "Não foi possível atualizar os dados do usuário",
         variant: "destructive",
       });
     },
@@ -366,14 +370,16 @@ export default function SettingsPage() {
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="password">Senha *</Label>
+                              <Label htmlFor="password">
+                                Senha{selectedUser ? "" : " *"}
+                              </Label>
                               <Input
                                 id="password"
                                 type="password"
                                 value={formData.password}
                                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                placeholder="••••••••"
-                                required
+                                placeholder={selectedUser ? "Deixe em branco para não alterar" : "••••••••"}
+                                required={!selectedUser}
                                 data-testid="input-user-password"
                               />
                             </div>
@@ -406,8 +412,8 @@ export default function SettingsPage() {
                                 <Input
                                   id="defaultAppointmentDuration"
                                   type="number"
-                                  min="15"
-                                  step="15"
+                                  min="1"
+                                  step="1"
                                   value={formData.defaultAppointmentDuration || ""}
                                   onChange={(e) => 
                                     setFormData({ 
