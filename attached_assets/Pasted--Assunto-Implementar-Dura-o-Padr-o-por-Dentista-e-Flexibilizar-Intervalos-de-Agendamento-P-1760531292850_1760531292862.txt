@@ -1,0 +1,45 @@
+**Assunto:** Implementar Duração Padrão por Dentista e Flexibilizar Intervalos de Agendamento
+
+**Prompt:**
+
+Aja como um desenvolvedor full-stack sênior, especialista em React e Node.js. A sua tarefa é implementar duas melhorias importantes na funcionalidade de agendamento para aumentar a eficiência e a flexibilidade do sistema.
+
+**Instruções de Execução:**
+* Foque-se apenas na implementação do código conforme os requisitos abaixo. **Não execute testes funcionais na aplicação**, pois estes serão realizados por mim.
+* Ao me retornar o código modificado, forneça sempre o **ficheiro completo**, e não apenas o trecho que foi alterado.
+
+---
+
+### **Funcionalidade 1: Duração Padrão de Consulta por Dentista**
+
+* **User Story:** Como administrador, eu quero poder definir uma duração padrão para as consultas de cada dentista no seu cadastro. Como recepcionista, ao agendar uma consulta para um dentista específico, eu quero que o campo "Duração" já venha preenchido com esse padrão, para agilizar o processo.
+
+* **Requisitos Técnicos:**
+    1.  **Banco de Dados:**
+        * Na tabela `User`, adicione uma nova coluna chamada `defaultAppointmentDuration` (tipo: `Integer`, opcional/nullable).
+
+    2.  **Backend (API):**
+        * Atualize os endpoints de criação (`POST /api/users`) e edição (`PUT /api/users/:id`) de utilizadores para que aceitem e salvem o novo campo `defaultAppointmentDuration`.
+        * Garanta que o endpoint que busca a lista de utilizadores (`GET /api/users`) também retorne este novo campo.
+
+    3.  **Frontend (UI):**
+        * **No Cadastro de Utilizadores:** Adicione um campo numérico "Duração Padrão da Consulta (minutos)" no formulário de criação/edição de utilizadores quando a função "Dentista" for selecionada.
+        * **No Modal de Agendamento (`AppointmentModal`):** Implemente uma lógica que, ao selecionar um dentista no dropdown, verifique se ele possui um `defaultAppointmentDuration`. Se possuir, o campo "Duração" do formulário deve ser automaticamente preenchido com esse valor. Se não possuir, o campo deve manter um valor padrão (ex: 60). O utilizador deve poder alterar este valor manualmente a qualquer momento.
+
+---
+
+### **Funcionalidade 2: Flexibilização da Duração dos Agendamentos**
+
+* **User Story:** Como recepcionista, eu quero poder agendar consultas com durações personalizadas (ex: 15, 45, 75 minutos), para que a agenda reflita com precisão o tempo real de cada procedimento.
+
+* **Requisitos Técnicos:**
+    1.  **Frontend (Componente do Calendário):**
+        * No ficheiro `client/src/components/calendar/calendar-view.tsx`, altere a configuração do componente `<Calendar>`. As propriedades `step` e `timeslots` devem ser ajustadas para refletir intervalos de **15 minutos**. (Ex: `step={15}` e `timeslots={4}`).
+
+    2.  **Frontend (Modal de Agendamento):**
+        * No ficheiro `client/src/components/modals/appointment-modal.tsx`, localize o `<Input>` para o campo "Duração". Altere a propriedade `step` deste input para `15` para permitir que o utilizador incremente ou decremente o valor em intervalos de 15 minutos.
+
+**Diretrizes de Qualidade e Segurança (Aplicar em toda a implementação):**
+* **Código Limpo e Organizado:** Siga as melhores práticas de mercado, mantendo o código legível e bem estruturado.
+* **Segurança:** Toda a entrada de dados do utilizador deve ser validada no backend.
+* **Transparência:** Adicione comentários apenas onde a lógica for complexa, explicando o "porquê" da implementação.
