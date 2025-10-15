@@ -185,16 +185,16 @@ export default function AppointmentModal({
     }));
   };
 
-  // Calculate maximum duration: from scheduled time to midnight
+  // Calculate maximum duration: from scheduled time to midnight (next day start)
   const calculateMaxDuration = (): number => {
     if (!formData.scheduledDate) return 480; // Default 8 hours if no date set
     
     const scheduledDateTime = new Date(formData.scheduledDate);
-    const midnight = new Date(scheduledDateTime);
-    midnight.setHours(23, 59, 59, 999);
+    const nextDayStart = new Date(scheduledDateTime);
+    nextDayStart.setHours(24, 0, 0, 0); // Start of next day (midnight)
     
-    const diffMs = midnight.getTime() - scheduledDateTime.getTime();
-    const maxMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffMs = nextDayStart.getTime() - scheduledDateTime.getTime();
+    const maxMinutes = Math.ceil(diffMs / (1000 * 60));
     
     return Math.max(5, maxMinutes); // Minimum 5 minutes
   };

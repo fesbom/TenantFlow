@@ -728,6 +728,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         requestData.scheduledDate = new Date(requestData.scheduledDate);
       }
       
+      // Validate duration: minimum 5 minutes, maximum until midnight
+      if (requestData.duration) {
+        if (requestData.duration < 5) {
+          return res.status(400).json({ message: "A duração mínima do agendamento é de 5 minutos." });
+        }
+        
+        if (requestData.scheduledDate) {
+          const scheduledDateTime = new Date(requestData.scheduledDate);
+          const nextDayStart = new Date(scheduledDateTime);
+          nextDayStart.setHours(24, 0, 0, 0); // Start of next day (midnight)
+          
+          const diffMs = nextDayStart.getTime() - scheduledDateTime.getTime();
+          const maxMinutes = Math.ceil(diffMs / (1000 * 60));
+          
+          if (requestData.duration > maxMinutes) {
+            return res.status(400).json({ message: "A duração do agendamento não pode ultrapassar a meia-noite." });
+          }
+        }
+      }
+      
       const appointmentData = insertAppointmentSchema.parse(requestData);
       const appointment = await storage.createAppointment(appointmentData);
       res.status(201).json(appointment);
@@ -766,6 +786,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // NO TIMEZONE CONVERSION - Save exactly what was received
       if (updateData.scheduledDate) {
         updateData.scheduledDate = new Date(updateData.scheduledDate);
+      }
+      
+      // Validate duration: minimum 5 minutes, maximum until midnight
+      if (updateData.duration !== undefined) {
+        if (updateData.duration < 5) {
+          return res.status(400).json({ message: "A duração mínima do agendamento é de 5 minutos." });
+        }
+        
+        const scheduledDate = updateData.scheduledDate || (await storage.getAppointmentById(req.params.id, req.user!.clinicId))?.scheduledDate;
+        if (scheduledDate) {
+          const scheduledDateTime = new Date(scheduledDate);
+          const nextDayStart = new Date(scheduledDateTime);
+          nextDayStart.setHours(24, 0, 0, 0); // Start of next day (midnight)
+          
+          const diffMs = nextDayStart.getTime() - scheduledDateTime.getTime();
+          const maxMinutes = Math.ceil(diffMs / (1000 * 60));
+          
+          if (updateData.duration > maxMinutes) {
+            return res.status(400).json({ message: "A duração do agendamento não pode ultrapassar a meia-noite." });
+          }
+        }
       }
       
       const parsedData = insertAppointmentSchema.partial().parse(updateData);
