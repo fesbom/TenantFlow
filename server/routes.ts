@@ -386,6 +386,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/users/:id", authenticateToken, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      
+      const updateData = insertUserSchema.partial().parse(req.body);
+      
+      if (updateData.password) {
+        updateData.password = await bcrypt.hash(updateData.password, 10);
+      }
+      
+      const updatedUser = await storage.updateUser(id, updateData);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const { password, ...sanitizedUser } = updatedUser;
+      res.json(sanitizedUser);
+    } catch (error: any) {
+      console.error("Update user error:", error);
+      
+      if (error.code === '23505') {
+        if (error.constraint?.includes('username')) {
+          return res.status(400).json({ message: "Este nome de usuário já está em uso. Escolha outro." });
+        }
+        if (error.constraint?.includes('email')) {
+          return res.status(400).json({ message: "Este email já está cadastrado. Use outro email." });
+        }
+        return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
+      }
+      
+      if (error.name === 'ZodError') {
+        const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
+        return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
+      }
+      
+      res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
+    }
+  });
+
   // Clinic routes
   app.get("/api/clinic", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
