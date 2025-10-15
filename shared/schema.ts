@@ -36,6 +36,7 @@ export const users = pgTable("users", {
   clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
   externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   isActive: boolean("is_active").default(true).notNull(),
+  defaultAppointmentDuration: integer("default_appointment_duration"), // Default duration in minutes for dentist appointments
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
