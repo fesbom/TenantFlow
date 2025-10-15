@@ -77,3 +77,25 @@ Preferred communication style: Simple, everyday language.
 - **Replit integration**: Custom Vite plugins for Replit development environment
 - **Hot reload**: Full-stack development with automatic reloading
 - **Error overlay**: Development error modal for debugging
+
+## Recent Changes
+
+### Appointment Scheduling Enhancements (October 2025)
+
+#### Default Appointment Duration per Dentist
+- Added `defaultAppointmentDuration` field to users table (optional, in minutes)
+- User form displays duration input when role is "dentist"
+- Appointment modal auto-fills duration when dentist is selected (fallback to 60 minutes)
+- Backend route: `PUT /api/users/:id` to update user preferences
+
+#### Flexible Appointment Duration
+- **Calendar Configuration**: 10-minute intervals (step=10, timeslots=6) for better granularity
+- **Frontend Validation**:
+  - Minimum: 5 minutes
+  - Maximum: Calculated dynamically to midnight (allows appointments ending exactly at 00:00)
+  - No fixed step restrictions - users can input any duration value
+- **Backend Validation**:
+  - POST/PUT `/api/appointments` validates duration bounds
+  - Uses `setHours(24,0,0,0)` with `Math.ceil` for accurate midnight boundary calculation
+  - Prevents appointments from extending beyond midnight with appropriate error messages
+- **Bug Fix**: Corrected midnight boundary calculation to allow appointments ending at exactly 00:00 (previously blocked at 23:59)
