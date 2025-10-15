@@ -122,71 +122,79 @@ export function PhotoUpload({
     }
   };
 
+  // Converter canvas.toBlob em Promise para melhor erro handling
+  const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Não foi possível processar a imagem recortada'));
+          }
+        },
+        type,
+        quality
+      );
+    });
+  };
+
   // Processar imagem recortada e fazer upload
   const handleCropComplete = async () => {
-    if (cropperRef.current?.cropper && patientId) {
-      setIsUploading(true);
-      
-      try {
-        // Obter imagem recortada como blob
-        const canvas = cropperRef.current.cropper.getCroppedCanvas({
-          width: 800,
-          height: 600,
-          imageSmoothingQuality: 'high',
-        });
+    if (!cropperRef.current?.cropper || !patientId) return;
 
-        canvas.toBlob(async (blob) => {
-          if (!blob) {
-            toast({
-              title: "Erro ao processar imagem",
-              description: "Não foi possível processar a imagem recortada",
-              variant: "destructive",
-            });
-            setIsUploading(false);
-            return;
-          }
+    setIsUploading(true);
+    
+    try {
+      // Obter imagem recortada como canvas
+      const canvas = cropperRef.current.cropper.getCroppedCanvas({
+        width: 800,
+        height: 600,
+        imageSmoothingQuality: 'high',
+      });
 
-          // Criar FormData e fazer upload
-          const formData = new FormData();
-          formData.append('photo', blob, 'photo.jpg');
+      // Converter canvas para blob
+      const blob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
 
-          const token = localStorage.getItem('dental_token');
-          const response = await fetch(`/api/patients/${patientId}/photo`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-            body: formData,
-          });
+      // Criar FormData e fazer upload
+      const formData = new FormData();
+      formData.append('photo', blob, 'photo.jpg');
 
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Erro ao fazer upload' }));
-            throw new Error(errorData.message || 'Erro ao fazer upload da foto');
-          }
+      const token = localStorage.getItem('dental_token');
+      const response = await fetch(`/api/patients/${patientId}/photo`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
 
-          const result = await response.json();
-          
-          toast({
-            title: "Foto atualizada",
-            description: "A foto do paciente foi atualizada com sucesso",
-          });
-
-          if (onPhotoChange && result.photoUrl) {
-            onPhotoChange(result.photoUrl);
-          }
-
-          setIsCropModalOpen(false);
-          setImageToCrop(null);
-        }, 'image/jpeg', 0.9);
-      } catch (error: any) {
-        toast({
-          title: "Erro ao fazer upload",
-          description: error.message || "Não foi possível fazer upload da foto",
-          variant: "destructive",
-        });
-      } finally {
-        setIsUploading(false);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Erro ao fazer upload' }));
+        throw new Error(errorData.message || 'Erro ao fazer upload da foto');
       }
+
+      const result = await response.json();
+      
+      toast({
+        title: "Foto atualizada",
+        description: "A foto do paciente foi atualizada com sucesso",
+      });
+
+      if (onPhotoChange && result.photoUrl) {
+        onPhotoChange(result.photoUrl);
+      }
+
+      setIsCropModalOpen(false);
+      setImageToCrop(null);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao fazer upload",
+        description: error.message || "Não foi possível fazer upload da foto",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
