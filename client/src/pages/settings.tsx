@@ -35,6 +35,7 @@ export default function SettingsPage() {
     username: "",
     password: "",
     role: "secretary" as "admin" | "dentist" | "secretary",
+    defaultAppointmentDuration: undefined as number | undefined,
   });
 
   const [clinicFormData, setClinicFormData] = useState({
@@ -211,6 +212,7 @@ export default function SettingsPage() {
       username: "",
       password: "",
       role: "secretary",
+      defaultAppointmentDuration: undefined,
     });
     setSelectedUser(null);
   };
@@ -223,6 +225,7 @@ export default function SettingsPage() {
       username: (user as any).username || user.email,
       password: "", // Don't pre-fill password for security
       role: user.role as "admin" | "dentist" | "secretary",
+      defaultAppointmentDuration: (user as any).defaultAppointmentDuration || undefined,
     });
     setIsModalOpen(true);
   };
@@ -394,6 +397,29 @@ export default function SettingsPage() {
                                 </SelectContent>
                               </Select>
                             </div>
+
+                            {formData.role === "dentist" && (
+                              <div className="space-y-2">
+                                <Label htmlFor="defaultAppointmentDuration">
+                                  Duração Padrão da Consulta (minutos)
+                                </Label>
+                                <Input
+                                  id="defaultAppointmentDuration"
+                                  type="number"
+                                  min="15"
+                                  step="15"
+                                  value={formData.defaultAppointmentDuration || ""}
+                                  onChange={(e) => 
+                                    setFormData({ 
+                                      ...formData, 
+                                      defaultAppointmentDuration: e.target.value ? parseInt(e.target.value) : undefined 
+                                    })
+                                  }
+                                  placeholder="60"
+                                  data-testid="input-default-duration"
+                                />
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex justify-end space-x-3 pt-4 border-t">
