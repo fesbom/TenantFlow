@@ -174,6 +174,17 @@ export default function AppointmentModal({
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleDentistChange = (dentistId: string) => {
+    const selectedDentist = dentists.find(d => d.id === dentistId);
+    const defaultDuration = (selectedDentist as any)?.defaultAppointmentDuration || 60;
+    
+    setFormData(prev => ({ 
+      ...prev, 
+      dentistId,
+      duration: defaultDuration
+    }));
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-screen overflow-y-auto">
@@ -227,7 +238,7 @@ export default function AppointmentModal({
 
             <div className="space-y-2">
               <Label htmlFor="dentistId">Dentista *</Label>
-              <Select value={formData.dentistId} onValueChange={(value) => handleInputChange("dentistId", value)} required>
+              <Select value={formData.dentistId} onValueChange={handleDentistChange} required>
                 <SelectTrigger><SelectValue placeholder="Selecione um dentista" /></SelectTrigger>
                 <SelectContent>
                   {dentists.map((dentist) => ( <SelectItem key={dentist.id} value={dentist.id}>{dentist.fullName}</SelectItem> ))}
