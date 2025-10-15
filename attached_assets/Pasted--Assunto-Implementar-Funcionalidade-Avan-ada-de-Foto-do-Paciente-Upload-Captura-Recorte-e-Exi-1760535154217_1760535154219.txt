@@ -1,0 +1,43 @@
+**Assunto:** Implementar Funcionalidade Avançada de Foto do Paciente (Upload, Captura, Recorte e Exibição Completa)
+
+**Prompt:**
+
+Aja como um desenvolvedor de software sênior, especialista em React, Node.js e interfaces de utilizador interativas. A sua tarefa é implementar uma funcionalidade avançada e totalmente integrada para a gestão da foto de perfil dos pacientes.
+
+**Instruções de Execução:**
+* Foque-se apenas na implementação do código conforme os requisitos abaixo. **Não execute testes funcionais**, pois estes serão realizados por mim.
+* Ao me retornar o código modificado, forneça sempre o **ficheiro completo**.
+
+---
+
+### **User Story (Aprimorada):**
+
+Como profissional da clínica, eu quero poder **adicionar ou capturar** uma foto no perfil de cada paciente e **vê-la em todos os pontos-chave do sistema**, para que a identificação seja rápida, profissional e humanizada em todo o fluxo de atendimento.
+
+### **Requisitos Técnicos Detalhados:**
+
+**1. Backend (Banco de Dados e API):**
+* **Banco de Dados:** Garanta que a tabela `Patient` possui a coluna `photoUrl` (tipo: `String`, opcional/nullable).
+* **API de Upload:** Crie ou ajuste o endpoint `POST /api/patients/:id/photo` para receber um ficheiro de imagem, salvá-lo e atualizar o campo `photoUrl` do paciente.
+* **APIs de Consulta:** **(Reforço Crítico)** Modifique todos os endpoints que retornam dados de pacientes (`GET /api/patients`, `GET /api/appointments`, e **`GET /api/dashboard/birthday-patients`**) para que **incluam o campo `photoUrl`** nos dados retornados. Isso é essencial para a exibição no frontend.
+
+**2. Frontend (Captura e Gestão da Foto):**
+A implementação no formulário de **cadastro/edição de paciente** deve seguir este fluxo:
+* **Componente Principal:** Exiba a foto atual. Se não houver, mostre um ícone padrão. Ao clicar, ofereça as opções:
+    1.  **"Carregar Ficheiro"**: Abre o seletor de ficheiros.
+    2.  **"Tirar Foto (Webcam/Câmera)"**: Ativa a câmera do dispositivo com um botão "Capturar".
+    3.  **"Remover Foto"**: Apaga a foto atual.
+* **Modal de Recorte (Crop):** Após carregar ou capturar uma foto, exiba um modal com a biblioteca **`Cropper.js`**. Configure-o para forçar uma proporção de **4:3**.
+* **Lógica de Salvamento:** Envie **apenas a imagem já recortada** para a API de upload.
+
+**3. Frontend (Exibição da Foto no Sistema) - Requisito Consolidado:**
+A foto do paciente (`photoUrl`) deve ser exibida nos seguintes locais para maximizar a sua utilidade:
+* **Na Lista de Pacientes:** Adicione uma coluna no início da tabela de pacientes para exibir uma miniatura (avatar circular) da foto de cada paciente.
+* **No Agendamento (Calendário):** No "pop-up" ou detalhe do evento no calendário, exiba a miniatura da foto ao lado do nome do paciente.
+* **Na Seleção de Paciente para Tratamento:** No formulário de criação de um novo tratamento, quando um paciente for selecionado, exiba a sua foto e nome para confirmar visualmente a seleção correta.
+* **No Dashboard (Aniversariantes):** Na lista de aniversariantes do dia, exiba a miniatura (avatar circular) da foto ao lado do nome de cada paciente.
+
+**Diretrizes de Qualidade e Segurança:**
+* **Código Limpo:** Crie um componente React reutilizável para a lógica de captura e recorte para manter o formulário de paciente organizado.
+* **Segurança:** No backend, valide o ficheiro recebido (tipo de imagem e tamanho máximo de 5MB).
+* **Experiência do Utilizador (UX):** Mostre indicadores de carregamento durante o processo de upload. Garanta que as miniaturas das fotos carreguem de forma eficiente e não prejudiquem a performance das listas.

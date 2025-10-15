@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
 import { Patient, User } from "@/types";
+import { PhotoUpload } from "@/components/patient/photo-upload";
 
 interface PatientModalProps {
   isOpen: boolean;
@@ -48,6 +49,7 @@ interface PatientFormData {
   lastContactDate: string;
   
   medicalNotes: string;
+  photoUrl?: string;
 }
 
 export default function PatientModal({ isOpen, onClose, patient }: PatientModalProps) {
@@ -95,6 +97,7 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
     lastContactDate: "",
     
     medicalNotes: "",
+    photoUrl: "",
   });
 
   useEffect(() => {
@@ -131,6 +134,7 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
         lastContactDate: (patient as any).lastContactDate || "",
         
         medicalNotes: patient.medicalNotes || "",
+        photoUrl: (patient as any).photoUrl || "",
       });
       setShowOtherField((patient as any).howDidYouKnowUs === 'Outros');
     } else {
@@ -166,6 +170,7 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
         lastContactDate: "",
         
         medicalNotes: "",
+        photoUrl: "",
       });
       setShowOtherField(false);
     }
@@ -279,6 +284,16 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
           {/* Dados Pessoais */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold border-b pb-2">Dados Pessoais</h3>
+            
+            {/* Photo Upload */}
+            <PhotoUpload
+              currentPhotoUrl={formData.photoUrl}
+              patientId={patient?.id}
+              patientName={formData.fullName || "Paciente"}
+              onPhotoChange={(photoUrl) => setFormData(prev => ({ ...prev, photoUrl }))}
+              disabled={!patient}
+            />
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="fullName">Nome Completo *</Label>

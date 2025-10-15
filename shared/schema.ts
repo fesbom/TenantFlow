@@ -75,6 +75,7 @@ export const patients = pgTable("patients", {
   
   externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   medicalNotes: text("medical_notes"),
+  photoUrl: text("photo_url"), // URL da foto do paciente
   clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

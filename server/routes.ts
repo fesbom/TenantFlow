@@ -502,6 +502,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Upload patient photo
+  app.post("/api/patients/:id/photo", authenticateToken, requireRole(["admin", "secretary"]), upload.single('photo'), async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ 
+          message: "Nenhum arquivo foi enviado"
+        });
+      }
+
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+      if (req.file.size > maxSize) {
+        return res.status(400).json({ 
+          message: "O arquivo é muito grande. Tamanho máximo: 5MB"
+        });
+      }
+
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ 
+          message: "Tipo de arquivo inválido. Use: JPG, PNG ou WEBP"
+        });
+      }
+
+      const photoUrl = `/uploads/${req.file.filename}`;
+      
+      // Update patient with new photo URL
+      const updatedPatient = await storage.updatePatient(req.params.id, { photoUrl }, req.user!.clinicId);
+      
+      if (!updatedPatient) {
+        return res.status(404).json({ message: "Paciente não encontrado" });
+      }
+      
+      res.json({ photoUrl, patient: updatedPatient });
+    } catch (error: any) {
+      console.error("Upload patient photo error:", error);
+      res.status(500).json({ 
+        message: "Erro ao fazer upload da foto",
+        error: error.message
+      });
+    }
+  });
+
   // Public route to get clinic branding for login page
   app.get("/api/clinic/branding/:email", async (req, res) => {
     try {
