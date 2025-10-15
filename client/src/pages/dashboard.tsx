@@ -19,6 +19,7 @@ import {
   MessageCircle,
   ChevronLeft,
   ChevronRight,
+  User,
 } from "lucide-react";
 import { Appointment, Patient } from "@/types";
 
@@ -296,8 +297,22 @@ export default function Dashboard() {
                         key={patient.id}
                         className="flex items-center space-x-3 p-3 bg-pink-50 rounded-lg border border-pink-200"
                       >
-                        <div className="h-10 w-10 bg-pink-100 rounded-full flex items-center justify-center">
-                          <Cake className="h-5 w-5 text-pink-600" />
+                        {/* Patient Photo or Birthday Icon */}
+                        <div className="relative h-10 w-10 rounded-full overflow-hidden border-2 border-pink-300 bg-pink-100 flex items-center justify-center flex-shrink-0">
+                          {patient.photoUrl ? (
+                            <img
+                              src={patient.photoUrl}
+                              alt={patient.fullName}
+                              className="w-full h-full object-cover"
+                              data-testid={`img-birthday-photo-${patient.id}`}
+                            />
+                          ) : (
+                            <User className="h-5 w-5 text-pink-600" />
+                          )}
+                          {/* Birthday Badge Overlay */}
+                          <div className="absolute -bottom-1 -right-1 bg-pink-500 rounded-full p-0.5">
+                            <Cake className="h-3 w-3 text-white" />
+                          </div>
                         </div>
                         <div className="flex-1">
                           <p className="text-sm font-medium text-gray-900">{patient.fullName}</p>

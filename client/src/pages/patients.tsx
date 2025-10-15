@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
 import PatientModal from "@/components/modals/patient-modal";
 import { Patient } from "@/types";
-import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User } from "lucide-react";
 import { formatDateBR } from "@/lib/date-formatter";
 
 interface PaginatedResponse {
@@ -173,11 +173,28 @@ export default function Patients() {
                         {patients.map((patient) => (
                           <TableRow key={patient.id} data-testid={`patient-row-${patient.id}`}>
                             <TableCell>
-                              <div>
-                                <div className="font-medium">{patient.fullName}</div>
-                                {patient.cpf && (
-                                  <div className="text-sm text-gray-500">CPF: {patient.cpf}</div>
-                                )}
+                              <div className="flex items-center gap-3">
+                                {/* Patient Photo */}
+                                <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                  {patient.photoUrl ? (
+                                    <img
+                                      src={patient.photoUrl}
+                                      alt={patient.fullName}
+                                      className="w-full h-full object-cover"
+                                      data-testid={`img-patient-photo-${patient.id}`}
+                                    />
+                                  ) : (
+                                    <User className="w-5 h-5 text-gray-400" />
+                                  )}
+                                </div>
+                                
+                                {/* Patient Info */}
+                                <div>
+                                  <div className="font-medium">{patient.fullName}</div>
+                                  {patient.cpf && (
+                                    <div className="text-sm text-gray-500">CPF: {patient.cpf}</div>
+                                  )}
+                                </div>
                               </div>
                             </TableCell>
                             <TableCell>

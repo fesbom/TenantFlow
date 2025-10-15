@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { Appointment, Patient, User } from "@/types";
 import AppointmentModal from "@/components/modals/appointment-modal";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter, User as UserIcon } from "lucide-react";
 import moment from "moment";
 import 'moment/locale/pt-br';
 
@@ -180,6 +180,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
   const EventComponent = ({ event }: { event: CalendarEvent }) => {
     const appointment = event.resource;
+    const patient = patients.find(p => p.id === appointment.patientId);
     const statusColors = {
       scheduled: "bg-blue-100 border-blue-500 text-blue-800",
       in_progress: "bg-yellow-100 border-yellow-500 text-yellow-800",
@@ -190,8 +191,23 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
     return (
       <div className={`p-1 rounded border-l-4 text-xs ${colorClass} h-full overflow-hidden`}>
-        <div className="font-medium truncate">{getPatientName(appointment.patientId)}</div>
-        <div className="text-xs opacity-75 truncate">{appointment.procedure || "Consulta"}</div>
+        <div className="flex items-center gap-1">
+          {/* Patient Photo */}
+          <div className="w-5 h-5 rounded-full overflow-hidden border border-current bg-white flex items-center justify-center flex-shrink-0">
+            {patient?.photoUrl ? (
+              <img
+                src={patient.photoUrl}
+                alt={patient.fullName}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <UserIcon className="w-3 h-3" />
+            )}
+          </div>
+          {/* Patient Name */}
+          <div className="font-medium truncate flex-1">{getPatientName(appointment.patientId)}</div>
+        </div>
+        <div className="text-xs opacity-75 truncate ml-6">{appointment.procedure || "Consulta"}</div>
       </div>
     );
   };
