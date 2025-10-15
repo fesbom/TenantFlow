@@ -80,6 +80,39 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### Patient Photo Management (October 2025)
+
+#### Photo Upload Infrastructure
+- **Database**: Added `photoUrl` column to patients table (TEXT, optional)
+- **Backend Endpoint**: `POST /api/patients/:id/photo` for photo uploads
+  - Validates file type (JPG, PNG, WEBP)
+  - Validates file size (max 5MB)
+  - Uses multer for file handling
+  - Stores files in local file system
+- **Dependencies**: Installed `react-cropper` and `cropperjs` for image cropping
+
+#### PhotoUpload Component
+- **Upload Methods**:
+  - File upload from device
+  - Webcam capture with live preview
+- **Image Editing**:
+  - Cropping with 4:3 aspect ratio
+  - Canvas-based processing at 800x600 resolution
+  - JPEG output with 0.9 quality
+- **Features**:
+  - Photo removal functionality
+  - Client-side validation (type, size)
+  - Error handling with user feedback via toasts
+  - Async blob conversion for proper error catching
+- **Integration**: Embedded in patient modal form
+
+#### Photo Display Locations
+- **Patient List**: 40x40px circular thumbnail next to patient name with User icon fallback
+- **Calendar Events**: 20x20px miniature in event component alongside patient name
+- **Dashboard Birthdays**: 40x40px photo with pink border and cake badge overlay in corner
+- **Medical Records Modal**: 64x64px photo in patient info header section
+- All displays include appropriate test IDs and graceful fallbacks when no photo exists
+
 ### Appointment Scheduling Enhancements (October 2025)
 
 #### Default Appointment Duration per Dentist
