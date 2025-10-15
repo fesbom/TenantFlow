@@ -185,6 +185,20 @@ export default function AppointmentModal({
     }));
   };
 
+  // Calculate maximum duration: from scheduled time to midnight
+  const calculateMaxDuration = (): number => {
+    if (!formData.scheduledDate) return 480; // Default 8 hours if no date set
+    
+    const scheduledDateTime = new Date(formData.scheduledDate);
+    const midnight = new Date(scheduledDateTime);
+    midnight.setHours(23, 59, 59, 999);
+    
+    const diffMs = midnight.getTime() - scheduledDateTime.getTime();
+    const maxMinutes = Math.floor(diffMs / (1000 * 60));
+    
+    return Math.max(5, maxMinutes); // Minimum 5 minutes
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-screen overflow-y-auto">
@@ -264,7 +278,9 @@ export default function AppointmentModal({
               <Input
                 id="duration"
                 type="number"
-                min="15" max="480" step="15"
+                min="5"
+                max={calculateMaxDuration()}
+                step="1"
                 value={formData.duration}
                 onChange={(e) => handleInputChange("duration", parseInt(e.target.value))}
                 data-testid="input-appointment-duration"
