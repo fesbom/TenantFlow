@@ -1,0 +1,45 @@
+**Assunto:** Refinamento da Duração dos Agendamentos: Duração Livre com Validação Dinâmica
+
+**Prompt:**
+
+Aja como um desenvolvedor full-stack sênior. A sua tarefa é refinar a funcionalidade de duração dos agendamentos para oferecer máxima flexibilidade ao utilizador, com validações de segurança.
+
+**Instruções de Execução:**
+* Foque-se apenas na implementação do código conforme os requisitos abaixo. **Não execute testes funcionais**, pois estes serão realizados por mim.
+* Ao me retornar o código modificado, forneça sempre o **ficheiro completo**.
+
+---
+
+### **Funcionalidade 1: Duração Padrão de Consulta por Dentista (Mantém-se)**
+
+* **User Story:** Como administrador, quero poder definir uma duração padrão para as consultas de cada dentista. Ao agendar, quero que o campo "Duração" já venha preenchido com esse padrão para agilizar o processo, mas que eu possa alterá-lo livremente.
+
+* **Requisitos Técnicos:**
+    1.  **Banco de Dados:** Garanta que a tabela `User` tenha a coluna `defaultAppointmentDuration` (Integer, opcional).
+    2.  **Backend (API):** Garanta que os endpoints de gestão de utilizadores (`GET`, `POST`, `PUT`) suportem este campo.
+    3.  **Frontend (UI):**
+        * No **cadastro de Dentistas**, inclua o campo "Duração Padrão da Consulta (minutos)".
+        * No **Modal de Agendamento**, ao selecionar um dentista, preencha automaticamente o campo "Duração" com o valor padrão dele. Se não houver um, use um fallback (ex: 60).
+
+---
+
+### **Funcionalidade 2: Flexibilização Total da Duração (Requisito Ajustado)**
+
+* **User Story:** Como recepcionista, eu quero poder agendar consultas com **qualquer duração em minutos** (ex: 18, 23, 50 minutos), para que a agenda reflita com precisão o tempo real de cada procedimento, garantindo apenas que a duração mínima seja de 5 minutos e que o agendamento não ultrapasse a meia-noite.
+
+* **Requisitos Técnicos:**
+    1.  **Frontend (Componente do Calendário - `calendar-view.tsx`):**
+        * Para suportar visualmente durações variadas, altere a configuração do componente `<Calendar>` para ter uma granularidade menor. Sugestão: `step={10}` e `timeslots={6}` (intervalos de 10 minutos).
+
+    2.  **Frontend (Modal de Agendamento - `appointment-modal.tsx`):**
+        * Localize o `<Input>` para o campo "Duração".
+        * **Remova qualquer `step` predefinido** ou defina `step="1"`, para permitir a inserção de qualquer número inteiro.
+        * Defina o atributo `min="5"` para garantir a duração mínima.
+        * **Implemente um `max` dinâmico:** O valor máximo permitido para a duração deve ser calculado em tempo real. A lógica é: `max = (minutos desde a hora de início do agendamento até a meia-noite do mesmo dia)`.
+            * Exemplo: Se o agendamento começa às 23:00, o `max` do campo duração será `60`. Se começa às 10:00, o `max` será `840`.
+            * Esta lógica deve ser implementada no componente React, recalculando o valor `max` sempre que a data/hora de início do agendamento for alterada.
+
+**Diretrizes de Qualidade e Segurança (Aplicar em toda a implementação):**
+* **Código Limpo e Organizado:** Siga as melhores práticas, mantendo o código legível e bem estruturado.
+* **Segurança:** A validação dos limites de duração (mínimo de 5 minutos e o máximo calculado) deve ser reforçada no backend para garantir a integridade dos dados.
+* **Transparência:** Adicione comentários apenas onde a lógica for complexa, como no cálculo do `max` dinâmico.
