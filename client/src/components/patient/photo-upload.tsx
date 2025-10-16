@@ -1,5 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Cropper, ReactCropperElement } from "react-cropper";
+import "cropperjs/dist/cropper.css"; // Esta linha agora funcionará
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Camera, Upload, Trash2, User } from "lucide-react";
@@ -26,46 +27,59 @@ export function PhotoUpload({
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   const cropperRef = useRef<ReactCropperElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Iniciar webcam
-  const startWebcam = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: "user"
-        } 
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        setIsWebcamActive(true);
+  useEffect(() => {
+    const stopWebcamStream = () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
-    } catch (error) {
-      toast({
-        title: "Erro ao acessar câmera",
-        description: "Não foi possível acessar a câmera do dispositivo",
-        variant: "destructive",
-      });
+    };
+
+    if (isWebcamActive) {
+      const startWebcamStream = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: "user"
+            } 
+          });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            streamRef.current = stream;
+          }
+        } catch (error) {
+          toast({
+            title: "Erro ao aceder à câmera",
+            description: "Não foi possível aceder à câmera do dispositivo. Verifique as permissões do navegador.",
+            variant: "destructive",
+          });
+          setIsWebcamActive(false);
+        }
+      };
+      startWebcamStream();
     }
+
+    return () => {
+      stopWebcamStream();
+    };
+  }, [isWebcamActive, toast]);
+
+  const startWebcam = () => {
+    setIsWebcamActive(true);
   };
 
-  // Parar webcam
   const stopWebcam = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
     setIsWebcamActive(false);
   };
 
-  // Capturar foto da webcam
   const capturePhoto = () => {
     if (videoRef.current) {
       const canvas = document.createElement('canvas');
@@ -83,29 +97,25 @@ export function PhotoUpload({
     }
   };
 
-  // Abrir seletor de arquivo
   const handleFileSelect = () => {
     fileInputRef.current?.click();
   };
 
-  // Processar arquivo selecionado
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validar tipo de arquivo
       if (!file.type.startsWith('image/')) {
         toast({
-          title: "Arquivo inválido",
+          title: "Ficheiro inválido",
           description: "Por favor, selecione uma imagem",
           variant: "destructive",
         });
         return;
       }
 
-      // Validar tamanho (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         toast({
-          title: "Arquivo muito grande",
+          title: "Ficheiro muito grande",
           description: "O tamanho máximo permitido é 5MB",
           variant: "destructive",
         });
@@ -122,7 +132,6 @@ export function PhotoUpload({
     }
   };
 
-  // Converter canvas.toBlob em Promise para melhor erro handling
   const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       canvas.toBlob(
@@ -139,24 +148,20 @@ export function PhotoUpload({
     });
   };
 
-  // Processar imagem recortada e fazer upload
   const handleCropComplete = async () => {
     if (!cropperRef.current?.cropper || !patientId) return;
 
     setIsUploading(true);
-    
+
     try {
-      // Obter imagem recortada como canvas
       const canvas = cropperRef.current.cropper.getCroppedCanvas({
         width: 800,
         height: 600,
         imageSmoothingQuality: 'high',
       });
 
-      // Converter canvas para blob
       const blob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
 
-      // Criar FormData e fazer upload
       const formData = new FormData();
       formData.append('photo', blob, 'photo.jpg');
 
@@ -175,7 +180,7 @@ export function PhotoUpload({
       }
 
       const result = await response.json();
-      
+
       toast({
         title: "Foto atualizada",
         description: "A foto do paciente foi atualizada com sucesso",
@@ -198,14 +203,13 @@ export function PhotoUpload({
     }
   };
 
-  // Remover foto
   const handleRemovePhoto = async () => {
     if (!patientId) return;
 
     try {
       setIsUploading(true);
       const token = localStorage.getItem('dental_token');
-      
+
       const response = await fetch(`/api/patients/${patientId}`, {
         method: 'PUT',
         headers: {
@@ -243,7 +247,6 @@ export function PhotoUpload({
   return (
     <>
       <div className="flex items-center space-x-4">
-        {/* Preview da foto atual */}
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
@@ -275,7 +278,6 @@ export function PhotoUpload({
         </div>
       </div>
 
-      {/* Modal de opções */}
       <Dialog open={isModalOpen} onOpenChange={(open) => {
         setIsModalOpen(open);
         if (!open) stopWebcam();
@@ -315,7 +317,7 @@ export function PhotoUpload({
                 className="hidden"
                 data-testid="input-photo-file"
               />
-              
+
               <Button
                 onClick={handleFileSelect}
                 className="w-full"
@@ -323,7 +325,7 @@ export function PhotoUpload({
                 data-testid="button-upload-photo"
               >
                 <Upload className="w-4 h-4 mr-2" />
-                Carregar Arquivo
+                Carregar Ficheiro
               </Button>
 
               <Button
@@ -353,7 +355,6 @@ export function PhotoUpload({
         </DialogContent>
       </Dialog>
 
-      {/* Modal de recorte */}
       <Dialog open={isCropModalOpen} onOpenChange={setIsCropModalOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
