@@ -80,7 +80,7 @@ export interface IStorage {
   getPatientById(id: string, clinicId: string): Promise<Patient | undefined>;
   updatePatient(id: string, updates: Partial<InsertPatient>, clinicId: string): Promise<Patient | undefined>;
   deletePatient(id: string, clinicId: string): Promise<boolean>;
-  getBirthdayPatients(clinicId: string, date: Date): Promise<Patient[]>;
+  getBirthdayPatients(clinicId: string, pagination: { page: number; pageSize: number }): Promise<PaginatedResponse<Patient>>;
 
   // Appointment methods
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
