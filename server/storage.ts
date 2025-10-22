@@ -246,7 +246,10 @@ export class DatabaseStorage implements IStorage {
     const [patient] = await db
       .select()
       .from(patients)
-      .where(and(eq(patients.externalId, externalId), eq(patients.clinicId, clinicId)));
+      .where(and(
+        sql`"external_id" = ${externalId}`,
+        eq(patients.clinicId, clinicId)
+      ));
     return patient || undefined;
   }
 
