@@ -78,6 +78,7 @@ export interface IStorage {
   createPatient(patient: InsertPatient): Promise<Patient>;
   getPatientsByClinic(clinicId: string): Promise<Patient[]>;
   getPatientById(id: string, clinicId: string): Promise<Patient | undefined>;
+  getPatientByExternalId(externalId: string, clinicId: string): Promise<Patient | undefined>;
   updatePatient(id: string, updates: Partial<InsertPatient>, clinicId: string): Promise<Patient | undefined>;
   deletePatient(id: string, clinicId: string): Promise<boolean>;
   getBirthdayPatients(clinicId: string, pagination: { page: number; pageSize: number }): Promise<PaginatedResponse<Patient>>;
@@ -241,6 +242,14 @@ export class DatabaseStorage implements IStorage {
     return patient || undefined;
   }
 
+  async getPatientByExternalId(externalId: string, clinicId: string): Promise<Patient | undefined> {
+    const [patient] = await db
+      .select()
+      .from(patients)
+      .where(and(eq(patients.externalId, externalId), eq(patients.clinicId, clinicId)));
+    return patient || undefined;
+  }
+
   async updatePatient(id: string, updates: Partial<InsertPatient>, clinicId: string): Promise<Patient | undefined> {
     const [patient] = await db
       .update(patients)
@@ -266,8 +275,8 @@ export class DatabaseStorage implements IStorage {
         eq(patients.clinicId, clinicId),
         isNotNull(patients.birthDate),
         // A lógica de fuso horário é feita 100% no banco de dados
-        sql`EXTRACT(MONTH FROM "birthDate") = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`,
-        sql`EXTRACT(DAY FROM "birthDate") = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`
+        sql`EXTRACT(MONTH FROM "birth_date") = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+        sql`EXTRACT(DAY FROM "birth_date") = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`
       );
 
       // 1. Obter a contagem total de aniversariantes para a paginação

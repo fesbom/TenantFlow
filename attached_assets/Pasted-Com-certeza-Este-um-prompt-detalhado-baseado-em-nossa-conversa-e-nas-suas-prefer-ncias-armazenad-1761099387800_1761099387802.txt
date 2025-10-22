@@ -1,0 +1,59 @@
+Com certeza. Este é um prompt detalhado, baseado em nossa conversa e nas suas preferências armazenadas, para ser usado no Replit.
+
+Ele instrui o assistente a agir como dev full stack, a criar a funcionalidade de upload em lote reutilizando sua API existente, e a reportar o código completo.
+
+---
+
+### Prompt para o Replit
+
+Aja como um desenvolvedor full stack sênior.
+
+Preciso implementar uma funcionalidade de upload de fotos de pacientes em lote no meu sistema de clínica odontológica.
+
+**Contexto e Estratégia:**
+O sistema já possui uma rota `POST /api/patients/:patientId/photo` que funciona perfeitamente para o upload de uma única foto (como visto no componente `PhotoUpload.tsx`). Esta rota espera o **`patientId` (UUID)** do paciente na URL.
+
+A nova funcionalidade de lote, no entanto, receberá múltiplos arquivos (fotos) onde o nome de cada arquivo (sem a extensão) é o **`external_id`** do paciente (ex: `pac-123.jpg`).
+
+Portanto, a tarefa precisa ser dividida em duas partes (Backend e Frontend) para "traduzir" o `external_id` no `patientId` (UUID) necessário para a rota existente.
+
+**Tarefas de Backend:**
+
+1.  **Arquivo `server/storage.ts`:**
+    * Adicione um novo método `getPatientByExternalId(externalId: string, clinicId: string): Promise<Patient | undefined>` à interface `IStorage` e à classe `DatabaseStorage`.
+    * A implementação deste método deve buscar na tabela `patients` usando o `externalId` e o `clinicId` do usuário logado.
+    * Atenção: A coluna no banco pode ser `externalId` (camelCase) ou `external_id` (snake_case). Verifique o schema e use `eq(patients.externalId, externalId)` ou `sql` se necessário.
+
+2.  **Arquivo `server/routes.ts`:**
+    * Crie uma nova rota `GET /api/patients/by-external-id/:externalId`.
+    * Esta rota deve ser protegida pelo middleware de autenticação (`authMiddleware`).
+    * Ela deve extrair o `clinicId` do `req.user`.
+    * Ela deve chamar o novo método `storage.getPatientByExternalId(req.params.externalId, clinicId)`.
+    * Se o paciente for encontrado, retorne o objeto `patient` com status 200.
+    * Se não for encontrado, retorne um 404 com a mensagem "Paciente não encontrado".
+
+**Tarefas de Frontend:**
+
+1.  **Novo Arquivo (ex: `pages/admin/upload-lote.tsx`):**
+    * Crie uma nova página de administração (React) para o "Upload de Fotos em Lote".
+    * Adicione um componente `<input type="file" multiple ... />` e um botão "Iniciar Envio".
+    * A página deve exibir uma lista de status de todos os arquivos selecionados.
+    * **Lógica de Envio (ao clicar no botão):**
+        * O componente deve iterar (fazer um loop `for...of`) por cada `File` da lista de arquivos selecionados.
+        * **Para cada arquivo:**
+            1.  Extraia o `external_id` do nome do arquivo (ex: `pac-123.jpg` -> `pac-123`).
+            2.  Atualize o status desse arquivo para "Buscando paciente...".
+            3.  Faça um `fetch` (GET) para a nova rota `/api/patients/by-external-id/${externalId}` (incluindo o token de autenticação).
+            4.  **Se a busca falhar (404):** Atualize o status do arquivo para "Erro: Paciente não encontrado" e continue para o próximo arquivo.
+            5.  **Se a busca for bem-sucedida:**
+                a. Recupere o `patientId` (UUID) do JSON de resposta (ex: `const patient = await res.json(); const patientId = patient.id;`).
+                b. Atualize o status para "Enviando foto...".
+                c. Crie um `FormData` e adicione o arquivo (ex: `formData.append('photo', file)`).
+                d. Faça um `fetch` (POST) para a rota *existente* `/api/patients/${patientId}/photo` (incluindo o token e o `FormData` no body).
+                e. Se o upload falhar, atualize o status para "Erro no upload".
+                f. Se o upload for bem-sucedido, atualize o status para "Sucesso".
+
+**Instruções Finais:**
+* Reporte a rotina completa dos arquivos modificados (`server/storage.ts` e `server/routes.ts`).
+* Reporte a rotina completa do novo arquivo de frontend (`pages/admin/upload-lote.tsx`).
+* Não execute testes funcionais na aplicação, a menos que eu solicite explicitamente.
