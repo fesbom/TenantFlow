@@ -113,6 +113,22 @@ Preferred communication style: Simple, everyday language.
 - **Medical Records Modal**: 64x64px photo in patient info header section
 - All displays include appropriate test IDs and graceful fallbacks when no photo exists
 
+#### Batch Photo Upload (October 2025)
+- **Backend Endpoint**: `GET /api/patients/by-external-id/:externalId` for patient lookup
+  - Returns patient object matching the provided external_id
+  - Clinic-scoped query ensures multi-tenant isolation
+  - Protected by authentication middleware
+- **Batch Upload Page**: `/batch-upload` accessible to admin and secretary roles
+  - File Selection: Multi-file input accepting JPG, PNG, WEBP formats
+  - Filename Convention: Uses `{external_id}.jpg` pattern to match patients
+  - Validation: Client-side checks for file type and 5MB size limit
+  - Sequential Processing: Each file is processed one at a time with status tracking
+  - Real-time Feedback: Individual file status updates (pending → searching → uploading → success/error)
+  - Accurate Summary: Uses local counters to track success/error counts (not stale state)
+  - Error Handling: Clear error messages for patient not found, upload failures, and validation errors
+- **Integration**: Menu item "Upload Fotos" in sidebar with Images icon
+- **Reuse**: Leverages existing `POST /api/patients/:id/photo` endpoint for actual photo uploads
+
 ### Dashboard Birthday Timezone Fix (October 2025)
 
 #### Bug Description
