@@ -113,6 +113,24 @@ Preferred communication style: Simple, everyday language.
 - **Medical Records Modal**: 64x64px photo in patient info header section
 - All displays include appropriate test IDs and graceful fallbacks when no photo exists
 
+### Dashboard Birthday Timezone Fix (October 2025)
+
+#### Bug Description
+The dashboard birthday list was displaying patients whose birthdays are tomorrow instead of today, due to timezone differences between the server (UTC) and Brazilian clinics (America/Sao_Paulo timezone).
+
+#### Solution Implementation
+- **Database-Level Timezone Handling**: All date comparison logic moved to PostgreSQL using `NOW() AT TIME ZONE 'America/Sao_Paulo'`
+- **server/storage.ts Changes**:
+  - Added `PaginatedResponse<T>` interface for typed paginated responses
+  - Updated `getBirthdayPatients` signature to accept pagination parameters instead of date
+  - SQL query uses `EXTRACT(MONTH/DAY FROM birthDate)` compared against localized timestamp
+  - Returns paginated results with metadata (page, pageSize, totalCount, totalPages)
+- **server/routes.ts Changes**:
+  - Route `GET /api/dashboard/birthday-patients` extracts pagination from query parameters
+  - Removed JavaScript-based date logic
+  - Delegates all timezone handling to database layer
+- **Result**: Birthday matching now correctly uses São Paulo local time, ensuring patients are shown on their actual birthday regardless of server timezone
+
 ### Appointment Scheduling Enhancements (October 2025)
 
 #### Default Appointment Duration per Dentist
