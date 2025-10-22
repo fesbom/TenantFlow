@@ -1,0 +1,48 @@
+Entendido. Ótima descoberta\! Os zeros à esquerda são um problema clássico de *padding*.
+
+Se o nome do arquivo é `0000007683.jpg` e o `external_id` no banco é `7683`, precisamos "limpar" esse ID antes de fazer a busca no banco.
+
+A sua sugestão (string -\> número -\> string) é a forma perfeita de fazer isso.
+
+`"0000007683"` (string) -\> `7683` (number) -\> `"7683"` (string)
+
+Essa limpeza deve ser feita no **backend**, assim que a rota recebe o ID, antes de passá-lo para a camada de *storage*.
+
+Aqui está o prompt de correção atualizado para o Replit.
+
+-----
+
+### Prompt para o Replit
+
+Aja como um desenvolvedor full stack sênior.
+
+Identificamos um bug na funcionalidade de upload em lote. O frontend envia o `external_id` extraído do nome do arquivo (ex: `0000007683`), mas o backend falha em encontrar o paciente porque o `external_id` no banco de dados está armazenado sem os zeros à esquerda (ex: `7683`).
+
+Precisamos corrigir a rota de busca no backend para que ela trate (limpe) esse ID antes de consultar o banco de dados.
+
+**Tarefa de Correção (Backend):**
+
+1.  **Arquivo `server/routes.ts`:**
+
+      * Localize a rota `GET /api/patients/by-external-id/:externalId`.
+      * **Ponto da Correção:** Logo após extrair o `externalId` dos parâmetros (`const { externalId } = req.params;`), adicione a lógica para remover os zeros à esquerda.
+      * A lógica deve converter o ID recebido (string) para número (para remover os zeros) e depois de volta para string (para usar na busca).
+      * **Adicionar esta linha:**
+        ```typescript
+        const cleanedExternalId = String(parseInt(externalId, 10));
+        ```
+      * Na chamada ao método de storage, use o ID limpo (`cleanedExternalId`) em vez do ID original.
+      * **Alterar de:**
+        `const patient = await storage.getPatientByExternalId(externalId, clinicId);`
+      * **Alterar para:**
+        `const patient = await storage.getPatientByExternalId(cleanedExternalId, clinicId);`
+
+2.  **Arquivo `server/storage.ts` (Verificação):**
+
+      * Verifique o método `getPatientByExternalId(externalId: string, clinicId: string)`.
+      * Confirme que ele está buscando na coluna correta (`patients.externalId` ou `sql`"external\_id"`), como revisamos anteriormente. A correção na rota (`routes.ts` ) não funcionará se o *storage* ainda estiver comparando com a coluna  `patients.id\`.
+
+**Instruções Finais:**
+
+  * Reporte a rotina completa dos arquivos modificados (`server/routes.ts` e `server/storage.ts`) com a correção aplicada.
+  * Não execute testes funcionais na aplicação, a menos que eu solicite explicitamente.

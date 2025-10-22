@@ -666,7 +666,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/patients/by-external-id/:externalId", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const patient = await storage.getPatientByExternalId(req.params.externalId, req.user!.clinicId);
+      // Remove zeros à esquerda do external_id (ex: "0000007683" -> "7683")
+      const cleanedExternalId = String(parseInt(req.params.externalId, 10));
+      
+      const patient = await storage.getPatientByExternalId(cleanedExternalId, req.user!.clinicId);
       if (!patient) {
         return res.status(404).json({ message: "Paciente não encontrado" });
       }
