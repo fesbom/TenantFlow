@@ -79,15 +79,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const user = await storage.getUserByEmail(email);
-      
+
       // For security, always return success even if user doesn't exist
       console.log(`Password reset requested for: ${email}${user ? ' (user found)' : ' (user not found)'}`);
-      
+
       if (user) {
         // Generate secure reset token
         const resetToken = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
-        
+
         // Save token to database
         await storage.createPasswordResetToken({
           userId: user.id,
@@ -101,9 +101,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const protocol = req.secure ? 'https' : 'http';
           const baseUrl = `${protocol}://${req.get('host') || 'localhost:5000'}`;
           const emailData = generatePasswordResetEmail(user.email, resetToken, baseUrl);
-          
+
           const emailSent = await sendEmail(emailData);
-          
+
           if (emailSent) {
             console.log(`Password reset email sent successfully to ${email}`);
           } else {
@@ -134,7 +134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const resetToken = await storage.getPasswordResetToken(token);
-      
+
       if (!resetToken) {
         return res.status(400).json({ message: "Invalid or expired token" });
       }
@@ -161,24 +161,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const resetToken = await storage.getPasswordResetToken(token);
-      
+
       if (!resetToken) {
         return res.status(400).json({ message: "Invalid or expired token" });
       }
 
       // Hash the new password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-      
+
       // Update user password
       const updatedUser = await storage.updateUserPassword(resetToken.userId, hashedPassword);
-      
+
       if (!updatedUser) {
         return res.status(404).json({ message: "User not found" });
       }
 
       // Mark token as used
       await storage.markTokenAsUsed(token);
-      
+
       // Clean up expired tokens
       await storage.deleteExpiredTokens();
 
@@ -282,53 +282,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/dashboard/birthday-patients", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
-      const pageSize = parseInt(req.query.pageSize as string) || 10;
+      const pageSize = parseInt(req.query.pageSize as string) || 5; // Define um padrão de 5 itens por página
 
-      // Validate and sanitize pagination parameters
-      const validPage = Math.max(1, page);
-      const validPageSize = Math.min(Math.max(1, pageSize), 50); // Max 50 per page
-      const offset = (validPage - 1) * validPageSize;
+      // A lógica de data foi removida. A função 'storage' agora cuida de tudo,
+      // incluindo a paginação que o frontend espera.
+      const paginatedResult = await storage.getBirthdayPatients(req.user!.clinicId, { page, pageSize });
+      res.json(paginatedResult);
 
-      const today = new Date();
-      
-      // Query birthday patients with pagination using Brazil timezone
-      const whereCondition = and(
-        eq(patients.clinicId, req.user!.clinicId),
-        sql`TO_CHAR(${patients.birthDate} AT TIME ZONE 'America/Sao_Paulo', 'MM-DD') = TO_CHAR(${today.toISOString()}::timestamptz AT TIME ZONE 'America/Sao_Paulo', 'MM-DD')`
-      );
-
-      // Get total count
-      const [{ count: totalCount }] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(patients)
-        .where(whereCondition);
-
-      const totalPages = Math.ceil(totalCount / validPageSize);
-
-      // Get paginated results
-      const birthdayPatients = await db
-        .select()
-        .from(patients)
-        .where(whereCondition)
-        .orderBy(patients.fullName)
-        .limit(validPageSize)
-        .offset(offset);
-
-      res.json({
-        data: birthdayPatients,
-        pagination: {
-          page: validPage,
-          pageSize: validPageSize,
-          totalCount,
-          totalPages
-        }
-      });
     } catch (error) {
       console.error("Birthday patients error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
-
+  
   // User routes
   app.get("/api/users", authenticateToken, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
     try {
@@ -364,7 +330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(sanitizedUser);
     } catch (error: any) {
       console.error("Create user error:", error);
-      
+
       // Handle specific database errors
       if (error.code === '23505') {
         if (error.constraint?.includes('username')) {
@@ -375,13 +341,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
       }
-      
+
       // Handle Zod validation errors
       if (error.name === 'ZodError') {
         const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
       }
-      
+
       res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
@@ -389,15 +355,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/users/:id", authenticateToken, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
-      
+
       // Log dos dados recebidos para depuração
       console.log("PUT /api/users/:id - Request body:", req.body);
-      
+
       const parsedData = insertUserSchema.partial().parse(req.body);
-      
+
       // Cria uma cópia mutável para permitir modificações
       const updateData = { ...parsedData };
-      
+
       // Só atualiza a senha se uma nova senha for fornecida (não vazia, null ou undefined)
       if (updateData.password && updateData.password.trim() !== '') {
         updateData.password = await bcrypt.hash(updateData.password, 10);
@@ -405,18 +371,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Remove o campo password do updateData para não atualizar
         delete updateData.password;
       }
-      
+
       const updatedUser = await storage.updateUser(id, updateData);
-      
+
       if (!updatedUser) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       const { password, ...sanitizedUser } = updatedUser;
       res.json(sanitizedUser);
     } catch (error: any) {
       console.error("Update user error:", error);
-      
+
       // Tratamento de erro de violação de constraint (duplicação)
       if (error.code === '23505') {
         if (error.constraint?.includes('username')) {
@@ -427,13 +393,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
       }
-      
+
       // Tratamento de erro de validação Zod
       if (error.name === 'ZodError') {
         const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
       }
-      
+
       // Erro genérico do servidor com mensagem de depuração
       res.status(500).json({ message: `Erro interno do servidor: ${error.message}` });
     }
@@ -460,7 +426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedClinic);
     } catch (error: any) {
       console.error("Update clinic error:", error);
-      
+
       // Handle specific database errors
       if (error.code === '23505') {
         if (error.constraint?.includes('email')) {
@@ -468,13 +434,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
       }
-      
+
       // Handle Zod validation errors
       if (error.name === 'ZodError') {
         const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
       }
-      
+
       res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
@@ -488,10 +454,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const logoUrl = `/uploads/${req.file.filename}`;
-      
+
       // Update clinic with new logo URL
       const updatedClinic = await storage.updateClinic(req.user!.clinicId, { logoUrl });
-      
+
       res.json({ logoUrl, clinic: updatedClinic });
     } catch (error: any) {
       console.error("Upload logo error:", error);
@@ -528,14 +494,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const photoUrl = `/uploads/${req.file.filename}`;
-      
+
       // Update patient with new photo URL
       const updatedPatient = await storage.updatePatient(req.params.id, { photoUrl }, req.user!.clinicId);
-      
+
       if (!updatedPatient) {
         return res.status(404).json({ message: "Paciente não encontrado" });
       }
-      
+
       res.json({ photoUrl, patient: updatedPatient });
     } catch (error: any) {
       console.error("Upload patient photo error:", error);
@@ -550,13 +516,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/clinic/branding/:email", async (req, res) => {
     try {
       const { email } = req.params;
-      
+
       // Find clinic by email to get branding info
       const [clinic] = await db.select({ 
         name: clinics.name, 
         logoUrl: clinics.logoUrl 
       }).from(clinics).where(eq(clinics.email, email)).limit(1);
-      
+
       if (clinic) {
         res.json({ 
           clinicName: clinic.name,
@@ -638,7 +604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/patients", authenticateToken, requireRole(["admin", "secretary"]), async (req: AuthenticatedRequest, res) => {
     try {
       let requestData = { ...req.body, clinicId: req.user!.clinicId };
-      
+
       // Clean up empty fields - convert empty strings to null
       const nullableFields = ['birthDate', 'lastVisitDate', 'lastContactDate', 'responsibleDentistId', 'cpf', 'email', 'birthCity', 'maritalStatus', 'cep', 'address', 'number', 'complement', 'neighborhood', 'city', 'state', 'responsibleName', 'responsibleCpf', 'howDidYouKnowUs', 'howDidYouKnowUsOther'];
       nullableFields.forEach(field => {
@@ -646,13 +612,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           requestData[field] = null;
         }
       });
-      
+
       const patientData = insertPatientSchema.parse(requestData);
       const patient = await storage.createPatient(patientData);
       res.status(201).json(patient);
     } catch (error: any) {
       console.error("Create patient error:", error);
-      
+
       // Handle specific database errors
       if (error.code === '23503') {
         if (error.constraint?.includes('responsible_dentist_id')) {
@@ -660,7 +626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Referência inválida. Verifique os dados preenchidos." });
       }
-      
+
       if (error.code === '23505') {
         if (error.constraint?.includes('cpf')) {
           return res.status(400).json({ message: "Este CPF já está cadastrado no sistema." });
@@ -670,17 +636,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
       }
-      
+
       if (error.code === '22007') {
         return res.status(400).json({ message: "Data inválida. Verifique o formato das datas preenchidas." });
       }
-      
+
       // Handle Zod validation errors
       if (error.name === 'ZodError') {
         const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
       }
-      
+
       res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
@@ -701,7 +667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/patients/:id", authenticateToken, requireRole(["admin", "secretary"]), async (req: AuthenticatedRequest, res) => {
     try {
       let updateData = insertPatientSchema.partial().parse(req.body);
-      
+
       // Clean up empty fields - convert empty strings to null
       const nullableFields = ['birthDate', 'lastVisitDate', 'lastContactDate', 'responsibleDentistId', 'cpf', 'email', 'birthCity', 'maritalStatus', 'cep', 'address', 'number', 'complement', 'neighborhood', 'city', 'state', 'responsibleName', 'responsibleCpf', 'howDidYouKnowUs', 'howDidYouKnowUsOther'] as const;
       nullableFields.forEach(field => {
@@ -709,17 +675,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           (updateData as any)[field] = null;
         }
       });
-      
+
       const patient = await storage.updatePatient(req.params.id, updateData, req.user!.clinicId);
-      
+
       if (!patient) {
         return res.status(404).json({ message: "Patient not found" });
       }
-      
+
       res.json(patient);
     } catch (error: any) {
       console.error("Update patient error:", error);
-      
+
       // Handle specific database errors
       if (error.code === '23503') {
         if (error.constraint?.includes('responsible_dentist_id')) {
@@ -727,7 +693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Referência inválida. Verifique os dados preenchidos." });
       }
-      
+
       if (error.code === '23505') {
         if (error.constraint?.includes('cpf')) {
           return res.status(400).json({ message: "Este CPF já está cadastrado no sistema." });
@@ -737,17 +703,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Dados duplicados. Verifique as informações preenchidas." });
       }
-      
+
       if (error.code === '22007') {
         return res.status(400).json({ message: "Data inválida. Verifique o formato das datas preenchidas." });
       }
-      
+
       // Handle Zod validation errors
       if (error.name === 'ZodError') {
         const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
       }
-      
+
       res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
@@ -779,38 +745,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/appointments", authenticateToken, requireRole(["admin", "secretary"]), async (req: AuthenticatedRequest, res) => {
     try {
       let requestData = { ...req.body, clinicId: req.user!.clinicId };
-      
+
       // NO TIMEZONE CONVERSION - Save exactly what was received
       if (requestData.scheduledDate) {
         requestData.scheduledDate = new Date(requestData.scheduledDate);
       }
-      
+
       // Validate duration: minimum 5 minutes, maximum until midnight
       if (requestData.duration) {
         if (requestData.duration < 5) {
           return res.status(400).json({ message: "A duração mínima do agendamento é de 5 minutos." });
         }
-        
+
         if (requestData.scheduledDate) {
           const scheduledDateTime = new Date(requestData.scheduledDate);
           const nextDayStart = new Date(scheduledDateTime);
           nextDayStart.setHours(24, 0, 0, 0); // Start of next day (midnight)
-          
+
           const diffMs = nextDayStart.getTime() - scheduledDateTime.getTime();
           const maxMinutes = Math.ceil(diffMs / (1000 * 60));
-          
+
           if (requestData.duration > maxMinutes) {
             return res.status(400).json({ message: "A duração do agendamento não pode ultrapassar a meia-noite." });
           }
         }
       }
-      
+
       const appointmentData = insertAppointmentSchema.parse(requestData);
       const appointment = await storage.createAppointment(appointmentData);
       res.status(201).json(appointment);
     } catch (error: any) {
       console.error("Create appointment error:", error);
-      
+
       // Handle specific database errors
       if (error.code === '23503') {
         if (error.constraint?.includes('patient_id')) {
@@ -821,17 +787,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Referência inválida. Verifique os dados preenchidos." });
       }
-      
+
       if (error.code === '22007') {
         return res.status(400).json({ message: "Data/hora inválida. Verifique o horário do agendamento." });
       }
-      
+
       // Handle Zod validation errors
       if (error.name === 'ZodError') {
         const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
       }
-      
+
       res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
@@ -839,44 +805,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/appointments/:id", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       let updateData = { ...req.body };
-      
+
       // NO TIMEZONE CONVERSION - Save exactly what was received
       if (updateData.scheduledDate) {
         updateData.scheduledDate = new Date(updateData.scheduledDate);
       }
-      
+
       // Validate duration: minimum 5 minutes, maximum until midnight
       if (updateData.duration !== undefined) {
         if (updateData.duration < 5) {
           return res.status(400).json({ message: "A duração mínima do agendamento é de 5 minutos." });
         }
-        
+
         const scheduledDate = updateData.scheduledDate || (await storage.getAppointmentById(req.params.id, req.user!.clinicId))?.scheduledDate;
         if (scheduledDate) {
           const scheduledDateTime = new Date(scheduledDate);
           const nextDayStart = new Date(scheduledDateTime);
           nextDayStart.setHours(24, 0, 0, 0); // Start of next day (midnight)
-          
+
           const diffMs = nextDayStart.getTime() - scheduledDateTime.getTime();
           const maxMinutes = Math.ceil(diffMs / (1000 * 60));
-          
+
           if (updateData.duration > maxMinutes) {
             return res.status(400).json({ message: "A duração do agendamento não pode ultrapassar a meia-noite." });
           }
         }
       }
-      
+
       const parsedData = insertAppointmentSchema.partial().parse(updateData);
       const appointment = await storage.updateAppointment(req.params.id, parsedData, req.user!.clinicId);
-      
+
       if (!appointment) {
         return res.status(404).json({ message: "Appointment not found" });
       }
-      
+
       res.json(appointment);
     } catch (error: any) {
       console.error("Update appointment error:", error);
-      
+
       // Handle specific database errors
       if (error.code === '23503') {
         if (error.constraint?.includes('patient_id')) {
@@ -887,17 +853,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return res.status(400).json({ message: "Referência inválida. Verifique os dados preenchidos." });
       }
-      
+
       if (error.code === '22007') {
         return res.status(400).json({ message: "Data/hora inválida. Verifique o horário do agendamento." });
       }
-      
+
       // Handle Zod validation errors
       if (error.name === 'ZodError') {
         const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ');
         return res.status(400).json({ message: `Dados inválidos: ${fieldErrors}` });
       }
-      
+
       res.status(500).json({ message: "Erro interno do servidor. Tente novamente." });
     }
   });
@@ -975,13 +941,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/anamnesis/responses", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { responses } = req.body; // Array of { questionId, response, patientId, treatmentId }
-      
+
       // First, delete existing responses for this treatment
       if (responses.length > 0) {
         const treatmentId = responses[0].treatmentId;
         await storage.deleteAnamnesisResponsesByTreatment(treatmentId);
       }
-      
+
       const savedResponses = [];
       for (const responseData of responses) {
         if (responseData.response && responseData.response.trim()) { // Only save non-empty responses
@@ -1040,11 +1006,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const updateData = insertBudgetSchema.partial().parse(req.body);
       const budget = await storage.updateBudget(req.params.id, updateData, req.user!.clinicId);
-      
+
       if (!budget) {
         return res.status(404).json({ message: "Budget not found" });
       }
-      
+
       res.json(budget);
     } catch (error) {
       console.error("Update budget error:", error);
@@ -1056,7 +1022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/whatsapp/send", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { phone, message, type } = req.body;
-      
+
       // Simulate WhatsApp message sending
       console.log(`📱 WhatsApp Message Sent (${type})`);
       console.log(`To: ${phone}`);
@@ -1101,7 +1067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { patientId } = req.params;
       const authReq = req as AuthenticatedRequest;
-      
+
       const treatments = await storage.getTreatmentsByPatient(patientId, authReq.user!.clinicId);
       res.json(treatments);
     } catch (error) {
@@ -1114,12 +1080,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const authReq = req as AuthenticatedRequest;
-      
+
       const treatment = await storage.getTreatmentById(id, authReq.user!.clinicId);
       if (!treatment) {
         return res.status(404).json({ message: "Treatment not found" });
       }
-      
+
       res.json(treatment);
     } catch (error) {
       console.error("Get treatment error:", error);
@@ -1131,7 +1097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const authReq = req as AuthenticatedRequest;
-      
+
       const result = insertTreatmentSchema.partial().safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ message: "Invalid treatment data", errors: result.error.errors });
@@ -1141,7 +1107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!treatment) {
         return res.status(404).json({ message: "Treatment not found" });
       }
-      
+
       res.json(treatment);
     } catch (error) {
       console.error("Update treatment error:", error);
@@ -1153,12 +1119,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const authReq = req as AuthenticatedRequest;
-      
+
       const deleted = await storage.deleteTreatment(id, authReq.user!.clinicId);
       if (!deleted) {
         return res.status(404).json({ message: "Treatment not found" });
       }
-      
+
       res.json({ message: "Treatment deleted successfully" });
     } catch (error) {
       console.error("Delete treatment error:", error);
@@ -1185,7 +1151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/budget-items/treatment/:treatmentId", authenticateToken, async (req, res) => {
     try {
       const { treatmentId } = req.params;
-      
+
       const budgetItems = await storage.getBudgetItemsByTreatment(treatmentId);
       res.json(budgetItems);
     } catch (error) {
@@ -1197,7 +1163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/budget-items/:id", authenticateToken, async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       const result = insertBudgetItemSchema.partial().safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ message: "Invalid budget item data", errors: result.error.errors });
@@ -1207,7 +1173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!budgetItem) {
         return res.status(404).json({ message: "Budget item not found" });
       }
-      
+
       res.json(budgetItem);
     } catch (error) {
       console.error("Update budget item error:", error);
@@ -1218,12 +1184,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/budget-items/:id", authenticateToken, async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       const deleted = await storage.deleteBudgetItem(id);
       if (!deleted) {
         return res.status(404).json({ message: "Budget item not found" });
       }
-      
+
       res.json({ message: "Budget item deleted successfully" });
     } catch (error) {
       console.error("Delete budget item error:", error);
@@ -1250,7 +1216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/budget-summary/treatment/:treatmentId", authenticateToken, async (req, res) => {
     try {
       const { treatmentId } = req.params;
-      
+
       const budgetSummary = await storage.getBudgetSummaryByTreatment(treatmentId);
       res.json(budgetSummary);
     } catch (error) {
@@ -1263,11 +1229,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/treatment-movements", authenticateToken, upload.single('photo'), async (req, res) => {
     try {
       const movementData = { ...req.body };
-      
+
       if (req.file) {
         movementData.fotoAtividade = `/uploads/${req.file.filename}`;
       }
-      
+
       const result = insertTreatmentMovementSchema.safeParse(movementData);
       if (!result.success) {
         return res.status(400).json({ message: "Invalid treatment movement data", errors: result.error.errors });
@@ -1284,7 +1250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/treatment-movements/treatment/:treatmentId", authenticateToken, async (req, res) => {
     try {
       const { treatmentId } = req.params;
-      
+
       const movements = await storage.getTreatmentMovementsByTreatment(treatmentId);
       res.json(movements);
     } catch (error) {
@@ -1297,11 +1263,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const movementData = { ...req.body };
-      
+
       if (req.file) {
         movementData.fotoAtividade = `/uploads/${req.file.filename}`;
       }
-      
+
       const result = insertTreatmentMovementSchema.partial().safeParse(movementData);
       if (!result.success) {
         return res.status(400).json({ message: "Invalid treatment movement data", errors: result.error.errors });
@@ -1311,7 +1277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!movement) {
         return res.status(404).json({ message: "Treatment movement not found" });
       }
-      
+
       res.json(movement);
     } catch (error) {
       console.error("Update treatment movement error:", error);
@@ -1322,12 +1288,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/treatment-movements/:id", authenticateToken, async (req, res) => {
     try {
       const { id } = req.params;
-      
+
       const deleted = await storage.deleteTreatmentMovement(id);
       if (!deleted) {
         return res.status(404).json({ message: "Treatment movement not found" });
       }
-      
+
       res.json({ message: "Treatment movement deleted successfully" });
     } catch (error) {
       console.error("Delete treatment movement error:", error);
@@ -1339,7 +1305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/anamnesis-responses/treatment/:treatmentId", authenticateToken, async (req, res) => {
     try {
       const { treatmentId } = req.params;
-      
+
       const responses = await storage.getAnamnesisResponsesByTreatment(treatmentId);
       res.json(responses);
     } catch (error) {
@@ -1415,49 +1381,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     function parseDate(dateStr: string): string {
       if (!dateStr || dateStr.trim() === '') return new Date().toISOString().split('T')[0];
-      
+
       const cleaned = dateStr.trim();
-      
+
       // Handle DD/MM/YYYY format with optional time component (09/05/1989 00:00:00)
       if (cleaned.includes('/')) {
         // Split by space first to separate date and time parts
         const dateTimeParts = cleaned.split(' ');
         const datePart = dateTimeParts[0];
-        
+
         const parts = datePart.split('/');
         if (parts.length === 3) {
           const [day, month, year] = parts;
           const fullYear = year.length === 2 ? `20${year}` : year;
-          
+
           // Validate the parsed components
           const dayNum = parseInt(day, 10);
           const monthNum = parseInt(month, 10);
           const yearNum = parseInt(fullYear, 10);
-          
+
           if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && yearNum >= 1900) {
             return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
           }
         }
       }
-      
+
       // Handle DD-MM-YYYY format
       if (cleaned.includes('-') && cleaned.length >= 8) {
         const parts = cleaned.split('-');
         if (parts.length === 3 && parts[0].length <= 2) {
           const [day, month, year] = parts;
           const fullYear = year.length === 2 ? `20${year}` : year;
-          
+
           // Validate the parsed components
           const dayNum = parseInt(day, 10);
           const monthNum = parseInt(month, 10);
           const yearNum = parseInt(fullYear, 10);
-          
+
           if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && yearNum >= 1900) {
             return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
           }
         }
       }
-      
+
       // If all parsing fails, return today's date as fallback
       console.warn(`Unable to parse date: "${dateStr}", using today's date as fallback`);
       return new Date().toISOString().split('T')[0];
@@ -1465,7 +1431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     function parseValue(valueStr: string): string {
       if (!valueStr) return '0.00';
-      
+
       // Handle Brazilian format (999,99)
       const cleanValue = valueStr.replace(/[^\d,]/g, '').replace(',', '.');
       const numValue = parseFloat(cleanValue);
@@ -1482,11 +1448,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(patients.clinicId, req.user!.clinicId)
           ))
           .limit(1);
-        
+
         if (existingPatient.length > 0) {
           return existingPatient[0].id;
         }
-        
+
         return null;
       } catch (error) {
         console.error('Error finding patient by old ID:', error);
@@ -1504,11 +1470,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(treatments.clinicId, req.user!.clinicId)
           ))
           .limit(1);
-        
+
         if (existingTreatment.length > 0) {
           return existingTreatment[0].id;
         }
-        
+
         return null;
       } catch (error) {
         console.error('Error finding treatment by old ID:', error);
@@ -1518,7 +1484,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const { type } = req.body;
-      
+
       if (!req.file) {
         return res.status(400).json({ success: false, message: "No file uploaded" });
       }
@@ -1549,7 +1515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Fallback to latin1 (ISO-8859-1) which is common for Brazilian CSV files
             csvContent = fileBuffer.toString('latin1');
           }
-          
+
           const stream = Readable.from(csvContent);
           stream
             .pipe(csv({ 
@@ -1598,7 +1564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     .from(patients)
                     .where(eq(patients.externalId, row.cd_paciente.toString()))
                     .limit(1);
-                  
+
                   if (existingPatient.length > 0) {
                     // Record already exists, skip it
                     idMapping.set(`patient_${row.cd_paciente}`, existingPatient[0].id);
@@ -1647,7 +1613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   failed++;
                   continue;
                 }
-                
+
                 // If no residential phone, use work phone as primary
                 if (!patientData.phone && patientData.workPhone) {
                   patientData.phone = patientData.workPhone;
@@ -1675,7 +1641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     .from(users)
                     .where(eq(users.externalId, row.id.toString()))
                     .limit(1);
-                  
+
                   if (existingUser.length > 0) {
                     // Record already exists, skip it
                     idMapping.set(`user_${row.id}`, existingUser[0].id);
@@ -1727,7 +1693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       eq(treatments.clinicId, req.user!.clinicId)
                     ))
                     .limit(1);
-                  
+
                   if (existingTreatment.length > 0) {
                     // Treatment already exists - silently skip and count as existing
                     idMapping.set(`treatment_${row.cd_tratamento}`, existingTreatment[0].id);
@@ -1739,7 +1705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Step 2: Treatment doesn't exist, proceed to find patient and create new treatment
                 const patientId = idMapping.get(`patient_${row.cd_paciente}`) || 
                                  await findPatientByOldId(row.cd_paciente);
-                
+
                 if (!patientId) {
                   errors.push(`Row ${csvData.indexOf(row) + 1}: Patient with ID ${row.cd_paciente} not found`);
                   failed++;
@@ -1758,12 +1724,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 };
 
                 const treatment = await storage.createTreatment(treatmentData);
-                
+
                 // Store in mapping for potential use by dependent imports
                 if (row.cd_tratamento) {
                   idMapping.set(`treatment_${row.cd_tratamento}`, treatment.id);
                 }
-                
+
                 imported++;
               } catch (error: any) {
                 errors.push(`Row ${csvData.indexOf(row) + 1}: ${error.message}`);
@@ -1785,7 +1751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     .from(budgetItems)
                     .where(eq(budgetItems.externalId, compositeExternalId))
                     .limit(1);
-                  
+
                   if (existingBudgetItem.length > 0) {
                     // Record already exists, skip it
                     skipped++;
@@ -1796,7 +1762,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Find treatment by cd_tratamento from CSV using external ID lookup
                 const treatmentId = idMapping.get(`treatment_${row.cd_tratamento}`) || 
                                   await findTreatmentByOldId(row.cd_tratamento);
-                
+
                 if (!treatmentId) {
                   errors.push(`Row ${csvData.indexOf(row) + 1}: Treatment with ID ${row.cd_tratamento} not found`);
                   failed++;
@@ -1834,7 +1800,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     .from(treatmentMovements)
                     .where(eq(treatmentMovements.externalId, row.id.toString()))
                     .limit(1);
-                  
+
                   if (existingMovement.length > 0) {
                     // Record already exists, skip it silently
                     skipped++;
@@ -1845,7 +1811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Find treatment by cd_tratamento from CSV using external ID lookup
                 const treatmentId = idMapping.get(`treatment_${row.cd_tratamento}`) || 
                                   await findTreatmentByOldId(row.cd_tratamento);
-                
+
                 if (!treatmentId) {
                   errors.push(`Row ${csvData.indexOf(row) + 1}: Tratamento com ID externo ${row.cd_tratamento} não encontrado`);
                   failed++;
@@ -1980,14 +1946,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .replace(/\s*\|\s*$/, '') // Remove trailing pipe
                 .replace(/\s*\|\s*\|\s*/g, ' | ') // Fix double pipes
                 .trim();
-              
+
               updates.medicalNotes = cleanedNotes || null;
 
               // Update the patient record
               await db.update(patients)
                 .set(updates)
                 .where(eq(patients.id, patient.id));
-              
+
               migrated++;
             }
           }

@@ -1,0 +1,53 @@
+**Assunto:** Corrigir Bug de Fuso Horário (Timezone) na Lista de Aniversariantes do Dashboard
+
+**Prompt:**
+
+Aja como um desenvolvedor full-stack sênior. A sua tarefa é corrigir um bug crítico no dashboard: a lista de aniversariantes está a mostrar os pacientes que fazem aniversário amanhã, em vez de hoje.
+
+Isso é um problema clássico de fuso horário, onde o servidor (em UTC) está a usar uma data diferente da do utilizador (no Brasil).
+
+**Instruções de Execução:**
+* Foque-se apenas na implementação do código conforme os requisitos abaixo. **Não execute testes funcionais**, pois estes serão realizados por mim.
+* Ao me retornar o código modificado, forneça sempre o **ficheiro completo** de cada ficheiro alterado, e não apenas o trecho.
+* Mantenha o código limpo, organizado e siga as boas práticas de segurança.
+
+---
+
+### **Requisitos Técnicos Detalhados:**
+
+A correção deve ser feita em dois ficheiros (`server/routes.ts` e `server/storage.ts`) para centralizar a lógica de fuso horário no banco de dados, que é a forma mais robusta.
+
+**1. Modificações em `server/storage.ts`:**
+
+* **Interface `IStorage`:** Altere a assinatura da função `getBirthdayPatients`. Ela não deve mais aceitar `date: Date`. Em vez disso, deve aceitar os parâmetros de paginação.
+    * **De:** `getBirthdayPatients(clinicId: string, date: Date): Promise<Patient[]>;`
+    * **Para:** `getBirthdayPatients(clinicId: string, pagination: { page: number; pageSize: number }): Promise<PaginatedResponse<Patient>>;`
+    * **Nota:** Se a interface `PaginatedResponse` não existir, crie-a no topo do ficheiro (ou num local partilhado) da seguinte forma:
+        ```typescript
+        interface PaginatedResponse<T> {
+          data: T[];
+          pagination: {
+            page: number;
+            pageSize: number;
+            totalCount: number;
+            totalPages: number;
+          };
+        }
+        ```
+
+* **Classe `DatabaseStorage`:** Substitua completamente a implementação da função `getBirthdayPatients`. A nova versão deve:
+    1.  Aceitar `pagination: { page: number; pageSize: number }`.
+    2.  **Não** usar nenhuma variável de data vinda do JavaScript.
+    3.  Usar `NOW() AT TIME ZONE 'America/Sao_Paulo'` diretamente na query SQL para obter a data e hora corretas no fuso horário do Brasil.
+    4.  Usar `EXTRACT(MONTH ...)` e `EXTRACT(DAY ...)` para comparar o mês e o dia do `birthDate` do paciente com o mês e o dia da data atual *corrigida pelo fuso horário*.
+    5.  Implementar a lógica de paginação (calcular `offset`, buscar a contagem total de `totalCount`, e retornar os dados no formato `PaginatedResponse`).
+
+**2. Modificações em `server/routes.ts`:**
+
+* Localize a rota `GET /api/dashboard/birthday-patients`.
+* Remova completamente a lógica de `new Date()`, a criação de `whereCondition` e as consultas ao `db` que estão dentro da rota.
+* A rota deve apenas extrair os parâmetros `page` e `pageSize` da `req.query` (com valores padrão, ex: page 1, pageSize 10).
+* Chame a nova função de storage: `const paginatedResult = await storage.getBirthdayPatients(req.user!.clinicId, { page, pageSize });`.
+* Retorne o `paginatedResult` como resposta JSON.
+
+Esta abordagem move toda a lógica de fuso horário para o banco de dados, resolvendo o bug de forma definitiva.

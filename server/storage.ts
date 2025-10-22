@@ -43,6 +43,16 @@ import {
 import { db } from "./db";
 import { eq, and, desc, gte, lte, count, sql, isNotNull } from "drizzle-orm";
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
+}
+
 export interface IStorage {
   // Clinic methods
   createClinic(clinic: InsertClinic): Promise<Clinic>;
@@ -247,23 +257,51 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async getBirthdayPatients(clinicId: string, date: Date): Promise<Patient[]> {
+  async getBirthdayPatients(clinicId: string, pagination: { page: number; pageSize: number }): Promise<PaginatedResponse<Patient>> {
     try {
-      // CORREÇÃO FINAL - birthDate é DATE puro, apenas NOW() usa fuso horário brasileiro
-      const result = await db.execute(sql`
-        SELECT *
-        FROM ${patients}
-        WHERE
-          ${patients.clinicId} = ${clinicId}
-          AND ${patients.birthDate} IS NOT NULL
-          AND EXTRACT(MONTH FROM ${patients.birthDate}) = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
-          AND EXTRACT(DAY FROM ${patients.birthDate}) = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')
-      `);
+      const { page, pageSize } = pagination;
+      const offset = (page - 1) * pageSize;
 
-      return (result as any).rows || result;
+      const whereCondition = and(
+        eq(patients.clinicId, clinicId),
+        isNotNull(patients.birthDate),
+        // A lógica de fuso horário é feita 100% no banco de dados
+        sql`EXTRACT(MONTH FROM "birthDate") = EXTRACT(MONTH FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+        sql`EXTRACT(DAY FROM "birthDate") = EXTRACT(DAY FROM NOW() AT TIME ZONE 'America/Sao_Paulo')`
+      );
+
+      // 1. Obter a contagem total de aniversariantes para a paginação
+      const [{ count: totalCount }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(patients)
+        .where(whereCondition);
+
+      const totalPages = Math.ceil(totalCount / pageSize);
+
+      // 2. Obter os aniversariantes da página atual
+      const birthdayPatients = await db
+        .select()
+        .from(patients)
+        .where(whereCondition)
+        .orderBy(patients.fullName)
+        .limit(pageSize)
+        .offset(offset);
+
+      // 3. Retornar no formato paginado esperado pelo frontend
+      return {
+        data: birthdayPatients,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+        },
+      };
+
     } catch (error) {
       console.error("Erro ao buscar aniversariantes:", error);
-      return [];
+      // Retorna um objeto vazio e paginado em caso de erro
+      return { data: [], pagination: { page: 1, pageSize: 0, totalCount: 0, totalPages: 1 } };
     }
   }
 
@@ -284,7 +322,7 @@ export class DatabaseStorage implements IStorage {
   async getAppointmentsByDate(clinicId: string, date: Date): Promise<Appointment[]> {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
-    
+
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
@@ -651,7 +689,7 @@ export class DatabaseStorage implements IStorage {
   // Treatment Movement methods
   async createTreatmentMovement(insertMovement: InsertTreatmentMovement): Promise<TreatmentMovement> {
     const [movement] = await db.insert(treatmentMovements).values(insertMovement).returning();
-    
+
     // Update patient's last visit date automatically
     try {
       // Get the treatment to find the patient
@@ -659,7 +697,7 @@ export class DatabaseStorage implements IStorage {
         .select({ patientId: treatments.patientId })
         .from(treatments)
         .where(eq(treatments.id, insertMovement.treatmentId));
-      
+
       if (treatment) {
         // Update patient's last visit date to today
         await db
@@ -671,7 +709,7 @@ export class DatabaseStorage implements IStorage {
       console.error('Error updating patient last visit date:', error);
       // Don't throw - the movement was created successfully
     }
-    
+
     return movement;
   }
 

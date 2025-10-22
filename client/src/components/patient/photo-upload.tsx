@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { Cropper, ReactCropperElement } from "react-cropper";
-import "cropperjs/dist/cropper.css"; // Esta linha agora funcionará
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Camera, Upload, Trash2, User } from "lucide-react";
@@ -367,7 +366,7 @@ export function PhotoUpload({
                 ref={cropperRef}
                 src={imageToCrop}
                 style={{ height: 400, width: '100%' }}
-                aspectRatio={4 / 3}
+                aspectRatio={3 / 4}
                 guides={true}
                 viewMode={1}
                 dragMode="move"
