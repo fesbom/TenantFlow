@@ -16,6 +16,7 @@ import Anamnesis from "@/pages/anamnesis";
 import Budgets from "@/pages/budgets";
 import Settings from "@/pages/settings";
 import ImportData from "@/pages/import-data";
+import BatchUpload from "@/pages/batch-upload";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const authContext = useAuth();
@@ -51,6 +52,7 @@ function Router() {
           <Route path="/budgets" component={() => <ProtectedRoute component={Budgets} />} />
           <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
           <Route path="/import-data" component={() => <ProtectedRoute component={ImportData} />} />
+          <Route path="/batch-upload" component={() => <ProtectedRoute component={BatchUpload} />} />
           <Route component={NotFound} />
         </>
       )}

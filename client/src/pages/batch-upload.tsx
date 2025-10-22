@@ -91,6 +91,10 @@ export default function BatchUpload() {
     setIsUploading(true);
     const token = localStorage.getItem('dental_token');
     
+    // Track results locally to compute accurate final summary
+    let successCount = 0;
+    let errorCount = 0;
+    
     // Process each file sequentially
     for (let i = 0; i < files.length; i++) {
       const fileStatus = files[i];
@@ -111,6 +115,7 @@ export default function BatchUpload() {
 
         if (!searchResponse.ok) {
           // Patient not found
+          errorCount++;
           setFiles(prev => prev.map((f, idx) => 
             idx === i ? { 
               ...f, 
@@ -143,6 +148,7 @@ export default function BatchUpload() {
 
         if (!uploadResponse.ok) {
           const errorData = await uploadResponse.json().catch(() => ({ message: 'Erro desconhecido' }));
+          errorCount++;
           setFiles(prev => prev.map((f, idx) => 
             idx === i ? { 
               ...f, 
@@ -154,6 +160,7 @@ export default function BatchUpload() {
         }
 
         // Step 5: Success
+        successCount++;
         setFiles(prev => prev.map((f, idx) => 
           idx === i ? { 
             ...f, 
@@ -164,6 +171,7 @@ export default function BatchUpload() {
 
       } catch (error) {
         console.error('Upload error:', error);
+        errorCount++;
         setFiles(prev => prev.map((f, idx) => 
           idx === i ? { 
             ...f, 
@@ -176,10 +184,7 @@ export default function BatchUpload() {
 
     setIsUploading(false);
     
-    // Show final summary
-    const successCount = files.filter(f => f.status === 'success').length;
-    const errorCount = files.filter(f => f.status === 'error').length;
-    
+    // Show final summary using locally tracked counts
     toast({
       title: "Upload finalizado",
       description: `${successCount} foto(s) enviada(s) com sucesso, ${errorCount} erro(s).`,
@@ -221,10 +226,10 @@ export default function BatchUpload() {
         isOpen={sidebarOpen} 
         onClose={() => setSidebarOpen(false)}
         isExpanded={sidebarExpanded}
-        onToggleExpand={() => setSidebarExpanded(!sidebarExpanded)}
+        onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
+        <Header title="Upload de Fotos em Lote" onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto">
             <div className="mb-6">

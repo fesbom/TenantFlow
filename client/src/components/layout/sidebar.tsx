@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Upload,
+  Images,
 } from "lucide-react";
 
 const navigation = [
@@ -23,6 +24,7 @@ const navigation = [
   { name: "Prontuários", href: "/medical-records", icon: FileText, roles: ["admin", "dentist"] },
   { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"] },
   { name: "Importar Dados", href: "/import-data", icon: Upload, roles: ["admin"] },
+  { name: "Upload Fotos", href: "/batch-upload", icon: Images, roles: ["admin", "secretary"] },
   { name: "Configurações", href: "/settings", icon: Settings, roles: ["admin"] },
 ];
 
