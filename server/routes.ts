@@ -664,6 +664,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/patients/by-external-id/:externalId", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const patient = await storage.getPatientByExternalId(req.params.externalId, req.user!.clinicId);
+      if (!patient) {
+        return res.status(404).json({ message: "Paciente não encontrado" });
+      }
+      res.json(patient);
+    } catch (error) {
+      console.error("Get patient by external ID error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.put("/api/patients/:id", authenticateToken, requireRole(["admin", "secretary"]), async (req: AuthenticatedRequest, res) => {
     try {
       let updateData = insertPatientSchema.partial().parse(req.body);
