@@ -1,6 +1,21 @@
+# Dependências do Node.js
 node_modules
+
+# Arquivos de build (produção)
 dist
+
+# Arquivo do sistema MacOS
 .DS_Store
+
+# Pasta pública do servidor (se você não quiser versioná-la)
 server/public
+
+# Arquivos temporários do Vite
 vite.config.ts.*
+
+# Arquivos compactados
 *.tar.gz
+
+# --- ADIÇÃO CRÍTICA ---
+# Ignorar fotos e arquivos de pacientes
+uploads/
