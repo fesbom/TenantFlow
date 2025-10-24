@@ -71,7 +71,10 @@ Preferred communication style: Simple, everyday language.
 
 ### File Upload and Storage
 - **multer**: Multipart form data handling for file uploads
-- **Local storage**: File system storage for images (MVP implementation)
+- **@google-cloud/storage**: Google Cloud Storage client for Replit Object Storage integration
+- **Environment-aware storage**: Automatic detection of development vs. production environment
+  - Development: Local filesystem storage in `/uploads` directory
+  - Production: Replit Object Storage with signed URLs for secure access
 
 ### Development Environment
 - **Replit integration**: Custom Vite plugins for Replit development environment
@@ -88,8 +91,20 @@ Preferred communication style: Simple, everyday language.
   - Validates file type (JPG, PNG, WEBP)
   - Validates file size (max 5MB)
   - Uses multer for file handling
-  - Stores files in local file system
-- **Dependencies**: Installed `react-cropper` and `cropperjs` for image cropping
+  - Environment-aware storage:
+    - **Development** (`NODE_ENV !== 'production'`): Stores files in local `/uploads` directory
+    - **Production** (`NODE_ENV === 'production'`): Stores files in Replit Object Storage with signed URLs
+    - Automatic fallback to local storage if Object Storage fails
+  - Replaces old photo when uploading new one (deletes physical file)
+- **Photo Deletion**: `PUT /api/patients/:id` with `photoUrl: null` removes physical file from storage
+  - Development: Deletes file from local filesystem
+  - Production: Deletes file from Object Storage bucket
+- **Object Storage Service** (`server/objectStorage.ts`):
+  - Wrapper for `@google-cloud/storage` client
+  - Uses Replit sidecar authentication (`http://127.0.0.1:1106`)
+  - Requires `PRIVATE_OBJECT_DIR` environment variable (e.g., `/bucket-name/uploads`)
+  - Generates 100-year signed URLs for secure access
+- **Dependencies**: Installed `react-cropper`, `cropperjs`, and `@google-cloud/storage`
 
 #### PhotoUpload Component
 - **Upload Methods**:
@@ -118,6 +133,7 @@ Preferred communication style: Simple, everyday language.
   - Returns patient object matching the provided external_id
   - Clinic-scoped query ensures multi-tenant isolation
   - Protected by authentication middleware
+  - Strips leading zeros from external_id (e.g., "0000007683" → "7683") for reliable matching
 - **Batch Upload Page**: `/batch-upload` accessible to admin and secretary roles
   - File Selection: Multi-file input accepting JPG, PNG, WEBP formats
   - Filename Convention: Uses `{external_id}.jpg` pattern to match patients
@@ -128,6 +144,8 @@ Preferred communication style: Simple, everyday language.
   - Error Handling: Clear error messages for patient not found, upload failures, and validation errors
 - **Integration**: Menu item "Upload Fotos" in sidebar with Images icon
 - **Reuse**: Leverages existing `POST /api/patients/:id/photo` endpoint for actual photo uploads
+  - Automatically uses environment-appropriate storage (local filesystem or Object Storage)
+  - Inherits all validation and error handling from individual photo upload endpoint
 
 ### Dashboard Birthday Timezone Fix (October 2025)
 

@@ -44,6 +44,14 @@ export const upload = multer({
   },
 });
 
+export const uploadPatientPhoto = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
+
 // For CSV imports
 export const uploadCSV = multer({
   storage: multer.memoryStorage(), // Store in memory for processing

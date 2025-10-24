@@ -12,7 +12,7 @@ import { authenticateToken, requireRole, generateToken, type AuthenticatedReques
 import { db } from "./db";
 import { users, patients, treatments, budgetItems, treatmentMovements, clinics } from "@shared/schema";
 import { eq, and, or, isNotNull, sql } from "drizzle-orm";
-import { upload, uploadCSV } from "./middleware/upload";
+import { upload, uploadCSV, uploadPatientPhoto } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
 import { ObjectStorageService } from "./objectStorage";
 import {
@@ -471,7 +471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload patient photo
-  app.post("/api/patients/:id/photo", authenticateToken, requireRole(["admin", "secretary"]), upload.single('photo'), async (req: AuthenticatedRequest, res) => {
+  app.post("/api/patients/:id/photo", authenticateToken, requireRole(["admin", "secretary"]), uploadPatientPhoto.single('photo'), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ 
@@ -506,16 +506,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             req.file.originalname,
             req.file.mimetype
           );
-
-          if (req.file.path && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-          }
         } catch (storageError: any) {
           console.error("Object storage error (falling back to local):", storageError);
-          photoUrl = `/uploads/${req.file.filename}`;
+          
+          const uploadDir = path.join(process.cwd(), 'uploads');
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          
+          const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+          const filename = "photo-" + uniqueSuffix + path.extname(req.file.originalname);
+          const targetPath = path.join(uploadDir, filename);
+          fs.writeFileSync(targetPath, req.file.buffer);
+          photoUrl = `/uploads/${filename}`;
         }
       } else {
-        photoUrl = `/uploads/${req.file.filename}`;
+        const uploadDir = path.join(process.cwd(), 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const filename = "photo-" + uniqueSuffix + path.extname(req.file.originalname);
+        const targetPath = path.join(uploadDir, filename);
+        fs.writeFileSync(targetPath, req.file.buffer);
+        photoUrl = `/uploads/${filename}`;
       }
 
       const patient = await storage.getPatientById(req.params.id, req.user!.clinicId);
@@ -524,14 +539,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (patient.photoUrl) {
-        if (isProduction && patient.photoUrl.startsWith('http')) {
+        if (patient.photoUrl.startsWith('http')) {
           try {
             const objectStorageService = new ObjectStorageService();
             await objectStorageService.deleteFile(patient.photoUrl);
           } catch (deleteError) {
             console.error("Error deleting old photo from object storage:", deleteError);
           }
-        } else if (!isProduction && patient.photoUrl.startsWith('/uploads/')) {
+        } else if (patient.photoUrl.startsWith('/uploads/')) {
           try {
             const oldFilePath = path.join(process.cwd(), patient.photoUrl);
             if (fs.existsSync(oldFilePath)) {
@@ -742,15 +757,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updateData.photoUrl === null) {
         const currentPatient = await storage.getPatientById(req.params.id, req.user!.clinicId);
         if (currentPatient?.photoUrl) {
-          const isProduction = process.env.NODE_ENV === 'production';
-          if (isProduction && currentPatient.photoUrl.startsWith('http')) {
+          if (currentPatient.photoUrl.startsWith('http')) {
             try {
               const objectStorageService = new ObjectStorageService();
               await objectStorageService.deleteFile(currentPatient.photoUrl);
             } catch (deleteError) {
               console.error("Error deleting photo from object storage:", deleteError);
             }
-          } else if (!isProduction && currentPatient.photoUrl.startsWith('/uploads/')) {
+          } else if (currentPatient.photoUrl.startsWith('/uploads/')) {
             try {
               const filePath = path.join(process.cwd(), currentPatient.photoUrl);
               if (fs.existsSync(filePath)) {
