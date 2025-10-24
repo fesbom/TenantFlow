@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import express from "express";
 import path from "path";
+import fs from "fs";
 import csv from "csv-parser";
 import { Readable } from "stream";
 import { storage } from "./storage";
@@ -13,6 +14,7 @@ import { users, patients, treatments, budgetItems, treatmentMovements, clinics }
 import { eq, and, or, isNotNull, sql } from "drizzle-orm";
 import { upload, uploadCSV } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
+import { ObjectStorageService } from "./objectStorage";
 import {
   insertUserSchema,
   insertPatientSchema,
@@ -493,9 +495,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const photoUrl = `/uploads/${req.file.filename}`;
+      let photoUrl: string;
+      const isProduction = process.env.NODE_ENV === 'production';
 
-      // Update patient with new photo URL
+      if (isProduction) {
+        try {
+          const objectStorageService = new ObjectStorageService();
+          photoUrl = await objectStorageService.uploadFile(
+            req.file.buffer,
+            req.file.originalname,
+            req.file.mimetype
+          );
+
+          if (req.file.path && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+          }
+        } catch (storageError: any) {
+          console.error("Object storage error (falling back to local):", storageError);
+          photoUrl = `/uploads/${req.file.filename}`;
+        }
+      } else {
+        photoUrl = `/uploads/${req.file.filename}`;
+      }
+
+      const patient = await storage.getPatientById(req.params.id, req.user!.clinicId);
+      if (!patient) {
+        return res.status(404).json({ message: "Paciente não encontrado" });
+      }
+
+      if (patient.photoUrl) {
+        if (isProduction && patient.photoUrl.startsWith('http')) {
+          try {
+            const objectStorageService = new ObjectStorageService();
+            await objectStorageService.deleteFile(patient.photoUrl);
+          } catch (deleteError) {
+            console.error("Error deleting old photo from object storage:", deleteError);
+          }
+        } else if (!isProduction && patient.photoUrl.startsWith('/uploads/')) {
+          try {
+            const oldFilePath = path.join(process.cwd(), patient.photoUrl);
+            if (fs.existsSync(oldFilePath)) {
+              fs.unlinkSync(oldFilePath);
+            }
+          } catch (deleteError) {
+            console.error("Error deleting old photo from filesystem:", deleteError);
+          }
+        }
+      }
+
       const updatedPatient = await storage.updatePatient(req.params.id, { photoUrl }, req.user!.clinicId);
 
       if (!updatedPatient) {
@@ -691,6 +738,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           (updateData as any)[field] = null;
         }
       });
+
+      if (updateData.photoUrl === null) {
+        const currentPatient = await storage.getPatientById(req.params.id, req.user!.clinicId);
+        if (currentPatient?.photoUrl) {
+          const isProduction = process.env.NODE_ENV === 'production';
+          if (isProduction && currentPatient.photoUrl.startsWith('http')) {
+            try {
+              const objectStorageService = new ObjectStorageService();
+              await objectStorageService.deleteFile(currentPatient.photoUrl);
+            } catch (deleteError) {
+              console.error("Error deleting photo from object storage:", deleteError);
+            }
+          } else if (!isProduction && currentPatient.photoUrl.startsWith('/uploads/')) {
+            try {
+              const filePath = path.join(process.cwd(), currentPatient.photoUrl);
+              if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+              }
+            } catch (deleteError) {
+              console.error("Error deleting photo from filesystem:", deleteError);
+            }
+          }
+        }
+      }
 
       const patient = await storage.updatePatient(req.params.id, updateData, req.user!.clinicId);
 

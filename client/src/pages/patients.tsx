@@ -187,7 +187,7 @@ export default function Patients() {
                                     <User className="w-5 h-5 text-gray-400" />
                                   )}
                                 </div>
-                                
+
                                 {/* Patient Info */}
                                 <div>
                                   <div className="font-medium">{patient.fullName}</div>
