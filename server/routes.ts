@@ -15,6 +15,23 @@ import { eq, and, or, isNotNull, sql } from "drizzle-orm";
 import { upload, uploadCSV, uploadPatientPhoto } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
 import { ObjectStorageService } from "./objectStorage";
+
+function convertPhotoUrlForClient(photoUrl: string | null): string | null {
+  if (!photoUrl) return photoUrl;
+  if (photoUrl.startsWith('gcs://')) {
+    const gcsPath = photoUrl.replace('gcs://', '');
+    return `/api/storage/photo/${gcsPath}`;
+  }
+  return photoUrl;
+}
+
+function convertPatientPhotoUrls<T extends { photoUrl?: string | null }>(patient: T): T {
+  if (patient.photoUrl) {
+    return { ...patient, photoUrl: convertPhotoUrlForClient(patient.photoUrl) };
+  }
+  return patient;
+}
+
 import {
   insertUserSchema,
   insertPatientSchema,
@@ -289,7 +306,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // A lógica de data foi removida. A função 'storage' agora cuida de tudo,
       // incluindo a paginação que o frontend espera.
       const paginatedResult = await storage.getBirthdayPatients(req.user!.clinicId, { page, pageSize });
-      res.json(paginatedResult);
+      res.json({
+        ...paginatedResult,
+        data: paginatedResult.data.map(convertPatientPhotoUrls)
+      });
 
     } catch (error) {
       console.error("Birthday patients error:", error);
@@ -519,8 +539,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fs.mkdirSync(uploadDir, { recursive: true });
         }
         
-        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        const filename = "photo-" + uniqueSuffix + path.extname(req.file.originalname);
+        const timestamp = Date.now();
+        const filename = timestamp + "-" + req.file.originalname;
         const targetPath = path.join(uploadDir, filename);
         fs.writeFileSync(targetPath, req.file.buffer);
         photoUrl = `/uploads/${filename}`;
@@ -532,7 +552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (patient.photoUrl) {
-        if (patient.photoUrl.startsWith('http')) {
+        if (patient.photoUrl.startsWith('gcs://') || patient.photoUrl.startsWith('http')) {
           try {
             const objectStorageService = new ObjectStorageService();
             await objectStorageService.deleteFile(patient.photoUrl);
@@ -557,13 +577,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Paciente não encontrado" });
       }
 
-      res.json({ photoUrl, patient: updatedPatient });
+      const publicPhotoUrl = convertPhotoUrlForClient(photoUrl);
+      res.json({ photoUrl: publicPhotoUrl, patient: convertPatientPhotoUrls(updatedPatient) });
     } catch (error: any) {
       console.error("Upload patient photo error:", error);
       res.status(500).json({ 
         message: "Erro ao fazer upload da foto",
         error: error.message
       });
+    }
+  });
+
+  // Proxy endpoint to serve photos from Object Storage
+  app.get("/api/storage/photo/*", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const photoPath = req.params[0];
+      if (!photoPath) {
+        return res.status(400).json({ message: "Invalid photo path" });
+      }
+
+      const gcsUrl = `gcs://${photoPath}`;
+      
+      const [patientWithPhoto] = await db
+        .select()
+        .from(patients)
+        .where(and(
+          eq(patients.photoUrl, gcsUrl),
+          eq(patients.clinicId, req.user!.clinicId)
+        ))
+        .limit(1);
+
+      if (!patientWithPhoto) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const { buffer, contentType } = await objectStorageService.downloadFile(gcsUrl);
+      
+      res.set('Content-Type', contentType);
+      res.set('Cache-Control', 'private, max-age=31536000');
+      res.send(buffer);
+    } catch (error: any) {
+      console.error("Error serving photo:", error);
+      if (error.name === 'ObjectNotFoundError') {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      res.status(500).json({ message: "Error serving photo" });
     }
   });
 
@@ -642,7 +701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .offset(offset);
 
       res.json({
-        data: patientsData,
+        data: patientsData.map(convertPatientPhotoUrls),
         pagination: {
           page: validPage,
           pageSize: validPageSize,
@@ -670,7 +729,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const patientData = insertPatientSchema.parse(requestData);
       const patient = await storage.createPatient(patientData);
-      res.status(201).json(patient);
+      res.status(201).json(convertPatientPhotoUrls(patient));
     } catch (error: any) {
       console.error("Create patient error:", error);
 
@@ -712,7 +771,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!patient) {
         return res.status(404).json({ message: "Patient not found" });
       }
-      res.json(patient);
+      res.json(convertPatientPhotoUrls(patient));
     } catch (error) {
       console.error("Get patient error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -728,7 +787,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!patient) {
         return res.status(404).json({ message: "Paciente não encontrado" });
       }
-      res.json(patient);
+      res.json(convertPatientPhotoUrls(patient));
     } catch (error) {
       console.error("Get patient by external ID error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -750,7 +809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (updateData.photoUrl === null) {
         const currentPatient = await storage.getPatientById(req.params.id, req.user!.clinicId);
         if (currentPatient?.photoUrl) {
-          if (currentPatient.photoUrl.startsWith('http')) {
+          if (currentPatient.photoUrl.startsWith('gcs://') || currentPatient.photoUrl.startsWith('http')) {
             try {
               const objectStorageService = new ObjectStorageService();
               await objectStorageService.deleteFile(currentPatient.photoUrl);
@@ -776,7 +835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Patient not found" });
       }
 
-      res.json(patient);
+      res.json(convertPatientPhotoUrls(patient));
     } catch (error: any) {
       console.error("Update patient error:", error);
 

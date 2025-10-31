@@ -1,0 +1,39 @@
+Aja como um desenvolvedor full-stack sênior. Sua tarefa é corrigir um bug crítico de upload de arquivos no Object Storage da plataforma e, em seguida, padronizar a nomenclatura de arquivos em toda a aplicação.
+
+Conforme minhas preferências, reporte a rotina completa de todos os arquivos alterados e não execute testes funcionais a menos que eu solicite.
+
+1. Diagnosticar e Corrigir o Erro de Upload no Object Storage
+
+Arquivo Principal: ObjectStorageService.ts
+
+Sintomas: Estou recebendo um erro 500 (HTTP 500) ao tentar fazer upload de fotos.
+
+Log de Erro: O log principal que aparece no console é: Falha no ObjectStorageService.uploadFile: Cannot sign data without \client_email`, seguido por um name: 'SigningError'`.
+
+Comportamento Observado:
+
+Apesar do erro, o arquivo é salvo com sucesso. Eu consigo vê-lo no painel do Object Storage com o nome esperado (ex: 1761782153966-0000002001.jpg).
+
+O erro parece acontecer depois do salvamento do arquivo, especificamente na chamada file.getSignedUrl().
+
+Código Problemático: A minha suspeita é que o método de autenticação que estou usando (definido em objectStorageClient, que usa REPLIT_SIDECAR_ENDPOINT e type: "external_account") não tem as credenciais ou permissões necessárias para assinar URLs, embora consiga escrever arquivos.
+
+Sua Ação: Investigue por que a chamada getSignedUrl() está causando o erro Cannot sign data without \client_email`quando usada com a autenticaçãoREPLIT_SIDECAR_ENDPOINT. Proponha uma alternativa a esse método de autenticação que resolva esse erro de assinatura e permita que tanto o file.save()quanto ofile.getSignedUrl()` funcionem corretamente.
+
+2. Padronizar a Nomenclatura de Arquivos
+
+Problema: A aplicação usa duas lógicas diferentes para nomear arquivos, o que causa confusão.
+
+Lógica 1 (em ObjectStorageService.ts): ${timestamp}-${filename}. (Ex: 1761704593690-0000007671.jpg). Este é o padrão que queremos manter.
+
+Lógica 2 (no endpoint app.post, no bloco else de desenvolvimento): photo-${uniqueSuffix}${extname}. (Ex: photo-1761780868101-768927153.jpg).
+
+Arquivo a ser Modificado: O arquivo que contém o endpoint app.post("/api/patients/:id/photo", ...).
+
+Sua Ação: Altere a lógica de nomenclatura no bloco else (ambiente de não-produção) do endpoint para que ela corresponda à Lógica 1, gerando um nome no formato timestamp-nomeoriginal.ext (ex: Date.now() + "-" + req.file.originalname).
+
+3. Revisar o Upload em Lote
+
+Sua Ação: Temos uma segunda funcionalidade de "upload em lote". Localize essa rota e garanta que ela esteja utilizando o ObjectStorageService.uploadFile corrigido (com a nova autenticação) e que não tenha nenhuma lógica de nomenclatura de arquivos conflitante.
+
+Por favor, execute essas alterações e me retorne o código completo de todos os arquivos modificados.

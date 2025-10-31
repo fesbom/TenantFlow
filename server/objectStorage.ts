@@ -59,17 +59,43 @@ export class ObjectStorageService {
         },
       });
 
-      const [url] = await file.getSignedUrl({
-        version: 'v4',
-        action: 'read',
-        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      });
-
-      return url;
+      return `gcs://${bucketName}/${objectName}`;
     } catch (error: any) {
-      // Este log vai nos dizer o erro exato (seja do save ou do getSignedUrl)
       console.error("Falha no ObjectStorageService.uploadFile:", error.message, error);
       throw new Error(error.message || "Failed to upload file to object storage");
+    }
+  }
+
+  async downloadFile(fileUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
+    try {
+      if (!fileUrl.startsWith('gcs://')) {
+        throw new Error('Invalid GCS URL format');
+      }
+
+      const urlWithoutProtocol = fileUrl.replace('gcs://', '');
+      const { bucketName, objectName } = this.parseObjectPath(`/${urlWithoutProtocol}`);
+
+      const bucket = objectStorageClient.bucket(bucketName);
+      const file = bucket.file(objectName);
+
+      const [exists] = await file.exists();
+      if (!exists) {
+        throw new ObjectNotFoundError();
+      }
+
+      const [metadata] = await file.getMetadata();
+      const [buffer] = await file.download();
+
+      return {
+        buffer,
+        contentType: metadata.contentType || 'application/octet-stream'
+      };
+    } catch (error: any) {
+      if (error instanceof ObjectNotFoundError) {
+        throw error;
+      }
+      console.error("Error downloading file from object storage:", error);
+      throw new Error("Failed to download file from object storage");
     }
   }
 
@@ -95,6 +121,9 @@ export class ObjectStorageService {
 
   private extractObjectPathFromUrl(url: string): string | null {
     try {
+      if (url.startsWith('gcs://')) {
+        return `/${url.replace('gcs://', '')}`;
+      }
       if (url.startsWith('http')) {
         const urlObj = new URL(url);
         const pathname = urlObj.pathname;
