@@ -1,0 +1,43 @@
+Aja como um desenvolvedor full-stack sênior. Sua tarefa é corrigir um bug de exibição de imagens do Object Storage.
+
+Conforme minhas preferências, reporte a rotina completa de todos os arquivos alterados e não execute testes funcionais a menos que eu solicite.
+
+1. Diagnóstico do Problema
+
+O erro anterior (client_email) foi resolvido e os uploads agora estão funcionando (o arquivo aparece no bucket, como no print). No entanto, a imagem não aparece na aplicação (ícone de imagem quebrada).
+
+Investigando o banco de dados, descobri o problema:
+
+O banco de dados está salvando a photo_url como um URI interno (ex: gcs://replit-objstore-e2515c9c-5075-4c5f-9b55-bb59a86c3dfe/uploads_foto/1761871680834-photo.jpg).
+
+Um browser (tag <img>) não pode renderizar um URI gcs://. Ele precisa de uma URL HTTP pública (ex: https://storage.googleapis.com/...).
+
+Isso significa que a chamada getSignedUrl() no meu ObjectStorageService.ts está sendo ignorada ou o valor errado está sendo retornado e salvo.
+
+2. Sua Tarefa
+
+Você deve modificar o código para garantir que a URL assinada (Signed URL) https:// seja salva no banco de dados, e não o URI gcs://.
+
+Arquivo 1: ObjectStorageService.ts
+
+Revise o método uploadFile.
+
+A chamada await file.getSignedUrl(...) deve estar lá (nós a corrigimos antes).
+
+Certifique-se de que a variável url retornada por esta função seja o valor que o método uploadFile retorna.
+
+É provável que o método esteja retornando file.name ou algo similar por engano. Garanta que o retorno seja exclusivamente a variável da URL assinada.
+
+Arquivo 2: O Endpoint app.post("/api/patients/:id/photo", ...)
+
+Encontre a linha de código que salva no banco de dados (ex: await storage.updatePatient(...) ou similar).
+
+Confirme que o valor sendo passado para a coluna photo_url é a variável photoUrl que recebeu o retorno do ObjectStorageService.uploadFile.
+
+Importante: O catch (fallback) que salva localmente deve ser removido ou atualizado, pois não queremos mais salvar /uploads/photo... no banco. Se o upload na nuvem falhar, a aplicação deve retornar um erro.
+
+Arquivo 3: O Endpoint de "Upload em Lote"
+
+Faça a mesma verificação do Arquivo 2 para a rota de upload em lote, garantindo que ela também salve a URL assinada https:// no banco de dados.
+
+Por favor, execute essas alterações e me retorne o código completo de todos os arquivos modificados.

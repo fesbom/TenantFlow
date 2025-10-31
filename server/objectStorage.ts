@@ -59,7 +59,14 @@ export class ObjectStorageService {
         },
       });
 
-      return `gcs://${bucketName}/${objectName}`;
+      // Generate signed URL (valid for 100 years)
+      const [url] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + 100 * 365 * 24 * 60 * 60 * 1000,
+      });
+
+      return url;
     } catch (error: any) {
       console.error("Falha no ObjectStorageService.uploadFile:", error.message, error);
       throw new Error(error.message || "Failed to upload file to object storage");

@@ -86,24 +86,26 @@ Preferred communication style: Simple, everyday language.
 ### Patient Photo Management (October 2025)
 
 #### Photo Upload Infrastructure
-- **Database**: Added `photoUrl` column to patients table (TEXT, optional)
+- **Database**: Added `photoUrl` column to patients table (TEXT, optional) - stores HTTPS signed URLs in production, `/uploads/` paths in development
 - **Backend Endpoint**: `POST /api/patients/:id/photo` for photo uploads
   - Validates file type (JPG, PNG, WEBP)
   - Validates file size (max 5MB)
   - Uses multer for file handling
   - Environment-aware storage:
-    - **Development** (`NODE_ENV !== 'production'`): Stores files in local `/uploads` directory
-    - **Production** (`NODE_ENV === 'production'`): Stores files in Replit Object Storage with signed URLs
-    - Automatic fallback to local storage if Object Storage fails
-  - Replaces old photo when uploading new one (deletes physical file)
+    - **Development** (`NODE_ENV !== 'production'`): Stores files in local `/uploads` directory with timestamp-filename pattern
+    - **Production** (`NODE_ENV === 'production'`): Uploads to Replit Object Storage and saves signed HTTPS URL (100-year expiration) directly in database
+    - No fallback to local storage in production - upload fails if Object Storage fails
+  - Replaces old photo when uploading new one (deletes physical file from storage)
 - **Photo Deletion**: `PUT /api/patients/:id` with `photoUrl: null` removes physical file from storage
   - Development: Deletes file from local filesystem
-  - Production: Deletes file from Object Storage bucket
+  - Production: Deletes file from Object Storage bucket using pathname extraction from signed URL
 - **Object Storage Service** (`server/objectStorage.ts`):
   - Wrapper for `@google-cloud/storage` client
-  - Uses Replit sidecar authentication (`http://127.0.0.1:1106`)
+  - Uses Replit sidecar authentication (`http://127.0.0.1:1106`) to enable `getSignedUrl()` functionality
   - Requires `PRIVATE_OBJECT_DIR` environment variable (e.g., `/bucket-name/uploads`)
-  - Generates 100-year signed URLs for secure access
+  - **uploadFile()**: Returns signed HTTPS URL (100-year expiration) that is saved directly to database
+  - **deleteFile()**: Extracts object path from HTTPS signed URLs or gcs:// URIs for deletion
+  - Filename pattern: `${timestamp}-${originalname}` for all uploads
 - **Dependencies**: Installed `react-cropper`, `cropperjs`, and `@google-cloud/storage`
 
 #### PhotoUpload Component
@@ -144,8 +146,9 @@ Preferred communication style: Simple, everyday language.
   - Error Handling: Clear error messages for patient not found, upload failures, and validation errors
 - **Integration**: Menu item "Upload Fotos" in sidebar with Images icon
 - **Reuse**: Leverages existing `POST /api/patients/:id/photo` endpoint for actual photo uploads
-  - Automatically uses environment-appropriate storage (local filesystem or Object Storage)
+  - Automatically uses environment-appropriate storage (local filesystem with timestamp-filename in development, Object Storage with signed HTTPS URLs in production)
   - Inherits all validation and error handling from individual photo upload endpoint
+  - Database receives and stores the signed HTTPS URL directly from uploadFile() method
 
 ### Dashboard Birthday Timezone Fix (October 2025)
 

@@ -16,22 +16,6 @@ import { upload, uploadCSV, uploadPatientPhoto } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
 import { ObjectStorageService } from "./objectStorage";
 
-function convertPhotoUrlForClient(photoUrl: string | null): string | null {
-  if (!photoUrl) return photoUrl;
-  if (photoUrl.startsWith('gcs://')) {
-    const gcsPath = photoUrl.replace('gcs://', '');
-    return `/api/storage/photo/${gcsPath}`;
-  }
-  return photoUrl;
-}
-
-function convertPatientPhotoUrls<T extends { photoUrl?: string | null }>(patient: T): T {
-  if (patient.photoUrl) {
-    return { ...patient, photoUrl: convertPhotoUrlForClient(patient.photoUrl) };
-  }
-  return patient;
-}
-
 import {
   insertUserSchema,
   insertPatientSchema,
@@ -306,10 +290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // A lógica de data foi removida. A função 'storage' agora cuida de tudo,
       // incluindo a paginação que o frontend espera.
       const paginatedResult = await storage.getBirthdayPatients(req.user!.clinicId, { page, pageSize });
-      res.json({
-        ...paginatedResult,
-        data: paginatedResult.data.map(convertPatientPhotoUrls)
-      });
+      res.json(paginatedResult);
 
     } catch (error) {
       console.error("Birthday patients error:", error);
@@ -577,52 +558,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Paciente não encontrado" });
       }
 
-      const publicPhotoUrl = convertPhotoUrlForClient(photoUrl);
-      res.json({ photoUrl: publicPhotoUrl, patient: convertPatientPhotoUrls(updatedPatient) });
+      res.json({ photoUrl, patient: updatedPatient });
     } catch (error: any) {
       console.error("Upload patient photo error:", error);
       res.status(500).json({ 
         message: "Erro ao fazer upload da foto",
         error: error.message
       });
-    }
-  });
-
-  // Proxy endpoint to serve photos from Object Storage
-  app.get("/api/storage/photo/*", authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const photoPath = req.params[0];
-      if (!photoPath) {
-        return res.status(400).json({ message: "Invalid photo path" });
-      }
-
-      const gcsUrl = `gcs://${photoPath}`;
-      
-      const [patientWithPhoto] = await db
-        .select()
-        .from(patients)
-        .where(and(
-          eq(patients.photoUrl, gcsUrl),
-          eq(patients.clinicId, req.user!.clinicId)
-        ))
-        .limit(1);
-
-      if (!patientWithPhoto) {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
-      const objectStorageService = new ObjectStorageService();
-      const { buffer, contentType } = await objectStorageService.downloadFile(gcsUrl);
-      
-      res.set('Content-Type', contentType);
-      res.set('Cache-Control', 'private, max-age=31536000');
-      res.send(buffer);
-    } catch (error: any) {
-      console.error("Error serving photo:", error);
-      if (error.name === 'ObjectNotFoundError') {
-        return res.status(404).json({ message: "Photo not found" });
-      }
-      res.status(500).json({ message: "Error serving photo" });
     }
   });
 
@@ -701,7 +643,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .offset(offset);
 
       res.json({
-        data: patientsData.map(convertPatientPhotoUrls),
+        data: patientsData,
         pagination: {
           page: validPage,
           pageSize: validPageSize,
@@ -729,7 +671,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const patientData = insertPatientSchema.parse(requestData);
       const patient = await storage.createPatient(patientData);
-      res.status(201).json(convertPatientPhotoUrls(patient));
+      res.status(201).json(patient);
     } catch (error: any) {
       console.error("Create patient error:", error);
 
@@ -771,7 +713,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!patient) {
         return res.status(404).json({ message: "Patient not found" });
       }
-      res.json(convertPatientPhotoUrls(patient));
+      res.json(patient);
     } catch (error) {
       console.error("Get patient error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -787,7 +729,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!patient) {
         return res.status(404).json({ message: "Paciente não encontrado" });
       }
-      res.json(convertPatientPhotoUrls(patient));
+      res.json(patient);
     } catch (error) {
       console.error("Get patient by external ID error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -835,7 +777,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Patient not found" });
       }
 
-      res.json(convertPatientPhotoUrls(patient));
+      res.json(patient);
     } catch (error: any) {
       console.error("Update patient error:", error);
 
