@@ -507,18 +507,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             req.file.mimetype
           );
         } catch (storageError: any) {
-          console.error("Object storage error (falling back to local):", storageError);
-          
-          const uploadDir = path.join(process.cwd(), 'uploads');
-          if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-          }
-          
-          const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-          const filename = "photo-" + uniqueSuffix + path.extname(req.file.originalname);
-          const targetPath = path.join(uploadDir, filename);
-          fs.writeFileSync(targetPath, req.file.buffer);
-          photoUrl = `/uploads/${filename}`;
+            console.error("Object storage error (NÃO HÁ FALLBACK):", storageError);
+            return res.status(500).json({ 
+                message: "Falha ao processar upload no GCS.",
+                error: storageError.message 
+            });
         }
       } else {
         const uploadDir = path.join(process.cwd(), 'uploads');

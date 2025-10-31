@@ -17,7 +17,7 @@ const objectStorageClient = new Storage({
     },
     universe_domain: "googleapis.com",
   },
-  projectId: "",
+  projectId: "dentalcare_fesbom",
 });
 
 export class ObjectNotFoundError extends Error {
@@ -66,9 +66,10 @@ export class ObjectStorageService {
       });
 
       return url;
-    } catch (error) {
-      console.error("Error uploading file to object storage:", error);
-      throw new Error("Failed to upload file to object storage");
+    } catch (error: any) {
+      // Este log vai nos dizer o erro exato (seja do save ou do getSignedUrl)
+      console.error("Falha no ObjectStorageService.uploadFile:", error.message, error);
+      throw new Error(error.message || "Failed to upload file to object storage");
     }
   }
 
