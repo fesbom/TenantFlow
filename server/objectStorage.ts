@@ -1,24 +1,34 @@
 import { Storage, File } from "@google-cloud/storage";
 
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
+// --- INÍCIO DA CORREÇÃO DE AUTENTICAÇÃO ---
 
+// 1. Validar e carregar o Secret
+let credentialsJson;
+if (!process.env.GOOGLE_CREDENTIALS) {
+  throw new Error(
+    "FATAL: Secret 'GOOGLE_CREDENTIALS' não foi encontrado. " +
+    "Por favor, crie o Secret com o JSON da Conta de Serviço do Google Cloud."
+  );
+}
+
+try {
+  credentialsJson = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+} catch (e) {
+  console.error(
+    "FATAL: Erro ao fazer parse do Secret 'GOOGLE_CREDENTIALS'. " +
+    "Verifique se você copiou o JSON inteiro corretamente."
+  );
+  throw e;
+}
+
+// 2. Inicializar o Storage com as credenciais CORRETAS
 const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
-      },
-    },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "dentalcare_fesbom",
+  credentials: credentialsJson,
+  projectId: credentialsJson.project_id, // Pega o ID do projeto de dentro do JSON
 });
+
+// --- FIM DA CORREÇÃO DE AUTENTICAÇÃO ---
+// O código antigo do REPLIT_SIDECAR_ENDPOINT foi removido
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -59,52 +69,32 @@ export class ObjectStorageService {
         },
       });
 
-      // Generate signed URL (valid for 100 years)
+      // --- CORREÇÃO DA EXPIRAÇÃO (MÁXIMO DE 7 DIAS) ---
+      const maxExpiration = 7 * 24 * 60 * 60 * 1000; // 7 dias em milissegundos
+
       const [url] = await file.getSignedUrl({
         version: 'v4',
         action: 'read',
-        expires: Date.now() + 100 * 365 * 24 * 60 * 60 * 1000,
+        expires: Date.now() + maxExpiration, // Corrigido para 7 dias
       });
 
+      // Esta URL será algo como: "https://storage.googleapis.com/..."
       return url;
+
     } catch (error: any) {
-      console.error("Falha no ObjectStorageService.uploadFile:", error.message, error);
+      console.error(
+        "Falha grave no ObjectStorageService.uploadFile:", 
+        error.message, 
+        error
+      );
+      // Lança o erro para que o 'catch' do app.post seja ativado
       throw new Error(error.message || "Failed to upload file to object storage");
     }
   }
 
-  async downloadFile(fileUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
-    try {
-      if (!fileUrl.startsWith('gcs://')) {
-        throw new Error('Invalid GCS URL format');
-      }
-
-      const urlWithoutProtocol = fileUrl.replace('gcs://', '');
-      const { bucketName, objectName } = this.parseObjectPath(`/${urlWithoutProtocol}`);
-
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
-
-      const [exists] = await file.exists();
-      if (!exists) {
-        throw new ObjectNotFoundError();
-      }
-
-      const [metadata] = await file.getMetadata();
-      const [buffer] = await file.download();
-
-      return {
-        buffer,
-        contentType: metadata.contentType || 'application/octet-stream'
-      };
-    } catch (error: any) {
-      if (error instanceof ObjectNotFoundError) {
-        throw error;
-      }
-      console.error("Error downloading file from object storage:", error);
-      throw new Error("Failed to download file from object storage");
-    }
-  }
+  // ... (O restante do arquivo: deleteFile, downloadFile, etc.) ...
+  // O restante do seu arquivo parece correto, apenas cole o código acima
+  // no lugar do `uploadFile` e da inicialização do `objectStorageClient`.
 
   async deleteFile(fileUrl: string): Promise<void> {
     try {
