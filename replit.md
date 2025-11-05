@@ -119,6 +119,14 @@ Refactored file storage infrastructure to support true multi-tenancy with isolat
 - Ensures consistent behavior between development and production
 - Automatic directory creation with recursive `mkdirSync`
 
+#### Security Measures
+- **ID Validation**: All clinic/patient/record IDs validated against `/^[a-zA-Z0-9_-]+$/` before use in file paths
+- **Filename Sanitization**: All uploaded filenames sanitized using:
+  - `path.basename()` to strip directory components
+  - `.replace(/[^a-zA-Z0-9._-]/g, '_')` to whitelist safe characters
+  - Prevents path traversal attacks via malicious filenames
+- **Local Deletion Path Resolution**: Stored URLs have leading slash stripped before `path.join()` to ensure correct filesystem resolution
+
 ### Patient Photo Management (October 2025)
 
 #### Photo Upload Infrastructure
