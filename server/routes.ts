@@ -456,10 +456,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const logoUrl = `/uploads/${req.file.filename}`;
+      const clinicId = req.user!.clinicId;
+      
+      // Validate clinicId to prevent path traversal
+      if (!/^[a-zA-Z0-9_-]+$/.test(clinicId)) {
+        return res.status(400).json({ message: "Invalid clinic ID" });
+      }
+      
+      const timestamp = Date.now();
+      // Sanitize filename to prevent path traversal
+      const safeName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filename = `${timestamp}-${safeName}`;
+
+      let logoUrl: string;
+      const isProduction = process.env.NODE_ENV === 'production';
+
+      if (isProduction) {
+        try {
+          const objectStorageService = new ObjectStorageService();
+          const objectPath = `${clinicId}/profile/${filename}`;
+          logoUrl = await objectStorageService.uploadFile(
+            req.file.buffer,
+            objectPath,
+            req.file.mimetype
+          );
+
+          // Delete old logo if it exists
+          const clinic = await storage.getClinicById(clinicId);
+          if (clinic?.logoUrl && clinic.logoUrl.startsWith('http')) {
+            try {
+              await objectStorageService.deleteFile(clinic.logoUrl);
+            } catch (deleteError) {
+              console.error("Error deleting old logo:", deleteError);
+            }
+          }
+        } catch (storageError: any) {
+          console.error("Object storage error:", storageError);
+          return res.status(500).json({ 
+            message: "Falha ao processar upload do logo.",
+            error: storageError.message 
+          });
+        }
+      } else {
+        // Development: maintain same folder structure locally
+        const uploadDir = path.join(process.cwd(), 'uploads', clinicId, 'profile');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        
+        // Delete old logo if it exists
+        const clinic = await storage.getClinicById(clinicId);
+        if (clinic?.logoUrl && clinic.logoUrl.startsWith('/uploads/')) {
+          try {
+            const oldFilePath = path.join(process.cwd(), clinic.logoUrl.replace(/^\//, ''));
+            if (fs.existsSync(oldFilePath)) {
+              fs.unlinkSync(oldFilePath);
+            }
+          } catch (deleteError) {
+            console.error("Error deleting old logo:", deleteError);
+          }
+        }
+
+        const targetPath = path.join(uploadDir, filename);
+        fs.writeFileSync(targetPath, req.file.buffer);
+        logoUrl = `/uploads/${clinicId}/profile/${filename}`;
+      }
 
       // Update clinic with new logo URL
-      const updatedClinic = await storage.updateClinic(req.user!.clinicId, { logoUrl });
+      const updatedClinic = await storage.updateClinic(clinicId, { logoUrl });
 
       res.json({ logoUrl, clinic: updatedClinic });
     } catch (error: any) {
@@ -496,15 +560,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      const clinicId = req.user!.clinicId;
+      const patientId = req.params.id;
+      
+      // Validate IDs to prevent path traversal
+      if (!/^[a-zA-Z0-9_-]+$/.test(clinicId) || !/^[a-zA-Z0-9_-]+$/.test(patientId)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+      
+      const timestamp = Date.now();
+      // Sanitize filename to prevent path traversal
+      const safeName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filename = `${timestamp}-${safeName}`;
+
       let photoUrl: string;
       const isProduction = process.env.NODE_ENV === 'production';
 
       if (isProduction) {
         try {
           const objectStorageService = new ObjectStorageService();
+          const objectPath = `${clinicId}/patients/${patientId}/${filename}`;
           photoUrl = await objectStorageService.uploadFile(
             req.file.buffer,
-            req.file.originalname,
+            objectPath,
             req.file.mimetype
           );
         } catch (storageError: any) {
@@ -515,16 +593,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
         }
       } else {
-        const uploadDir = path.join(process.cwd(), 'uploads');
+        // Development: maintain same folder structure locally
+        const uploadDir = path.join(process.cwd(), 'uploads', clinicId, 'patients', patientId);
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }
         
-        const timestamp = Date.now();
-        const filename = timestamp + "-" + req.file.originalname;
         const targetPath = path.join(uploadDir, filename);
         fs.writeFileSync(targetPath, req.file.buffer);
-        photoUrl = `/uploads/${filename}`;
+        photoUrl = `/uploads/${clinicId}/patients/${patientId}/${filename}`;
       }
 
       const patient = await storage.getPatientById(req.params.id, req.user!.clinicId);
@@ -542,7 +619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } else if (patient.photoUrl.startsWith('/uploads/')) {
           try {
-            const oldFilePath = path.join(process.cwd(), patient.photoUrl);
+            const oldFilePath = path.join(process.cwd(), patient.photoUrl.replace(/^\//, ''));
             if (fs.existsSync(oldFilePath)) {
               fs.unlinkSync(oldFilePath);
             }
@@ -760,7 +837,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           } else if (currentPatient.photoUrl.startsWith('/uploads/')) {
             try {
-              const filePath = path.join(process.cwd(), currentPatient.photoUrl);
+              const filePath = path.join(process.cwd(), currentPatient.photoUrl.replace(/^\//, ''));
               if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath);
               }
@@ -990,11 +1067,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/medical-records", authenticateToken, requireRole(["admin", "dentist"]), upload.array("images", 10), async (req: AuthenticatedRequest, res) => {
     try {
       const files = req.files as Express.Multer.File[];
-      const imagePaths = files ? files.map(file => `/uploads/${file.filename}`) : [];
+      const clinicId = req.user!.clinicId;
+      const patientId = req.body.patientId;
+      
+      // Validate IDs to prevent path traversal
+      if (!/^[a-zA-Z0-9_-]+$/.test(clinicId) || !/^[a-zA-Z0-9_-]+$/.test(patientId)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+      
+      // Generate a temporary ID for organizing files (will be replaced by actual DB ID)
+      const tempRecordId = crypto.randomBytes(16).toString('hex');
+      const timestamp = Date.now();
+      
+      const imagePaths: string[] = [];
+      const isProduction = process.env.NODE_ENV === 'production';
+
+      if (files && files.length > 0) {
+        if (isProduction) {
+          const objectStorageService = new ObjectStorageService();
+          
+          for (const file of files) {
+            try {
+              // Sanitize filename to prevent path traversal
+              const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+              const filename = `${timestamp}-${safeName}`;
+              const objectPath = `${clinicId}/medical-records/${patientId}/${tempRecordId}/${filename}`;
+              const url = await objectStorageService.uploadFile(
+                file.buffer,
+                objectPath,
+                file.mimetype
+              );
+              imagePaths.push(url);
+            } catch (uploadError) {
+              console.error("Error uploading medical record image:", uploadError);
+            }
+          }
+        } else {
+          // Development: maintain same folder structure locally
+          const uploadDir = path.join(process.cwd(), 'uploads', clinicId, 'medical-records', patientId, tempRecordId);
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+
+          for (const file of files) {
+            // Sanitize filename to prevent path traversal
+            const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+            const filename = `${timestamp}-${safeName}`;
+            const targetPath = path.join(uploadDir, filename);
+            fs.writeFileSync(targetPath, file.buffer);
+            imagePaths.push(`/uploads/${clinicId}/medical-records/${patientId}/${tempRecordId}/${filename}`);
+          }
+        }
+      }
 
       const recordData = insertMedicalRecordSchema.parse({
         ...req.body,
-        clinicId: req.user!.clinicId,
+        clinicId,
         dentistId: req.user!.id,
         images: JSON.stringify(imagePaths),
       });

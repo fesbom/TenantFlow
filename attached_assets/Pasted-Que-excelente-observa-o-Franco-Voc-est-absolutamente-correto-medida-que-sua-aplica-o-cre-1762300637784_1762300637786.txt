@@ -1,0 +1,73 @@
+Que excelente observação, Franco. Você está absolutamente correto.
+
+À medida que sua aplicação cresce, salvar tudo em uma única pasta (`uploads_foto`) se torna um grande problema de organização e, principalmente, de segurança de dados (uma clínica não deve, de forma alguma, ter acesso às fotos de outra).
+
+A solução é usar uma estrutura de pastas baseada no ID da clínica (o que chamamos de "multi-tenancy").
+
+Aqui está um prompt para o Replit que aborda todas as suas preocupações.
+
+---
+
+### Prompt para o Replit
+
+Aja como um desenvolvedor full-stack sênior. O upload de arquivos está funcionando, mas nossa estrutura de armazenamento precisa de uma refatoração urgente para suportar múltiplas clínicas (multi-tenancy) e diferentes tipos de uploads.
+
+**O Problema Atual:**
+Todos os arquivos de todas as clínicas e de todos os contextos de upload (foto do paciente, logo da clínica, foto do tratamento) estão sendo salvos em uma única pasta no bucket (ex: `.../uploads_foto/[timestamp]-photo.jpg`).
+
+**O Objetivo (Nova Estrutura de Pastas):**
+Precisamos organizar os arquivos em subpastas, usando o `clinicId` como o "raiz" para isolar os dados de cada clínica. A estrutura de pastas desejada dentro do bucket é:
+
+* **Logo da Clínica:** `[clinicId]/profile/[timestamp]-[filename]`
+* **Fotos do Paciente:** `[clinicId]/patients/[patientId]/[timestamp]-[filename]`
+* **Fotos do Tratamento:** `[clinicId]/treatments/[treatmentId]/[timestamp]-[filename]`
+
+---
+
+**Plano de Ação (Tarefas):**
+
+**1. Ação do Usuário (Minha Ação):**
+Eu irei alterar o Replit Secret `PRIVATE_OBJECT_DIR`. Atualmente, ele contém o nome do bucket *e* a pasta (ex: `dentalcare-fesbom-fotos-franco/uploads_foto`). Eu vou mudá-lo para conter **APENAS** o nome do bucket (ex: `dentalcare-fesbom-fotos-franco`).
+
+**2. Sua Ação (Refatorar o Código):**
+
+**Tarefa 2.1: Refatorar `ObjectStorageService.ts`**
+* **`getPrivateObjectDir()`:** Renomeie esta função para `getBucketName()` e garanta que ela retorne o valor do Secret `PRIVATE_OBJECT_DIR` (que agora é *apenas* o nome do bucket).
+* **`uploadFile()`:** A assinatura deste método deve mudar. Ele não deve mais ser responsável por criar o nome do arquivo.
+    * **De:** `uploadFile(fileBuffer: Buffer, filename: string, mimeType: string)`
+    * **Para:** `uploadFile(fileBuffer: Buffer, fullObjectPath: string, mimeType: string)`
+* Dentro de `uploadFile()`:
+    * Remova a lógica que cria o `fullPath` (ex: `const fullPath = \`${privateObjectDir}/${timestamp}-${filename}\`;`).
+    * Obtenha o bucket: `const bucket = objectStorageClient.bucket(this.getBucketName());`
+    * Use o novo parâmetro diretamente: `const file = bucket.file(fullObjectPath);`
+* **`deleteFile()`:** Esta função precisa de uma refatoração importante.
+    * Ela deve usar `this.getBucketName()` para saber em qual bucket procurar.
+    * A função `extractObjectPathFromUrl(fileUrl)` precisa ser ajustada para extrair *apenas* o caminho do objeto (ex: `clinicId/patients/...`) da URL assinada, removendo o nome do host e os parâmetros de query.
+    * A função `parseObjectPath` (que tentava extrair o bucket do caminho) deve ser **removida**.
+    * A lógica final de `deleteFile` deve ser: obter o `bucketName`, extrair o `objectPath` da URL e, em seguida, chamar `bucket.file(objectPath).delete()`.
+
+**Tarefa 2.2: Refatorar Endpoint de Foto do Paciente (`/api/patients/:id/photo`)**
+* Este endpoint **agora** é responsável por construir o caminho do arquivo.
+* Obtenha o `clinicId` (de `req.user.clinicId`) e o `patientId` (de `req.params.id`).
+* Crie o `fullObjectPath`:
+    `const objectPath = \`${clinicId}/patients/${patientId}/${Date.now()}-${req.file.originalname}\`;`
+* Chame o serviço com a nova assinatura:
+    `photoUrl = await objectStorageService.uploadFile(req.file.buffer, objectPath, req.file.mimetype);`
+* Garanta que a lógica de exclusão (que chama `deleteFile`) continue funcionando.
+
+**Tarefa 2.3: Localizar e Refatorar Endpoint da Imagem da Clínica**
+* Procure o endpoint de upload da imagem da clínica (provavelmente em `POST /api/clinic/logo` ou `POST /api/config/photo`).
+* Aplique a mesma lógica, construindo o caminho:
+    `const objectPath = \`${req.user.clinicId}/profile/${Date.now()}-${req.file.originalname}\`;`
+* Chame o `uploadFile` atualizado.
+* Implemente a lógica de exclusão da foto antiga do perfil, se ela existir.
+
+**Tarefa 2.4: Localizar e Refatorar Endpoint da Foto do Tratamento**
+* Procure o endpoint de upload da foto do tratamento (provavelmente `POST /api/treatments/:treatmentId/photo` ou similar).
+* Obtenha `clinicId` e `treatmentId`.
+* Aplique a mesma lógica, construindo o caminho:
+    `const objectPath = \`${req.user.clinicId}/treatments/${req.params.treatmentId}/${Date.now()}-${req.file.originalname}\`;`
+* Chame o `uploadFile` atualizado. (Este endpoint pode permitir múltiplos uploads, então a lógica de exclusão pode não se aplicar, ou pode ser para um arquivo específico).
+
+---
+Por favor, execute essa refatoração completa e me retorne o código de todos os arquivos modificados.

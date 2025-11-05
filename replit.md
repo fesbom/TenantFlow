@@ -71,10 +71,14 @@ Preferred communication style: Simple, everyday language.
 
 ### File Upload and Storage
 - **multer**: Multipart form data handling for file uploads
-- **@google-cloud/storage**: Google Cloud Storage client for Replit Object Storage integration
-- **Environment-aware storage**: Automatic detection of development vs. production environment
-  - Development: Local filesystem storage in `/uploads` directory
-  - Production: Replit Object Storage with signed URLs for secure access
+- **@google-cloud/storage**: Google Cloud Storage client for production file storage
+- **Multi-tenant folder structure**: Files organized by clinic for data isolation
+  - Development: Local filesystem storage in `/uploads/[clinicId]/[context]/...` structure
+  - Production: Google Cloud Storage with signed URLs for secure access
+- **Folder organization patterns**:
+  - Clinic logos: `[clinicId]/profile/[timestamp]-[filename]`
+  - Patient photos: `[clinicId]/patients/[patientId]/[timestamp]-[filename]`
+  - Medical records: `[clinicId]/medical-records/[patientId]/[recordId]/[timestamp]-[filename]`
 
 ### Development Environment
 - **Replit integration**: Custom Vite plugins for Replit development environment
@@ -82,6 +86,38 @@ Preferred communication style: Simple, everyday language.
 - **Error overlay**: Development error modal for debugging
 
 ## Recent Changes
+
+### Multi-Tenant File Storage Refactoring (November 2025)
+
+#### Objective
+Refactored file storage infrastructure to support true multi-tenancy with isolated folder structures per clinic, ensuring data isolation and better organization.
+
+#### Architecture Changes
+- **ObjectStorageService Refactoring**:
+  - Renamed `getPrivateObjectDir()` to `getBucketName()` - now returns only bucket name
+  - Changed `uploadFile()` signature from `(buffer, filename, mimeType)` to `(buffer, fullObjectPath, mimeType)`
+  - Callers now construct complete paths with clinic isolation
+  - Simplified `deleteFile()` to use `getBucketName()` directly and extract paths from signed URLs
+  
+- **Folder Structure**:
+  - **Clinic logos**: `[clinicId]/profile/[timestamp]-[filename]`
+  - **Patient photos**: `[clinicId]/patients/[patientId]/[timestamp]-[filename]`
+  - **Medical records**: `[clinicId]/medical-records/[patientId]/[recordId]/[timestamp]-[filename]`
+
+#### Updated Endpoints
+- **POST /api/patients/:id/photo**: Now constructs path with clinicId and patientId
+- **POST /api/clinic/upload-logo**: Now constructs path with clinicId in profile folder
+- **POST /api/medical-records**: Now constructs paths with clinicId, patientId, and recordId
+
+#### Environment Configuration
+- `PRIVATE_OBJECT_DIR` secret now contains **only the bucket name** (e.g., `dentalcare-fotos`)
+- Previously contained bucket + folder path (e.g., `dentalcare-fotos/uploads_foto`)
+- `GOOGLE_CREDENTIALS` secret contains the Google Cloud Service Account JSON
+
+#### Development Environment
+- Local filesystem mirrors production structure: `/uploads/[clinicId]/[context]/...`
+- Ensures consistent behavior between development and production
+- Automatic directory creation with recursive `mkdirSync`
 
 ### Patient Photo Management (October 2025)
 
@@ -101,11 +137,12 @@ Preferred communication style: Simple, everyday language.
   - Production: Deletes file from Object Storage bucket using pathname extraction from signed URL
 - **Object Storage Service** (`server/objectStorage.ts`):
   - Wrapper for `@google-cloud/storage` client
-  - Uses Replit sidecar authentication (`http://127.0.0.1:1106`) to enable `getSignedUrl()` functionality
-  - Requires `PRIVATE_OBJECT_DIR` environment variable (e.g., `/bucket-name/uploads`)
-  - **uploadFile()**: Returns signed HTTPS URL (100-year expiration) that is saved directly to database
-  - **deleteFile()**: Extracts object path from HTTPS signed URLs or gcs:// URIs for deletion
-  - Filename pattern: `${timestamp}-${originalname}` for all uploads
+  - Uses Google Cloud Service Account credentials from `GOOGLE_CREDENTIALS` secret
+  - Requires `PRIVATE_OBJECT_DIR` environment variable containing only the bucket name (e.g., `dentalcare-fotos`)
+  - **getBucketName()**: Returns bucket name from environment variable
+  - **uploadFile(buffer, fullObjectPath, mimeType)**: Accepts full object path as parameter, returns signed HTTPS URL (7-day expiration)
+  - **deleteFile(url)**: Extracts object path from HTTPS signed URLs and deletes from bucket
+  - **Multi-tenant structure**: Callers are responsible for constructing paths with clinic isolation
 - **Dependencies**: Installed `react-cropper`, `cropperjs`, and `@google-cloud/storage`
 
 #### PhotoUpload Component

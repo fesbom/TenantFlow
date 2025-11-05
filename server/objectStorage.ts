@@ -1,13 +1,11 @@
 import { Storage, File } from "@google-cloud/storage";
 
-// --- INÍCIO DA CORREÇÃO DE AUTENTICAÇÃO ---
-
-// 1. Validar e carregar o Secret
+// Validate and load credentials
 let credentialsJson;
 if (!process.env.GOOGLE_CREDENTIALS) {
   throw new Error(
-    "FATAL: Secret 'GOOGLE_CREDENTIALS' não foi encontrado. " +
-    "Por favor, crie o Secret com o JSON da Conta de Serviço do Google Cloud."
+    "FATAL: Secret 'GOOGLE_CREDENTIALS' not found. " +
+    "Please create the Secret with the Google Cloud Service Account JSON."
   );
 }
 
@@ -15,20 +13,17 @@ try {
   credentialsJson = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 } catch (e) {
   console.error(
-    "FATAL: Erro ao fazer parse do Secret 'GOOGLE_CREDENTIALS'. " +
-    "Verifique se você copiou o JSON inteiro corretamente."
+    "FATAL: Error parsing Secret 'GOOGLE_CREDENTIALS'. " +
+    "Verify that you copied the complete JSON correctly."
   );
   throw e;
 }
 
-// 2. Inicializar o Storage com as credenciais CORRETAS
+// Initialize Storage with credentials
 const objectStorageClient = new Storage({
   credentials: credentialsJson,
-  projectId: credentialsJson.project_id, // Pega o ID do projeto de dentro do JSON
+  projectId: credentialsJson.project_id,
 });
-
-// --- FIM DA CORREÇÃO DE AUTENTICAÇÃO ---
-// O código antigo do REPLIT_SIDECAR_ENDPOINT foi removido
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -41,26 +36,21 @@ export class ObjectNotFoundError extends Error {
 export class ObjectStorageService {
   constructor() {}
 
-  getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
-    if (!dir) {
+  getBucketName(): string {
+    const bucketName = process.env.PRIVATE_OBJECT_DIR || "";
+    if (!bucketName) {
       throw new Error(
         "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var (e.g., /bucket-name/uploads)."
+          "tool and set PRIVATE_OBJECT_DIR env var to the bucket name (e.g., dentalcare-fotos)."
       );
     }
-    return dir;
+    return bucketName;
   }
 
-  async uploadFile(fileBuffer: Buffer, filename: string, mimeType: string): Promise<string> {
+  async uploadFile(fileBuffer: Buffer, fullObjectPath: string, mimeType: string): Promise<string> {
     try {
-      const privateObjectDir = this.getPrivateObjectDir();
-      const timestamp = Date.now();
-      const fullPath = `${privateObjectDir}/${timestamp}-${filename}`;
-
-      const { bucketName, objectName } = this.parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
+      const bucket = objectStorageClient.bucket(this.getBucketName());
+      const file = bucket.file(fullObjectPath);
 
       await file.save(fileBuffer, {
         contentType: mimeType,
@@ -69,32 +59,25 @@ export class ObjectStorageService {
         },
       });
 
-      // --- CORREÇÃO DA EXPIRAÇÃO (MÁXIMO DE 7 DIAS) ---
-      const maxExpiration = 7 * 24 * 60 * 60 * 1000; // 7 dias em milissegundos
+      // Generate signed URL (valid for 7 days - Google Cloud max)
+      const maxExpiration = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
       const [url] = await file.getSignedUrl({
         version: 'v4',
         action: 'read',
-        expires: Date.now() + maxExpiration, // Corrigido para 7 dias
+        expires: Date.now() + maxExpiration,
       });
 
-      // Esta URL será algo como: "https://storage.googleapis.com/..."
       return url;
-
     } catch (error: any) {
       console.error(
-        "Falha grave no ObjectStorageService.uploadFile:", 
+        "Fatal error in ObjectStorageService.uploadFile:", 
         error.message, 
         error
       );
-      // Lança o erro para que o 'catch' do app.post seja ativado
       throw new Error(error.message || "Failed to upload file to object storage");
     }
   }
-
-  // ... (O restante do arquivo: deleteFile, downloadFile, etc.) ...
-  // O restante do seu arquivo parece correto, apenas cole o código acima
-  // no lugar do `uploadFile` e da inicialização do `objectStorageClient`.
 
   async deleteFile(fileUrl: string): Promise<void> {
     try {
@@ -103,9 +86,8 @@ export class ObjectStorageService {
         return;
       }
 
-      const { bucketName, objectName } = this.parseObjectPath(objectPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
+      const bucket = objectStorageClient.bucket(this.getBucketName());
+      const file = bucket.file(objectPath);
 
       const [exists] = await file.exists();
       if (exists) {
@@ -118,38 +100,26 @@ export class ObjectStorageService {
 
   private extractObjectPathFromUrl(url: string): string | null {
     try {
-      if (url.startsWith('gcs://')) {
-        return `/${url.replace('gcs://', '')}`;
-      }
       if (url.startsWith('http')) {
+        // Extract path from signed URL
+        // URL format: https://storage.googleapis.com/bucket-name/path/to/file?X-Goog-Algorithm=...
         const urlObj = new URL(url);
         const pathname = urlObj.pathname;
-        return pathname;
+        
+        // Remove leading slash and bucket name
+        // pathname is like: /bucket-name/clinicId/patients/...
+        const pathParts = pathname.split('/').filter(p => p.length > 0);
+        
+        // Remove bucket name (first part) and return the rest
+        if (pathParts.length > 1) {
+          return pathParts.slice(1).join('/');
+        }
       }
-      return url;
+      
+      // For local paths (/uploads/...), return as is
+      return url.startsWith('/') ? url.substring(1) : url;
     } catch {
       return null;
     }
-  }
-
-  private parseObjectPath(path: string): {
-    bucketName: string;
-    objectName: string;
-  } {
-    if (!path.startsWith("/")) {
-      path = `/${path}`;
-    }
-    const pathParts = path.split("/").filter(p => p.length > 0);
-    if (pathParts.length < 2) {
-      throw new Error("Invalid path: must contain at least a bucket name and object name");
-    }
-
-    const bucketName = pathParts[0];
-    const objectName = pathParts.slice(1).join("/");
-
-    return {
-      bucketName,
-      objectName,
-    };
   }
 }
