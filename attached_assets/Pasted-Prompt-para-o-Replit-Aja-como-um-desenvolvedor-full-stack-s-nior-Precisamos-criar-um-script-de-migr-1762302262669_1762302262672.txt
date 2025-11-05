@@ -1,0 +1,54 @@
+Prompt para o Replit
+Aja como um desenvolvedor full-stack sênior. Precisamos criar um script de migração de dados robusto, que será executado manualmente para organizar os arquivos existentes no Object Storage.
+
+Contexto: Acabamos de refatorar nossa aplicação para salvar fotos em pastas por clínica (ex: [clinicId]/patients/[patientId]/...). No entanto, temos cerca de 3.000 fotos de pacientes na pasta raiz uploads_foto e as photo_url no banco de dados ainda apontam para lá.
+
+Tarefa: Crie um novo script (server/run-migration.ts) que aceite parâmetros de linha de comando para controlar a execução:
+
+Se o script for chamado com o ID 0 (ex: npm run migrate 0), ele deve migrar todos os pacientes.
+
+Se o script for chamado com um ID de paciente específico (ex: npm run migrate abc-123-xyz), ele deve migrar apenas esse paciente.
+
+Lógica Detalhada do Script:
+
+Ler Parâmetros:
+
+O script deve ler o ID do parâmetro da linha de comando (disponível em process.argv[2]).
+
+Se nenhum parâmetro for fornecido, deve exibir uma mensagem de erro (console.error('Uso: npm run migrate [0 para todos | ID_DO_PACIENTE]')) e sair.
+
+Conectar ao Banco de Dados e Serviços:
+
+O script precisa de acesso ao serviço de storage (banco de dados) e ao ObjectStorageService.
+
+Buscar Pacientes (Lógica Condicional):
+
+O script deve criar uma lista patientsToMigrate.
+
+Se o ID do parâmetro for 0: Preencha a lista com todos os pacientes (ex: await storage.getAllPatients()).
+
+Se o ID for um ID específico: Tente buscar o paciente (ex: await storage.getPatientById(patientId)). Se encontrado, coloque-o na lista. Se não for encontrado, exiba um erro (Paciente não encontrado: ${patientId}) e saia.
+
+Processar a Lista:
+
+Fazer um loop (for...of) pela lista patientsToMigrate.
+
+Filtrar: Para cada paciente, verificar se a photo_url atual existe e aponta para a pasta antiga (deve conter /uploads_foto/). Se não apontar, pular para o próximo paciente ([INFO] Paciente ${paciente.id} não precisa de migração.).
+
+Migrar:
+
+Extrair o oldObjectPath da oldPhotoUrl (ex: uploads_foto/176...-photo.jpg).
+
+Extrair o nome do arquivo (ex: 176...-photo.jpg).
+
+Definir o newObjectPath: [paciente.clinicId]/patients/[paciente.id]/[filename].
+
+Mover o Arquivo: await objectStorageClient.bucket(bucketName).file(oldObjectPath).move(newObjectPath);
+
+Gerar Nova URL: Gerar uma nova URL assinada (getSignedUrl) para o newObjectPath.
+
+Atualizar o Banco: Atualizar a photo_url na tabela patients com a newSignedUrl.
+
+Logar Progresso: Adicionar console.log para sucesso ([OK] Migrado Paciente ${paciente.id}) e console.error para falhas ([ERRO] Paciente ${paciente.id}: ${error.message}).
+
+Por favor, forneça o código completo para este script de migração (server/run-migration.ts).

@@ -77,6 +77,7 @@ export interface IStorage {
   // Patient methods
   createPatient(patient: InsertPatient): Promise<Patient>;
   getPatientsByClinic(clinicId: string): Promise<Patient[]>;
+  getAllPatients(): Promise<Patient[]>;
   getPatientById(id: string, clinicId: string): Promise<Patient | undefined>;
   getPatientByExternalId(externalId: string, clinicId: string): Promise<Patient | undefined>;
   updatePatient(id: string, updates: Partial<InsertPatient>, clinicId: string): Promise<Patient | undefined>;
@@ -231,6 +232,13 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(patients)
       .where(eq(patients.clinicId, clinicId))
+      .orderBy(desc(patients.createdAt));
+  }
+
+  async getAllPatients(): Promise<Patient[]> {
+    return await db
+      .select()
+      .from(patients)
       .orderBy(desc(patients.createdAt));
   }
 
