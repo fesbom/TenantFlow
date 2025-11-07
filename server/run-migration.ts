@@ -4,6 +4,8 @@ import { db } from "./db";
 import { patients } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
+console.log(`[DEBUG] Script iniciado. DATABASE_URL lida: ${process.env.DATABASE_URL}`);
+
 // Validate and load credentials
 let credentialsJson;
 if (!process.env.GOOGLE_CREDENTIALS) {
@@ -67,7 +69,7 @@ async function main() {
       .limit(1);
     
     if (!patient) {
-      console.error(`[ERRO] Paciente não encontrado: ${param}`);
+      console.error(`[ERRO.] Paciente não encontrado: ${param}`);
       process.exit(1);
     }
     

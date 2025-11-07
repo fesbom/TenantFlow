@@ -31,6 +31,8 @@ import {
   insertClinicSchema,
 } from "@shared/schema";
 
+import multer from 'multer';
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve uploaded files
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
@@ -448,21 +450,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/clinic/upload-logo", authenticateToken, requireRole(["admin"]), upload.single('logo'), async (req: AuthenticatedRequest, res) => {
+  // Usamos memoryStorage() para garantir que req.file.buffer seja preenchido.
+  const uploadLogo = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // Limite de 5MB
+  });
+  
+  app.post("/api/clinic/upload-logo", authenticateToken, requireRole(["admin"]), uploadLogo.single('logo'), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: "Nenhum arquivo foi enviado"
         });
       }
 
       const clinicId = req.user!.clinicId;
-      
+
       // Validate clinicId to prevent path traversal
       if (!/^[a-zA-Z0-9_-]+$/.test(clinicId)) {
         return res.status(400).json({ message: "Invalid clinic ID" });
       }
-      
+
       const timestamp = Date.now();
       // Sanitize filename to prevent path traversal
       const safeName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -474,9 +482,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isProduction) {
         try {
           const objectStorageService = new ObjectStorageService();
+          // O caminho agora inclui o ID da clínica para organização (multi-tenancy)
           const objectPath = `${clinicId}/profile/${filename}`;
+
           logoUrl = await objectStorageService.uploadFile(
-            req.file.buffer,
+            req.file.buffer, // Agora isso NÃO será undefined
             objectPath,
             req.file.mimetype
           );
@@ -492,9 +502,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (storageError: any) {
           console.error("Object storage error:", storageError);
-          return res.status(500).json({ 
+          return res.status(500).json({
             message: "Falha ao processar upload do logo.",
-            error: storageError.message 
+            error: storageError.message
           });
         }
       } else {
@@ -503,7 +513,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }
-        
+
         // Delete old logo if it exists
         const clinic = await storage.getClinicById(clinicId);
         if (clinic?.logoUrl && clinic.logoUrl.startsWith('/uploads/')) {
@@ -528,7 +538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ logoUrl, clinic: updatedClinic });
     } catch (error: any) {
       console.error("Upload logo error:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: "Erro ao fazer upload do logo",
         error: error.message
       });
