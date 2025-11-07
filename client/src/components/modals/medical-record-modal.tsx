@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { uploadFiles } from "@/lib/api";
 import { Patient, MedicalRecord } from "@/types";
 import { Camera, X, Upload, User } from "lucide-react";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
+import { TreatmentPhotoUpload } from "@/components/treatment/treatment-photo-upload";
 
 interface MedicalRecordModalProps {
   isOpen: boolean;
@@ -38,6 +40,8 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string>("");
 
   useEffect(() => {
     if (record) {
@@ -136,6 +140,11 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
 
   const removeExistingImage = (index: number) => {
     setExistingImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleImageClick = (imageUrl: string) => {
+    setLightboxImage(imageUrl);
+    setLightboxOpen(true);
   };
 
   const procedures = [
@@ -265,26 +274,42 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
             {!record && (
               <div className="space-y-2">
                 <Label>Fotos do Procedimento</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
                   <input
                     type="file"
                     multiple
                     accept="image/*"
+                    capture="environment"
                     onChange={handleFileSelect}
                     className="hidden"
                     id="file-input"
                     data-testid="input-images"
                   />
                   <label htmlFor="file-input" className="cursor-pointer">
-                    <div className="space-y-2">
+                    <div className="space-y-2 text-center">
                       <Camera className="h-8 w-8 mx-auto text-gray-400" />
                       <p className="text-sm text-gray-600">
-                        Clique para adicionar fotos ou arraste aqui
+                        Clique para adicionar fotos ou use a câmera
                       </p>
-                      <Button type="button" variant="outline" size="sm">
-                        <Upload className="h-4 w-4 mr-2" />
-                        Selecionar Arquivos
-                      </Button>
+                      <div className="flex justify-center gap-2">
+                        <Button type="button" variant="outline" size="sm">
+                          <Upload className="h-4 w-4 mr-2" />
+                          Selecionar Arquivos
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            const input = document.getElementById('file-input') as HTMLInputElement;
+                            if (input) input.click();
+                          }}
+                        >
+                          <Camera className="h-4 w-4 mr-2" />
+                          Tirar Foto
+                        </Button>
+                      </div>
                     </div>
                   </label>
                 </div>
@@ -292,23 +317,28 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
                 {/* Preview selected files */}
                 {selectedFiles.length > 0 && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                    {selectedFiles.map((file, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={URL.createObjectURL(file)}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg border border-gray-200"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeFile(index)}
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          data-testid={`button-remove-new-image-${index}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
+                    {selectedFiles.map((file, index) => {
+                      const fileUrl = URL.createObjectURL(file);
+                      return (
+                        <div key={index} className="relative group">
+                          <img
+                            src={fileUrl}
+                            alt={`Preview ${index + 1}`}
+                            className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => handleImageClick(fileUrl)}
+                            data-testid={`img-preview-${index}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeFile(index)}
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            data-testid={`button-remove-new-image-${index}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -324,15 +354,20 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
                       <img
                         src={imagePath}
                         alt={`Procedimento ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                        className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => handleImageClick(imagePath)}
                         onError={(e) => {
                           e.currentTarget.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMiAxNkM4LjY4NjI5IDE2IDYgMTMuMzEzNyA2IDEwQzYgNi42ODYyOSA4LjY4NjI5IDQgMTIgNEMxNS4zMTM3IDQgMTggNi42ODYyOSAxOCAxMEMxOCAxMy4zMTM3IDE1LjMxMzcgMTYgMTIgMTZaTTEyIDEyQzEzLjEwNDYgMTIgMTQgMTEuMTA0NiAxNCA5LjVDMTQgOC4zOTU0MyAxMy4xMDQ2IDcuNSAxMiA3LjVDMTAuODk1NCA3LjUgMTAgOC4zOTU0MyAxMCA5LjVDMTAgMTEuMTA0NiAxMC44OTU0IDEyIDEyIDEyWiIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K";
                         }}
+                        data-testid={`img-existing-${index}`}
                       />
                       {!record && (
                         <button
                           type="button"
-                          onClick={() => removeExistingImage(index)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeExistingImage(index);
+                          }}
                           className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                           data-testid={`button-remove-existing-image-${index}`}
                         >
@@ -367,6 +402,13 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
           </div>
         </form>
       </DialogContent>
+
+      <ImageLightbox
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        imageSrc={lightboxImage}
+        imageAlt="Foto do procedimento"
+      />
     </Dialog>
   );
 }

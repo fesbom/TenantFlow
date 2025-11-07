@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { uploadFiles } from "@/lib/api";
 import { Treatment, TreatmentMovement } from "@/types";
-import { Camera, X } from "lucide-react";
+import { TreatmentPhotoUpload } from "@/components/treatment/treatment-photo-upload";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 
 interface TreatmentMovementModalProps {
   isOpen: boolean;
@@ -41,6 +42,8 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string>("");
 
   useEffect(() => {
     if (movement) {
@@ -182,27 +185,20 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: "Arquivo inválido",
-          description: "Apenas arquivos de imagem são permitidos",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setSelectedFile(file);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-    }
+  const handlePhotoSelect = (file: File) => {
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
   };
 
-  const removeImage = () => {
+  const handleRemovePhoto = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
+  };
+
+  const handleImageClick = (imageUrl: string) => {
+    setLightboxImage(imageUrl);
+    setLightboxOpen(true);
   };
 
   const isLoading = createMovementMutation.isPending || updateMovementMutation.isPending;
@@ -283,45 +279,24 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
 
           <div className="space-y-2">
             <Label>Foto da Atividade (opcional)</Label>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => document.getElementById('photo-input')?.click()}
-                  className="flex items-center space-x-2"
-                >
-                  <Camera className="h-4 w-4" />
-                  <span>Selecionar Foto</span>
-                </Button>
-                <input
-                  id="photo-input"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </div>
-              
-              {previewUrl && (
-                <div className="relative inline-block">
-                  <img
-                    src={previewUrl}
-                    alt="Preview"
-                    className="w-32 h-32 object-cover rounded border"
-                  />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={removeImage}
-                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              )}
-            </div>
+            <TreatmentPhotoUpload
+              onPhotoSelect={handlePhotoSelect}
+              currentPhotoUrl={previewUrl}
+              onRemovePhoto={handleRemovePhoto}
+              disabled={isLoading}
+            />
+            {previewUrl && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleImageClick(previewUrl)}
+                className="mt-2"
+                data-testid="button-view-treatment-photo"
+              >
+                Visualizar em tamanho maior
+              </Button>
+            )}
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
@@ -344,6 +319,13 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
           </div>
         </form>
       </DialogContent>
+
+      <ImageLightbox
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        imageSrc={lightboxImage}
+        imageAlt="Foto da atividade"
+      />
     </Dialog>
   );
 }

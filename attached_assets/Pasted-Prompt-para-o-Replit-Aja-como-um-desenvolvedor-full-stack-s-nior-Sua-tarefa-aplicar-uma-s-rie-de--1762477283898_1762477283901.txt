@@ -1,0 +1,36 @@
+Prompt para o Replit
+Aja como um desenvolvedor full-stack sênior. Sua tarefa é aplicar uma série de melhorias de UI/UX no frontend da aplicação, focando na responsividade móvel e na usabilidade da agenda e dos prontuários.
+
+Conforme minhas preferências, reporte a rotina completa de todos os arquivos modificados. Não execute testes funcionais a menos que eu solicite.
+
+Aqui estão os ajustes necessários:
+
+1. Ajustes na Visualização da Agenda (Scheduler View)
+
+Problema: A subdivisão de tempo na agenda está muito pequena, dificultando a visualização.
+
+Ação: Localize o componente da agenda (provavelmente Agenda.tsx, Scheduler.tsx ou similar, que deve usar um componente como FullCalendar ou DayPilot). Ajuste a configuração de visualização (ex: slotDuration ou timeIntervals) para que a grade exiba blocos claros de 30 em 30 minutos.
+
+2. Correções de Usabilidade no Agendamento (Mobile)
+
+Existem dois problemas críticos de usabilidade no celular:
+
+Problema 1: Clicar em um espaço vazio na agenda não abre a modal para criar um novo agendamento.
+
+Ação: Investigue o evento de clique em slots vazios (ex: onSlotClick, onEmptyCellClick ou onTimeRangeSelected) em dispositivos móveis. O evento de toque (onTouchEnd ou onClick) não está disparando a modal de criação. Garanta que um toque em um slot vazio abra a modal de novo agendamento corretamente.
+
+Problema 2: Na modal de agendamento (ao editar ou criar), o dropdown de busca de pacientes se recolhe imediatamente no celular, impedindo a busca.
+
+Ação: No modal de agendamento, o componente de dropdown/combobox de busca de pacientes (provavelmente React-Select ou um input customizado) está perdendo o foco ou se fechando indevidamente ao ser tocado em dispositivos móveis. Corrija os eventos (onFocus, onBlur, onTouchStart, etc.) para que o dropdown permaneça aberto e permita a digitação e seleção no celular.
+
+3. Melhorias no Upload de Fotos (Movimentação do Prontuário)
+
+Problema: A funcionalidade de upload no prontuário precisa ser mais robusta e responsiva.
+
+Ação:
+
+UI Consistente: O frontend do upload de fotos na "Movimentação do Prontuário" deve ser visualmente idêntico ao componente de upload da foto do paciente (no cadastro do paciente). Reutilize o mesmo componente de upload.
+
+Responsividade e Captura de Câmera: Aprimore este componente de upload para ser totalmente responsivo. Adicione a funcionalidade de captura de foto "na hora" (acesso à câmera do celular), utilizando o input HTML com o atributo capture (ex: <input type="file" accept="image/*" capture="environment">).
+
+Visualizador de Imagem (Lightbox): Implemente um visualizador de imagens (lightbox). Ao clicar em uma imagem já salva no prontuário, deve abrir uma modal que exiba a imagem em tamanho maior, com funcionalidades de zoom (pan/zoom) e um botão de download para o usuário.

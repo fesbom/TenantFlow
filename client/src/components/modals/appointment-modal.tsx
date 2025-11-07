@@ -218,8 +218,15 @@ export default function AppointmentModal({
                 <SelectTrigger data-testid="select-appointment-patient">
                   <SelectValue placeholder="Selecione um paciente" />
                 </SelectTrigger>
-                <SelectContent>
-                  <div className="p-2">
+                <SelectContent
+                  onPointerDownOutside={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest('input') || target.tagName === 'INPUT') {
+                      e.preventDefault();
+                    }
+                  }}
+                >
+                  <div className="p-2" onPointerDown={(e) => e.stopPropagation()}>
                       <div className="relative">
                           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
                           <Input 
@@ -227,6 +234,7 @@ export default function AppointmentModal({
                               className="pl-8"
                               value={patientSearchTerm}
                               onChange={(e) => setPatientSearchTerm(e.target.value)}
+                              onKeyDown={(e) => e.stopPropagation()}
                           />
                       </div>
                   </div>
