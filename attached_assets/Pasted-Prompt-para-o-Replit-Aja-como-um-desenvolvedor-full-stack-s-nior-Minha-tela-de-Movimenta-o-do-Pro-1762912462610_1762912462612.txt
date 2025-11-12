@@ -1,0 +1,30 @@
+Prompt para o Replit
+Aja como um desenvolvedor full-stack sênior. Minha tela de "Movimentação do Prontuário" possui problemas críticos na funcionalidade de fotos que precisam ser corrigidos e aprimorados.
+
+Conforme minhas preferências, reporte a rotina completa de todos os arquivos modificados. Não execute testes funcionais a menos que eu solicite.
+
+Aqui estão os ajustes necessários:
+
+1. Correção da Captura de Foto "Na Hora" (Botão "Tirar Foto")
+
+Problema: O botão "Tirar Foto" (marcado com "1" na imagem) não está abrindo a câmera diretamente. Em vez disso, ele abre o seletor de arquivos gravados do dispositivo, o que é contra a intenção de captura imediata.
+
+Ação: Localize o componente ou o input HTML associado ao botão "Tirar Foto" na tela de "Movimentação do Prontuário". Garanta que este input esteja configurado corretamente para acionar a câmera do dispositivo, especialmente em celulares. Isso geralmente é feito adicionando ou corrigindo o atributo capture="environment" (para câmera traseira) ou capture="user" (para câmera frontal) no input do tipo file, além de accept="image/*".
+
+2. Aprimoramento da Visualização da Foto (Lightbox com Zoom e Download)
+
+Problema: A foto postada (marcada com "2" na imagem) é exibida em tamanho médio, o que é insuficiente para um dentista estudar detalhes. É fundamental que a imagem possa ser visualizada em tamanho maior e com a capacidade de zoom.
+
+Ação:
+
+Exibição Maior: Ajuste o estilo CSS ou a lógica de renderização para que a imagem seja exibida em um tamanho maior por padrão na tela de movimentação do prontuário, aproveitando melhor o espaço disponível (sem exceder as dimensões da tela, claro).
+
+Visualizador de Imagem (Lightbox/Modal): Implemente uma funcionalidade de "visualizador de imagem" (geralmente conhecida como Lightbox ou Modal de visualização de imagem).
+
+Quando o dentista clicar na imagem exibida (a foto de tamanho médio), deve abrir uma nova modal que mostre a imagem em tamanho máximo possível.
+
+Esta modal deve incluir funcionalidades de zoom (permitindo ao dentista ampliar e navegar pela imagem para ver detalhes finos).
+
+Deve haver um botão de download dentro dessa modal para que o dentista possa baixar a imagem original para o seu dispositivo, se necessário.
+
+Por favor, execute essas alterações e me retorne o código completo de todos os arquivos modificados.
