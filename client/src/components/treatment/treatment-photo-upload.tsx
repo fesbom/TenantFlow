@@ -71,11 +71,17 @@ export function TreatmentPhotoUpload({
   }, [isWebcamActive, toast]);
 
   const handleFileSelect = () => {
-    fileInputRef.current?.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
   };
 
   const handleCameraCapture = () => {
-    cameraInputRef.current?.click();
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
+      cameraInputRef.current.click();
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

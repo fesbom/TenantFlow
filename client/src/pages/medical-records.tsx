@@ -17,7 +17,8 @@ import TreatmentMovementModal from "@/components/modals/treatment-movement-modal
 import AnamnesisModal from "@/components/modals/anamnesis-modal";
 import BudgetDiscountModal from "@/components/modals/budget-discount-modal";
 import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement } from "@/types";
-import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 
 interface PaginatedPatientsResponse {
   data: Patient[];
@@ -54,6 +55,8 @@ export default function MedicalRecords() {
   const [isBudgetDiscountModalOpen, setIsBudgetDiscountModalOpen] = useState(false);
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<BudgetItem | null>(null);
   const [selectedMovement, setSelectedMovement] = useState<TreatmentMovement | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string>("");
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -162,6 +165,12 @@ export default function MedicalRecords() {
   const handleEditMovement = (movement: TreatmentMovement) => {
     setSelectedMovement(movement);
     setIsTreatmentMovementModalOpen(true);
+  };
+
+  const handleImageClick = (imageUrl: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLightboxImage(imageUrl);
+    setLightboxOpen(true);
   };
 
 
@@ -334,10 +343,49 @@ export default function MedicalRecords() {
                           </div>
                           {treatmentMovements.length > 0 ? (
                             <Table>
-                                <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Região</TableHead><TableHead>Dente</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Data</TableHead>
+                                    <TableHead>Descrição</TableHead>
+                                    <TableHead>Região</TableHead>
+                                    <TableHead>Dente</TableHead>
+                                    <TableHead className="text-right">Valor</TableHead>
+                                    <TableHead className="text-center">Foto</TableHead>
+                                  </TableRow>
+                                </TableHeader>
                                 <TableBody>
                                     {treatmentMovements.map(mov => (
-                                        <TableRow key={mov.id} data-testid={`row-movement-${mov.id}`} onClick={() => handleEditMovement(mov)} className="cursor-pointer hover:bg-gray-50"><TableCell>{formatDateBR(mov.dataMovimentacao)}</TableCell><TableCell>{mov.descricaoAtividade}</TableCell><TableCell>{mov.region || "-"}</TableCell><TableCell>{mov.toothNumber || "-"}</TableCell><TableCell className="text-right">{formatCurrency(mov.valorServico)}</TableCell></TableRow>
+                                        <TableRow 
+                                          key={mov.id} 
+                                          data-testid={`row-movement-${mov.id}`} 
+                                          onClick={() => handleEditMovement(mov)} 
+                                          className="cursor-pointer hover:bg-gray-50"
+                                        >
+                                          <TableCell>{formatDateBR(mov.dataMovimentacao)}</TableCell>
+                                          <TableCell>{mov.descricaoAtividade}</TableCell>
+                                          <TableCell>{mov.region || "-"}</TableCell>
+                                          <TableCell>{mov.toothNumber || "-"}</TableCell>
+                                          <TableCell className="text-right">{formatCurrency(mov.valorServico)}</TableCell>
+                                          <TableCell className="text-center">
+                                            {mov.fotoAtividade ? (
+                                              <div 
+                                                className="inline-flex items-center justify-center"
+                                                onClick={(e) => handleImageClick(mov.fotoAtividade!, e)}
+                                              >
+                                                <img
+                                                  src={mov.fotoAtividade}
+                                                  alt="Foto da atividade"
+                                                  className="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                                                  data-testid={`img-movement-${mov.id}`}
+                                                />
+                                              </div>
+                                            ) : (
+                                              <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-lg border border-gray-200">
+                                                <ImageIcon className="h-6 w-6 text-gray-400" />
+                                              </div>
+                                            )}
+                                          </TableCell>
+                                        </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
@@ -358,6 +406,13 @@ export default function MedicalRecords() {
       <TreatmentMovementModal isOpen={isTreatmentMovementModalOpen} onClose={() => setIsTreatmentMovementModalOpen(false)} treatment={selectedTreatment} movement={selectedMovement} />
       <AnamnesisModal isOpen={isAnamnesisModalOpen} onClose={() => setIsAnamnesisModalOpen(false)} treatment={selectedTreatment} />
       <BudgetDiscountModal isOpen={isBudgetDiscountModalOpen} onClose={() => setIsBudgetDiscountModalOpen(false)} treatment={selectedTreatment} budgetSummary={budgetSummary || null} />
+      
+      <ImageLightbox
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        imageSrc={lightboxImage}
+        imageAlt="Foto da movimentação"
+      />
     </div>
   );
 }
