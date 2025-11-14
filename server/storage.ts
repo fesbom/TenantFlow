@@ -141,6 +141,7 @@ export interface IStorage {
   // Treatment Movement methods
   createTreatmentMovement(movement: InsertTreatmentMovement): Promise<TreatmentMovement>;
   getTreatmentMovementsByTreatment(treatmentId: string): Promise<TreatmentMovement[]>;
+  getTreatmentMovementById(id: string): Promise<TreatmentMovement | undefined>;
   updateTreatmentMovement(id: string, updates: Partial<InsertTreatmentMovement>): Promise<TreatmentMovement | undefined>;
   deleteTreatmentMovement(id: string): Promise<boolean>;
 
@@ -739,6 +740,14 @@ export class DatabaseStorage implements IStorage {
       .from(treatmentMovements)
       .where(eq(treatmentMovements.treatmentId, treatmentId))
       .orderBy(desc(treatmentMovements.dataMovimentacao));
+  }
+
+  async getTreatmentMovementById(id: string): Promise<TreatmentMovement | undefined> {
+    const [movement] = await db
+      .select()
+      .from(treatmentMovements)
+      .where(eq(treatmentMovements.id, id));
+    return movement || undefined;
   }
 
   async updateTreatmentMovement(id: string, updates: Partial<InsertTreatmentMovement>): Promise<TreatmentMovement | undefined> {

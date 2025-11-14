@@ -42,6 +42,7 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string>("");
 
@@ -58,6 +59,7 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
       if (movement.fotoAtividade) {
         setPreviewUrl(movement.fotoAtividade);
       }
+      setPhotoRemoved(false);
     } else if (treatment) {
       setFormData({
         treatmentId: treatment.id,
@@ -67,6 +69,7 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
         region: "",
         toothNumber: "",
       });
+      setPhotoRemoved(false);
     }
     setSelectedFile(null);
   }, [movement, treatment]);
@@ -129,8 +132,13 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
         formDataToSend.append("toothNumber", data.toothNumber);
       }
 
+      // Handle photo changes
       if (selectedFile) {
+        // New photo selected - will replace existing one
         formDataToSend.append("photo", selectedFile);
+      } else if (photoRemoved && movement?.fotoAtividade) {
+        // Photo explicitly removed and there was one before
+        formDataToSend.append("removePhoto", "true");
       }
 
       const response = await uploadFiles(`/api/treatment-movements/${movement.id}`, formDataToSend, 'PUT');
@@ -189,11 +197,13 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
     setSelectedFile(file);
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+    setPhotoRemoved(false);
   };
 
   const handleRemovePhoto = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
+    setPhotoRemoved(true);
   };
 
   const handleImageClick = (imageUrl: string) => {

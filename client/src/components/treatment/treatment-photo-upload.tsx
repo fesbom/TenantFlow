@@ -25,7 +25,6 @@ export function TreatmentPhotoUpload({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setPreviewUrl(currentPhotoUrl || null);
@@ -77,11 +76,16 @@ export function TreatmentPhotoUpload({
     }
   };
 
-  const handleCameraCapture = () => {
-    if (cameraInputRef.current) {
-      cameraInputRef.current.value = '';
-      cameraInputRef.current.click();
+  const startWebcam = () => {
+    setIsWebcamActive(true);
+  };
+
+  const stopWebcam = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    setIsWebcamActive(false);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,14 +120,6 @@ export function TreatmentPhotoUpload({
     setIsModalOpen(false);
   };
 
-  const startWebcam = () => {
-    setIsWebcamActive(true);
-  };
-
-  const stopWebcam = () => {
-    setIsWebcamActive(false);
-  };
-
   const capturePhoto = () => {
     if (videoRef.current) {
       const canvas = document.createElement('canvas');
@@ -151,7 +147,6 @@ export function TreatmentPhotoUpload({
     if (onRemovePhoto) {
       onRemovePhoto();
     }
-    setIsModalOpen(false);
   };
 
   return (
@@ -161,47 +156,14 @@ export function TreatmentPhotoUpload({
           <Button
             type="button"
             variant="outline"
-            onClick={handleFileSelect}
+            onClick={() => setIsModalOpen(true)}
             disabled={disabled}
             className="flex items-center gap-2"
-            data-testid="button-upload-treatment-photo"
-          >
-            <Upload className="h-4 w-4" />
-            <span>Carregar Arquivo</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleCameraCapture}
-            disabled={disabled}
-            className="flex items-center gap-2"
-            data-testid="button-camera-treatment-photo"
+            data-testid="button-open-photo-options"
           >
             <Camera className="h-4 w-4" />
-            <span>Tirar Foto</span>
+            <span>{previewUrl ? "Alterar Foto" : "Adicionar Foto"}</span>
           </Button>
-
-          {/* File input for upload */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="hidden"
-            data-testid="input-file-upload"
-          />
-
-          {/* Camera input with capture attribute for mobile */}
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileChange}
-            className="hidden"
-            data-testid="input-camera-capture"
-          />
         </div>
 
         {/* Preview of selected/current photo */}
@@ -229,10 +191,53 @@ export function TreatmentPhotoUpload({
         )}
       </div>
 
-      {/* Webcam Modal (for desktop/devices that support it) */}
-      <Dialog open={isModalOpen && isWebcamActive} onOpenChange={(open) => {
+      {/* Photo Options Modal */}
+      <Dialog open={isModalOpen && !isWebcamActive} onOpenChange={(open) => {
         setIsModalOpen(open);
         if (!open) stopWebcam();
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Foto da Atividade</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+              data-testid="input-file-upload"
+            />
+
+            <Button
+              onClick={handleFileSelect}
+              className="w-full"
+              variant="outline"
+              data-testid="button-upload-treatment-photo"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Carregar Arquivo
+            </Button>
+
+            <Button
+              onClick={startWebcam}
+              className="w-full"
+              variant="outline"
+              data-testid="button-camera-treatment-photo"
+            >
+              <Camera className="w-4 h-4 mr-2" />
+              Tirar Foto (Câmera)
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Webcam Modal */}
+      <Dialog open={isWebcamActive} onOpenChange={(open) => {
+        if (!open) stopWebcam();
+        setIsWebcamActive(open);
       }}>
         <DialogContent>
           <DialogHeader>
@@ -246,6 +251,7 @@ export function TreatmentPhotoUpload({
                 autoPlay
                 playsInline
                 className="w-full"
+                data-testid="video-webcam-preview"
               />
             </div>
             <div className="flex justify-center gap-3">

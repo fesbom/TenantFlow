@@ -1,0 +1,37 @@
+Aja como um desenvolvedor full-stack sênior. Sua tarefa é depurar duas funcionalidades que não estão funcionando corretamente, mesmo após sua última tentativa de correção.
+
+Conforme minhas preferências, reporte a rotina completa de todos os arquivos modificados. Não execute testes funcionais a menos que eu solicite.
+
+Feedback da Última Rodada: A visualização da imagem (Lightbox) funcionou perfeitamente! Ótimo trabalho nisso.
+
+No entanto, ainda temos dois problemas críticos (um antigo e um novo):
+
+1. BUG AINDA PRESENTE: Captura de Foto (Botão "Tirar Foto")
+
+O Problema: Na tela de "Movimentação do Prontuário", o botão "Tirar Foto" ainda abre o seletor de arquivos do dispositivo, em vez de abrir a câmera.
+
+Sua Análise Anterior: Você mencionou que capture="environment" já estava lá e que isso era uma "limitação do navegador".
+
+Minha Depuração: Sua análise está incorreta. A funcionalidade de "Tirar Foto" na tela de Cadastro do Paciente (para o avatar) funciona perfeitamente no mesmo dispositivo/navegador.
+
+Ação Corretiva: O bug está na diferença de implementação entre os dois componentes. Por favor, copie a implementação exata (HTML/TSX/Hooks) do componente de upload da foto do paciente (o que funciona) e aplique essa mesma lógica no componente TreatmentPhotoUpload (o que está quebrado).
+
+2. NOVO BUG: Falha ao Excluir Foto na Edição
+
+O Problema: Ao editar uma movimentação que já possui uma foto:
+
+Eu clico no "X" no canto da imagem para removê-la.
+
+A imagem desaparece da interface (frontend funciona).
+
+Eu clico no botão "Atualizar" para salvar a movimentação.
+
+A movimentação é salva, mas a foto não é excluída do Object Storage e a photo_url não é limpa no banco de dados.
+
+Ação Corretiva: O endpoint do backend PUT /api/movements/:id (ou seja qual for a rota de atualização da movimentação) precisa ser modificado.
+
+Quando o frontend "remove" a foto (clicando no X) e envia a atualização, ele deve enviar a informação de que a foto foi removida (ex: enviando photoUrl: null).
+
+O backend, ao receber este pedido de atualização, deve: a. Verificar se a photo_url no banco de dados é diferente da enviada (ex: o banco tem uma URL e o frontend enviou null). b. Se sim, chamar objectStorageService.deleteFile(urlDaFotoAntiga) para excluir o arquivo do bucket. c. Atualizar o registro da movimentação no banco de dados com a photo_url: null.
+
+Por favor, execute essas duas correções (a da Câmera e a da Exclusão) e me retorne o código completo de todos os arquivos modificados.

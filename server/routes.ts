@@ -1495,18 +1495,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/treatment-movements/:id", authenticateToken, upload.single('photo'), async (req, res) => {
     try {
       const { id } = req.params;
-      const movementData = { ...req.body };
-
-      if (req.file) {
-        movementData.fotoAtividade = `/uploads/${req.file.filename}`;
+      
+      // Get current movement first
+      const currentMovement = await storage.getTreatmentMovementById(id);
+      if (!currentMovement) {
+        return res.status(404).json({ message: "Treatment movement not found" });
       }
 
+      // Parse and validate the movement data (excluding photo fields)
+      const movementData = { ...req.body };
+      delete movementData.removePhoto; // Remove non-schema field before validation
+      
       const result = insertTreatmentMovementSchema.partial().safeParse(movementData);
       if (!result.success) {
         return res.status(400).json({ message: "Invalid treatment movement data", errors: result.error.errors });
       }
 
-      const movement = await storage.updateTreatmentMovement(id, result.data);
+      const validatedData = result.data;
+      const removePhoto = String(req.body.removePhoto).toLowerCase() === 'true';
+
+      // Handle photo operations
+      if (req.file) {
+        // New photo uploaded - delete old one if exists
+        if (currentMovement.fotoAtividade) {
+          if (currentMovement.fotoAtividade.startsWith('gcs://') || currentMovement.fotoAtividade.startsWith('http')) {
+            try {
+              const objectStorageService = new ObjectStorageService();
+              await objectStorageService.deleteFile(currentMovement.fotoAtividade);
+            } catch (deleteError) {
+              console.error("Error deleting old photo from object storage:", deleteError);
+            }
+          } else if (currentMovement.fotoAtividade.startsWith('/uploads/')) {
+            try {
+              const filePath = path.join(process.cwd(), currentMovement.fotoAtividade.replace(/^\//, ''));
+              if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+              }
+            } catch (deleteError) {
+              console.error("Error deleting old photo from filesystem:", deleteError);
+            }
+          }
+        }
+        validatedData.fotoAtividade = `/uploads/${req.file.filename}`;
+      } else if (removePhoto && currentMovement.fotoAtividade) {
+        // Photo removal requested (and no new file) - delete old one
+        if (currentMovement.fotoAtividade.startsWith('gcs://') || currentMovement.fotoAtividade.startsWith('http')) {
+          try {
+            const objectStorageService = new ObjectStorageService();
+            await objectStorageService.deleteFile(currentMovement.fotoAtividade);
+          } catch (deleteError) {
+            console.error("Error deleting photo from object storage:", deleteError);
+          }
+        } else if (currentMovement.fotoAtividade.startsWith('/uploads/')) {
+          try {
+            const filePath = path.join(process.cwd(), currentMovement.fotoAtividade.replace(/^\//, ''));
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          } catch (deleteError) {
+            console.error("Error deleting photo from filesystem:", deleteError);
+          }
+        }
+        validatedData.fotoAtividade = null;
+      }
+
+      const movement = await storage.updateTreatmentMovement(id, validatedData);
       if (!movement) {
         return res.status(404).json({ message: "Treatment movement not found" });
       }
