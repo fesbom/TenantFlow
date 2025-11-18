@@ -59,11 +59,11 @@ export class ObjectStorageService {
         },
       });
 
-      // Generate signed URL (valid for 7 days - Google Cloud max)
-      const maxExpiration = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+      // Generate signed URL (valid for 100 anos - Google Cloud max)
+      const maxExpiration = Date.now() + 100 * 365 * 24 * 60 * 60 * 1000;
 
       const [url] = await file.getSignedUrl({
-        version: 'v4',
+        version: 'v2',
         action: 'read',
         expires: Date.now() + maxExpiration,
       });

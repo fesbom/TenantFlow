@@ -147,9 +147,9 @@ async function main() {
       // Move the file
       await oldFile.move(newObjectPath);
 
-      // Generate new signed URL (7 days - Google Cloud max)
+      // Generate new signed URL (100 anos - Google Cloud max)
       const newFile = bucket.file(newObjectPath);
-      const maxExpiration = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+      const maxExpiration = Date.now() + 100 * 365 * 24 * 60 * 60 * 1000;
       
       const [newSignedUrl] = await newFile.getSignedUrl({
         version: 'v4',
