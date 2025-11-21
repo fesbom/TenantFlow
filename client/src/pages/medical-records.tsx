@@ -375,17 +375,17 @@ export default function MedicalRecords() {
                                                 <img
                                                   src={mov.fotoAtividade}
                                                   alt="Foto da atividade"
-                                                  className="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                                                  className="w-24 h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity shadow-sm"
                                                   data-testid={`img-movement-${mov.id}`}
                                                 />
                                               </div>
                                             ) : (
-                                              <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-lg border border-gray-200">
-                                                <ImageIcon className="h-6 w-6 text-gray-400" />
+                                              <div className="inline-flex items-center justify-center w-24 h-24 bg-gray-100 rounded-lg border border-gray-200">
+                                                <ImageIcon className="h-8 w-8 text-gray-400" />
                                               </div>
                                             )}
                                           </TableCell>
-                                        </TableRow>
+                                      </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>

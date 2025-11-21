@@ -46,33 +46,46 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string>("");
 
+  // --- CORREÇÃO APLICADA NESTE USE EFFECT ---
   useEffect(() => {
-    if (movement) {
-      setFormData({
-        treatmentId: movement.treatmentId,
-        dataMovimentacao: movement.dataMovimentacao,
-        descricaoAtividade: movement.descricaoAtividade,
-        valorServico: movement.valorServico,
-        region: movement.region || "",
-        toothNumber: movement.toothNumber || "",
-      });
-      if (movement.fotoAtividade) {
-        setPreviewUrl(movement.fotoAtividade);
+    // Só executa se a modal estiver abrindo ou se o registro mudar
+    if (isOpen) {
+      if (movement) {
+        // MODO EDIÇÃO
+        setFormData({
+          treatmentId: movement.treatmentId,
+          dataMovimentacao: movement.dataMovimentacao,
+          descricaoAtividade: movement.descricaoAtividade,
+          valorServico: movement.valorServico,
+          region: movement.region || "",
+          toothNumber: movement.toothNumber || "",
+        });
+
+        // [CORREÇÃO]: Se tiver foto, usa ela. Se NÃO tiver, força NULL.
+        // Isso limpa a "imagem fantasma" da abertura anterior.
+        setPreviewUrl(movement.fotoAtividade || null);
+
+        setPhotoRemoved(false);
+      } else if (treatment) {
+        // MODO CRIAÇÃO (NOVO)
+        setFormData({
+          treatmentId: treatment.id,
+          dataMovimentacao: new Date().toISOString().split('T')[0],
+          descricaoAtividade: "",
+          valorServico: "",
+          region: "",
+          toothNumber: "",
+        });
+
+        // [CORREÇÃO]: Garante que comece sem foto
+        setPreviewUrl(null);
+
+        setPhotoRemoved(false);
       }
-      setPhotoRemoved(false);
-    } else if (treatment) {
-      setFormData({
-        treatmentId: treatment.id,
-        dataMovimentacao: new Date().toISOString().split('T')[0],
-        descricaoAtividade: "",
-        valorServico: "",
-        region: "",
-        toothNumber: "",
-      });
-      setPhotoRemoved(false);
+      // Sempre limpa o arquivo físico selecionado ao abrir
+      setSelectedFile(null);
     }
-    setSelectedFile(null);
-  }, [movement, treatment]);
+  }, [movement, treatment, isOpen]); 
 
   const createMovementMutation = useMutation({
     mutationFn: async (data: TreatmentMovementFormData) => {
@@ -83,7 +96,7 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
       formDataToSend.append("dataMovimentacao", data.dataMovimentacao);
       formDataToSend.append("descricaoAtividade", data.descricaoAtividade);
       formDataToSend.append("valorServico", data.valorServico);
-      
+
       if (data.region) {
         formDataToSend.append("region", data.region);
       }
@@ -124,7 +137,7 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
       formDataToSend.append("dataMovimentacao", data.dataMovimentacao);
       formDataToSend.append("descricaoAtividade", data.descricaoAtividade);
       formDataToSend.append("valorServico", data.valorServico);
-      
+
       if (data.region) {
         formDataToSend.append("region", data.region);
       }
@@ -163,7 +176,7 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.descricaoAtividade.trim()) {
       toast({
         title: "Descrição obrigatória",
@@ -215,101 +228,105 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      {/* Mantendo as correções de layout da iteração anterior (max-h, flex, overflow) */}
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle>
             {movement ? "Editar Movimentação" : "Nova Movimentação"}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="data">Data da Movimentação</Label>
-            <Input
-              id="data"
-              type="date"
-              value={formData.dataMovimentacao}
-              onChange={(e) => handleInputChange('dataMovimentacao', e.target.value)}
-              data-testid="input-movement-date"
-              required
-            />
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="data">Data da Movimentação</Label>
+              <Input
+                id="data"
+                type="date"
+                value={formData.dataMovimentacao}
+                onChange={(e) => handleInputChange('dataMovimentacao', e.target.value)}
+                data-testid="input-movement-date"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="atividade">Descrição da Atividade</Label>
+              <Textarea
+                id="atividade"
+                value={formData.descricaoAtividade}
+                onChange={(e) => handleInputChange('descricaoAtividade', e.target.value)}
+                placeholder="Descreva a atividade realizada no tratamento..."
+                data-testid="input-movement-description"
+                rows={3}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="valor">Valor do Serviço (R$)</Label>
+              <Input
+                id="valor"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.valorServico}
+                onChange={(e) => handleInputChange('valorServico', e.target.value)}
+                placeholder="0,00"
+                data-testid="input-movement-value"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="region">Região (opcional)</Label>
+              <Input
+                id="region"
+                type="text"
+                value={formData.region || ""}
+                onChange={(e) => handleInputChange('region', e.target.value)}
+                placeholder="Ex: Superior direita, Inferior esquerda..."
+                data-testid="input-movement-region"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="toothNumber">Número do Dente (opcional)</Label>
+              <Input
+                id="toothNumber"
+                type="text"
+                value={formData.toothNumber || ""}
+                onChange={(e) => handleInputChange('toothNumber', e.target.value)}
+                placeholder="Ex: 16, 21, 36-37..."
+                data-testid="input-movement-tooth"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Foto da Atividade (opcional)</Label>
+              <TreatmentPhotoUpload
+                onPhotoSelect={handlePhotoSelect}
+                currentPhotoUrl={previewUrl}
+                onRemovePhoto={handleRemovePhoto}
+                disabled={isLoading}
+              />
+              {previewUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleImageClick(previewUrl)}
+                  className="mt-2 w-full sm:w-auto"
+                  data-testid="button-view-treatment-photo"
+                >
+                  Visualizar em tamanho maior
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="atividade">Descrição da Atividade</Label>
-            <Textarea
-              id="atividade"
-              value={formData.descricaoAtividade}
-              onChange={(e) => handleInputChange('descricaoAtividade', e.target.value)}
-              placeholder="Descreva a atividade realizada no tratamento..."
-              data-testid="input-movement-description"
-              rows={3}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="valor">Valor do Serviço (R$)</Label>
-            <Input
-              id="valor"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.valorServico}
-              onChange={(e) => handleInputChange('valorServico', e.target.value)}
-              placeholder="0,00"
-              data-testid="input-movement-value"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="region">Região (opcional)</Label>
-            <Input
-              id="region"
-              type="text"
-              value={formData.region || ""}
-              onChange={(e) => handleInputChange('region', e.target.value)}
-              placeholder="Ex: Superior direita, Inferior esquerda..."
-              data-testid="input-movement-region"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="toothNumber">Número do Dente (opcional)</Label>
-            <Input
-              id="toothNumber"
-              type="text"
-              value={formData.toothNumber || ""}
-              onChange={(e) => handleInputChange('toothNumber', e.target.value)}
-              placeholder="Ex: 16, 21, 36-37..."
-              data-testid="input-movement-tooth"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Foto da Atividade (opcional)</Label>
-            <TreatmentPhotoUpload
-              onPhotoSelect={handlePhotoSelect}
-              currentPhotoUrl={previewUrl}
-              onRemovePhoto={handleRemovePhoto}
-              disabled={isLoading}
-            />
-            {previewUrl && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => handleImageClick(previewUrl)}
-                className="mt-2"
-                data-testid="button-view-treatment-photo"
-              >
-                Visualizar em tamanho maior
-              </Button>
-            )}
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-4">
+          <div className="flex justify-end space-x-2 p-4 border-t bg-background mt-auto">
             <Button 
               type="button" 
               variant="outline" 
