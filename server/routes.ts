@@ -2377,6 +2377,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Alias route for support panel - GET /api/conversations
+  app.get("/api/conversations", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const conversations = await storage.getWhatsappConversationsByClinic(req.user!.clinicId);
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Alias route for support panel - GET /api/conversations/:id/messages
+  app.get("/api/conversations/:id/messages", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const conversation = await storage.getWhatsappConversationById(id);
+      
+      if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      const messages = await storage.getWhatsappMessagesByConversation(id);
+      res.json({ conversation, messages });
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Alias route for support panel - PATCH /api/conversations/:id/status
+  app.patch("/api/conversations/:id/status", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!status || !["ai", "human"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status. Use 'ai' or 'human'" });
+      }
+
+      const conversation = await storage.getWhatsappConversationById(id);
+      
+      if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      const updated = await storage.updateWhatsappConversation(id, {
+        status,
+        assignedUserId: status === "human" ? req.user!.id : null,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating conversation status:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Get messages for a conversation
   app.get("/api/whatsapp/conversations/:id/messages", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
