@@ -1753,82 +1753,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Webhook for receiving WhatsApp messages from Twilio
   app.post("/api/whatsapp/webhook", async (req, res) => {
+    console.log("\n--- [DEBUG] INÍCIO DO WEBHOOK ---");
+    console.log("Conteúdo recebido (req.body):", JSON.stringify(req.body, null, 2));
+
     try {
       const { From, Body, MessageSid } = req.body;
 
       if (!From || !Body) {
+        console.warn("⚠️ [DEBUG] Campos obrigatórios ausentes (From ou Body).");
         return res.status(400).json({ message: "Missing required fields" });
       }
 
       // Normaliza número (whatsapp:+55...)
       const phone = From.replace("whatsapp:", "");
+      console.log(`📱 [DEBUG] Paciente: ${phone} | Mensagem: "${Body}"`);
 
       // ID da clínica (Idealmente vindo de configuração por número)
-      const clinicId = process.env.WHATSAPP_CLINIC_ID || "default";
+      const clinicId = process.env.WHATSAPP_CLINIC_ID || "1";
+      console.log(`🏥 [DEBUG] Clinic ID em uso: ${clinicId}`);
 
       // Busca ou cria conversa
       let conversation = await storage.getWhatsappConversationByPhone(clinicId, phone);
+
       if (!conversation) {
+        console.log("🆕 [DEBUG] Conversa não encontrada. Criando nova conversa...");
         conversation = await storage.createWhatsappConversation({
           clinicId,
           phone,
           status: 'ai',
         });
       }
+      console.log(`✅ [DEBUG] ID da Conversa no Banco: ${conversation.id} | Status: ${conversation.status}`);
 
       // Salva mensagem do paciente
-      await storage.createWhatsappMessage({
+      const savedMsg = await storage.createWhatsappMessage({
         conversationId: conversation.id,
         sender: 'patient',
         text: Body,
         twilioMessageSid: MessageSid,
       });
+      console.log(`💾 [DEBUG] Mensagem do paciente salva. ID: ${savedMsg.id}`);
 
       // Se em modo IA, processa com Gemini
       if (conversation.status === 'ai') {
+        console.log("🤖 [DEBUG] Modo IA ativo. Buscando histórico e chamando Gemini...");
+
         const messages = await storage.getWhatsappMessagesByConversation(conversation.id);
         const history = messages.slice(-10).map(m => ({
-          role: m.sender,
+          role: m.sender === 'patient' ? 'patient' : 'model',
           text: m.text,
         }));
 
-        // Chama a rotina do Gemini configurada anteriormente
+        // Chama a rotina do Gemini
         const aiResponse = await processPatientMessage(Body, history);
+        console.log("🧠 [DEBUG] Resposta do Gemini:", JSON.stringify(aiResponse, null, 2));
 
         // Salva resposta da IA
-        await storage.createWhatsappMessage({
+        const savedAiMsg = await storage.createWhatsappMessage({
           conversationId: conversation.id,
           sender: 'ai',
           text: aiResponse.message,
           extractedIntent: JSON.stringify(aiResponse.extractedIntent),
         });
+        console.log(`💾 [DEBUG] Mensagem da IA salva. ID: ${savedAiMsg.id}`);
 
         // Handoff humano se detectado
         if (aiResponse.extractedIntent.intent === 'falar_com_humano') {
+          console.log("👤 [DEBUG] Intenção de falar com humano detectada. Alterando status...");
           await storage.updateWhatsappConversation(conversation.id, { status: 'human' });
         }
 
         // Envio real via Twilio
         if (twilioClient && twilioWhatsappNumber) {
+          console.log(`📤 [DEBUG] Tentando enviar resposta via Twilio para ${From}...`);
           try {
-            await twilioClient.messages.create({
+            const twilioResult = await twilioClient.messages.create({
               from: `whatsapp:${twilioWhatsappNumber}`,
               to: From,
               body: aiResponse.message,
             });
-          } catch (twilioError) {
-            console.error("Error sending Twilio message:", twilioError);
+            console.log("✅ [DEBUG] Twilio confirmou envio. SID:", twilioResult.sid);
+          } catch (twilioError: any) {
+            console.error("❌ [DEBUG] Erro ao disparar API da Twilio:", twilioError.message);
           }
+        } else {
+          console.warn("⚠️ [DEBUG] twilioClient ou twilioWhatsappNumber não configurados nos Secrets.");
         }
+      } else {
+        console.log("👤 [DEBUG] Conversa em modo HUMANO. IA não responderá.");
       }
 
-      res.status(200).send();
-    } catch (error) {
-      console.error("WhatsApp webhook error:", error);
-      res.status(200).send();
+      console.log("--- [DEBUG] FIM DO WEBHOOK COM SUCESSO ---\n");
+      // Retorna TwiML vazio para Twilio saber que recebemos
+      res.type('text/xml');
+      res.status(200).send('<Response></Response>');
+
+    } catch (error: any) {
+      console.error("🔥 [DEBUG] ERRO FATAL NO WEBHOOK:", error);
+      res.type('text/xml');
+      res.status(200).send('<Response></Response>'); // Retorna 200 para evitar que Twilio fique tentando reenviar o erro
     }
   });
-
   // Dashboard de Atendimento
   app.get("/api/conversations", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
