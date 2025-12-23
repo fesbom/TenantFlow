@@ -1,11 +1,14 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
+// Configuração utilizando a sua chave real configurada nos Secrets
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
+
+// Seleção do modelo (Sugestão: 1.5-flash ou 2.0-flash para velocidade no WhatsApp)
+const model = genAI.getGenerativeModel({ 
+  model: "gemini-1.5-flash",
+  generationConfig: {
+    responseMimeType: "application/json",
+  }
 });
 
 export interface ExtractedIntent {
@@ -60,43 +63,34 @@ export async function processPatientMessage(
   conversationHistory: Array<{ role: string; text: string }>
 ): Promise<AIResponse> {
   try {
-    const messages = [
-      { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-      { role: "model", parts: [{ text: "Entendido. Estou pronto para ajudar os pacientes." }] },
-    ];
-
-    for (const msg of conversationHistory) {
-      messages.push({
-        role: msg.role === 'patient' ? 'user' : 'model',
-        parts: [{ text: msg.text }],
-      });
-    }
-
-    messages.push({
-      role: "user",
-      parts: [{ text: patientMessage }],
+    // Preparação do chat com o histórico
+    const chat = model.startChat({
+      history: [
+        { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
+        { role: "model", parts: [{ text: "Entendido. Estou pronto para ajudar os pacientes de forma profissional e retornar apenas JSON." }] },
+        ...conversationHistory.map(msg => ({
+          role: msg.role === 'patient' ? 'user' : 'model',
+          parts: [{ text: msg.text }],
+        }))
+      ],
     });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: messages,
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+    const result = await chat.sendMessage(patientMessage);
+    const responseText = result.response.text() || '{}';
 
-    const responseText = response.text || '{}';
-    
     let parsed;
     try {
-      parsed = JSON.parse(responseText);
-    } catch {
+      // Remove possíveis blocos de código Markdown que a IA possa enviar por engano
+      const cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+      parsed = JSON.parse(cleanJson);
+    } catch (e) {
+      console.error("Erro ao parsear JSON da IA:", responseText);
       return {
         message: "Desculpe, tive um problema ao processar sua mensagem. Vou transferir você para um atendente.",
         extractedIntent: {
           intent: 'falar_com_humano',
           confidence: 0.5,
-          reason: 'Erro ao processar resposta da IA'
+          reason: 'Erro de formatação na resposta da IA'
         }
       };
     }
@@ -122,7 +116,7 @@ export async function processPatientMessage(
       extractedIntent: {
         intent: 'falar_com_humano',
         confidence: 1.0,
-        reason: 'Erro técnico'
+        reason: 'Erro técnico na API'
       }
     };
   }
