@@ -1,0 +1,81 @@
+Atue como desenvolvedor Full Stack. Corrija o erro 'ERR_MODULE_NOT_FOUND' do pacote 'vite' seguindo rigorosamente estes passos:
+
+Reestruturação do package.json: Mova os pacotes vite, @vitejs/plugin-react e tsx da seção devDependencies para dependencies. Isso garante que o runtime do Node.js sempre os encontre.
+
+Limpeza de Cache: No terminal, execute rm -rf node_modules package-lock.json e em seguida npm install.
+
+Ajuste de Importação: No arquivo server/vite.ts, certifique-se de que o Vite seja importado dinamicamente dentro da função setupVite usando await import("vite"), para evitar falhas de carregamento durante o boot do servidor.
+
+Verificação: Após a instalação, verifique se o binário do vite está acessível em ./node_modules/.bin/vite.
+
+Instrução importante: Reporte as rotinas completas do package.json e do server/vite.ts após a correção. Não execute testes funcionais.
+
+📂 Rotinas de Referência (O que deve ser corrigido)
+Para sua conferência, estes são os arquivos que o Replit deve estabilizar:
+
+1. package.json (Configuração de Dependências)
+O segredo aqui é colocar o vite e o tsx nas dependências principais para que o Replit não os ignore ao subir o servidor.
+
+JSON
+
+{
+  "name": "rest-express",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server/index.ts",
+    "build": "vite build && esbuild server/index.ts --platform=node --bundle --outdir=dist/server",
+    "start": "NODE_ENV=production node dist/server/index.js"
+  },
+  "dependencies": {
+    "vite": "^6.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.19.2",
+    "express": "^4.21.2",
+    "@google/generative-ai": "^0.21.0",
+    "twilio": "^5.3.7",
+    "drizzle-orm": "^0.38.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
+2. server/vite.ts (Importação Segura)
+Este arquivo faz a ponte entre o servidor Express e o Vite. O mostra como o Vite deve ser carregado apenas se necessário.
+
+TypeScript
+
+import express, { type Express } from "express";
+import fs from "fs";
+import path, { dirname } from "path";
+import { fileURLToPath } from "url";
+import { type Server } from "http";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+export async function setupVite(app: Express, server: Server) {
+  // A importação dinâmica resolve o erro de 'Module Not Found' no boot
+  const viteModule = await import("vite");
+  const vite = await viteModule.createServer({
+    server: {
+      middlewareMode: true,
+      hmr: { server },
+    },
+    appType: "custom",
+  });
+
+  app.use(vite.middlewares);
+
+  app.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const clientIndexHtml = path.resolve(__dirname, "..", "client", "index.html");
+      let template = fs.readFileSync(clientIndexHtml, "utf-8");
+      template = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(template);
+    } catch (e) {
+      vite.ssrFixStacktrace(e as Error);
+      next(e);
+    }
+  });
+}
