@@ -510,6 +510,9 @@ export type InsertTreatmentMovement = z.infer<typeof insertTreatmentMovementSche
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
 
+// Re-export chat models for AI integration
+export * from "./models/chat";
+
 // WhatsApp types
 export type WhatsappConversation = typeof whatsappConversations.$inferSelect;
 export type InsertWhatsappConversation = z.infer<typeof insertWhatsappConversationSchema>;
