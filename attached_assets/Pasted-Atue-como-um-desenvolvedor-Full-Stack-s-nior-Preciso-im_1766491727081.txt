@@ -1,0 +1,30 @@
+Atue como um desenvolvedor Full Stack sênior. Preciso implementar um módulo de agendamento via WhatsApp integrado ao meu sistema de clínicas. O sistema deve usar a API do Google Gemini para processar mensagens e a Twilio como ponte para o WhatsApp.
+
+Requisitos Técnicos:
+
+Banco de Dados (SQLite): Crie tabelas para conversations (id, phone, status: 'ai' ou 'human', last_update) e chat_messages (id, conversation_id, sender: 'patient', 'ai' ou 'staff', text, timestamp).
+
+Integração Gemini: Crie uma rotina que receba o texto do paciente e retorne um JSON estruturado com: intent (agendar, cancelar, falar_com_humano), date, time, specialty e doctor_name.
+
+Webhook WhatsApp: Implemente uma rota /api/whatsapp/webhook que:
+
+Salve a mensagem recebida.
+
+Verifique se o status da conversa é 'ai'. Se sim, processe com Gemini e responda via Twilio.
+
+Se o status for 'human', não responda automaticamente (apenas salve para o atendente ver).
+
+Se o Gemini identificar a intenção "falar_com_humano", mude o status da conversa para 'human' e notifique o sistema.
+
+Interface de Atendimento (Frontend React): Crie uma tela "Atendimento em Tempo Real" que liste conversas ativas. Permita que o atendente visualize o histórico completo e tenha um botão "Assumir Chat" (que muda o status para 'human') e um campo para enviar mensagens manuais.
+
+Instrução importante: Reporte sempre a rotina completa dos arquivos alterados. Não execute testes funcionais agora, apenas prepare a estrutura e o código. Utilize variáveis de ambiente para as chaves de API.
+
+🛠️ O que esperar desta implementação
+Ao aplicar este prompt, o Replit deverá estruturar:
+
+O Webhook Inteligente: Onde a mágica acontece. Ele decide se quem responde é o "robô" ou se a mensagem deve apenas aparecer no seu painel para a secretária ler.
+
+O "Cérebro" de Extração: O Gemini não vai apenas "conversar", ele vai tentar extrair dados. Se o paciente disser "Quero marcar dentista pra amanhã às 10h", o código já terá os campos specialty: 'dentista', date: '2025-12-24' e time: '10:00' prontos para inserir no banco.
+
+A Tela de Handoff: Uma interface onde sua equipe verá as mensagens "pipocando" e poderá clicar em um botão para pausar a IA e digitar manualmente.

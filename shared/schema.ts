@@ -198,6 +198,29 @@ export const budgets = pgTable("budgets", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// WhatsApp Conversations - tracks chat sessions with patients
+export const whatsappConversations = pgTable("whatsapp_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+  patientId: varchar("patient_id").references(() => patients.id), // Optional - linked when patient is identified
+  phone: text("phone").notNull(), // WhatsApp phone number
+  status: text("status").default('ai').notNull(), // 'ai' = AI handling, 'human' = human takeover
+  assignedUserId: varchar("assigned_user_id").references(() => users.id), // Staff member who took over
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// WhatsApp Chat Messages - individual messages in conversations
+export const whatsappMessages = pgTable("whatsapp_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => whatsappConversations.id),
+  sender: text("sender").notNull(), // 'patient', 'ai', 'staff'
+  text: text("text").notNull(),
+  extractedIntent: text("extracted_intent"), // JSON with intent data from Gemini
+  twilioMessageSid: text("twilio_message_sid"), // Twilio message ID for tracking
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const clinicsRelations = relations(clinics, ({ many }) => ({
   users: many(users),
@@ -345,6 +368,29 @@ export const budgetsRelations = relations(budgets, ({ one }) => ({
   }),
 }));
 
+export const whatsappConversationsRelations = relations(whatsappConversations, ({ one, many }) => ({
+  clinic: one(clinics, {
+    fields: [whatsappConversations.clinicId],
+    references: [clinics.id],
+  }),
+  patient: one(patients, {
+    fields: [whatsappConversations.patientId],
+    references: [patients.id],
+  }),
+  assignedUser: one(users, {
+    fields: [whatsappConversations.assignedUserId],
+    references: [users.id],
+  }),
+  messages: many(whatsappMessages),
+}));
+
+export const whatsappMessagesRelations = relations(whatsappMessages, ({ one }) => ({
+  conversation: one(whatsappConversations, {
+    fields: [whatsappMessages.conversationId],
+    references: [whatsappConversations.id],
+  }),
+}));
+
 // Insert schemas
 export const insertClinicSchema = createInsertSchema(clinics).omit({
   id: true,
@@ -412,6 +458,17 @@ export const insertTreatmentMovementSchema = createInsertSchema(treatmentMovemen
   createdAt: true,
 });
 
+export const insertWhatsappConversationSchema = createInsertSchema(whatsappConversations).omit({
+  id: true,
+  createdAt: true,
+  lastMessageAt: true,
+});
+
+export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Clinic = typeof clinics.$inferSelect;
 export type InsertClinic = z.infer<typeof insertClinicSchema>;
@@ -452,3 +509,10 @@ export type InsertTreatmentMovement = z.infer<typeof insertTreatmentMovementSche
 // Password reset token types
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+// WhatsApp types
+export type WhatsappConversation = typeof whatsappConversations.$inferSelect;
+export type InsertWhatsappConversation = z.infer<typeof insertWhatsappConversationSchema>;
+
+export type WhatsappMessage = typeof whatsappMessages.$inferSelect;
+export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
