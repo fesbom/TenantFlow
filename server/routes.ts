@@ -1867,31 +1867,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send manual message (staff response) - WhatsApp endpoint
   app.post("/api/whatsapp/conversations/:id/send", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
-      const { message } = req.body;
+      // Accept both 'message' and 'text' fields for compatibility
+      const messageText = req.body.message || req.body.text;
+
+      if (!messageText || messageText.trim() === '') {
+        return res.status(400).json({ message: "Mensagem é obrigatória" });
+      }
+
       const conversation = await storage.getWhatsappConversationById(id);
 
-      if (!conversation) return res.status(404).send();
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversa não encontrada" });
+      }
 
+      // Validate clinic ownership
+      if (conversation.clinicId !== req.user!.clinicId) {
+        return res.status(403).json({ message: "Acesso negado. Faça login novamente." });
+      }
+
+      // Save staff message to database
       const savedMessage = await storage.createWhatsappMessage({
         conversationId: id,
         sender: 'staff',
-        text: message,
+        text: messageText.trim(),
       });
 
+      console.log(`📤 Mensagem do atendente salva: ${savedMessage.id}`);
+
+      // Send via Twilio
       if (twilioClient && twilioWhatsappNumber) {
-        await twilioClient.messages.create({
-          from: `whatsapp:${twilioWhatsappNumber}`,
-          to: `whatsapp:${conversation.phone}`,
-          body: message,
-        });
+        try {
+          // Ensure phone number has whatsapp: prefix
+          const toNumber = conversation.phone.startsWith('whatsapp:') 
+            ? conversation.phone 
+            : `whatsapp:${conversation.phone}`;
+          
+          const twilioMessage = await twilioClient.messages.create({
+            from: `whatsapp:${twilioWhatsappNumber}`,
+            to: toNumber,
+            body: messageText.trim(),
+          });
+          
+          console.log(`✅ Twilio enviou mensagem: SID=${twilioMessage.sid}`);
+        } catch (twilioError: any) {
+          console.error("❌ Erro ao enviar via Twilio:", twilioError.message);
+          return res.status(500).json({ 
+            message: "Mensagem salva, mas falha ao enviar via WhatsApp",
+            savedMessage 
+          });
+        }
+      } else {
+        console.warn("⚠️ Twilio não configurado - mensagem salva mas não enviada");
       }
 
       res.json(savedMessage);
-    } catch (error) {
-      res.status(500).send();
+    } catch (error: any) {
+      console.error("Erro ao enviar mensagem:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Alias route for support panel - POST /api/conversations/:id/send
+  app.post("/api/conversations/:id/send", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      // Accept both 'message' and 'text' fields for compatibility
+      const messageText = req.body.message || req.body.text;
+
+      if (!messageText || messageText.trim() === '') {
+        return res.status(400).json({ message: "Mensagem é obrigatória" });
+      }
+
+      const conversation = await storage.getWhatsappConversationById(id);
+
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversa não encontrada" });
+      }
+
+      // Validate clinic ownership
+      if (conversation.clinicId !== req.user!.clinicId) {
+        return res.status(403).json({ message: "Acesso negado. Faça login novamente." });
+      }
+
+      // Save staff message to database
+      const savedMessage = await storage.createWhatsappMessage({
+        conversationId: id,
+        sender: 'staff',
+        text: messageText.trim(),
+      });
+
+      console.log(`📤 Mensagem do atendente salva: ${savedMessage.id}`);
+
+      // Send via Twilio
+      if (twilioClient && twilioWhatsappNumber) {
+        try {
+          // Ensure phone number has whatsapp: prefix
+          const toNumber = conversation.phone.startsWith('whatsapp:') 
+            ? conversation.phone 
+            : `whatsapp:${conversation.phone}`;
+          
+          const twilioMessage = await twilioClient.messages.create({
+            from: `whatsapp:${twilioWhatsappNumber}`,
+            to: toNumber,
+            body: messageText.trim(),
+          });
+          
+          console.log(`✅ Twilio enviou mensagem: SID=${twilioMessage.sid}`);
+        } catch (twilioError: any) {
+          console.error("❌ Erro ao enviar via Twilio:", twilioError.message);
+          return res.status(500).json({ 
+            message: "Mensagem salva, mas falha ao enviar via WhatsApp",
+            savedMessage 
+          });
+        }
+      } else {
+        console.warn("⚠️ Twilio não configurado - mensagem salva mas não enviada");
+      }
+
+      res.json(savedMessage);
+    } catch (error: any) {
+      console.error("Erro ao enviar mensagem:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
     }
   });
 
