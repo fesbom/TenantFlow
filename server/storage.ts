@@ -12,6 +12,8 @@ import {
   budgetItems,
   budgetSummary,
   treatmentMovements,
+  whatsappConversations,
+  whatsappMessages,
   type Clinic,
   type User,
   type Patient,
@@ -38,6 +40,10 @@ import {
   type InsertBudgetSummary,
   type TreatmentMovement,
   type InsertTreatmentMovement,
+  type WhatsappConversation,
+  type InsertWhatsappConversation,
+  type WhatsappMessage,
+  type InsertWhatsappMessage,
 } from "@shared/schema";
 
 import { db } from "./db";
@@ -156,6 +162,17 @@ export interface IStorage {
     monthlyRevenue: number;
     attendanceRate: number;
   }>;
+
+  // WhatsApp conversation methods
+  createWhatsappConversation(conversation: InsertWhatsappConversation): Promise<WhatsappConversation>;
+  getWhatsappConversationsByClinic(clinicId: string): Promise<WhatsappConversation[]>;
+  getWhatsappConversationByPhone(clinicId: string, phone: string): Promise<WhatsappConversation | undefined>;
+  getWhatsappConversationById(id: string): Promise<WhatsappConversation | undefined>;
+  updateWhatsappConversation(id: string, updates: Partial<InsertWhatsappConversation>): Promise<WhatsappConversation | undefined>;
+
+  // WhatsApp message methods
+  createWhatsappMessage(message: InsertWhatsappMessage): Promise<WhatsappMessage>;
+  getWhatsappMessagesByConversation(conversationId: string): Promise<WhatsappMessage[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -832,6 +849,69 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(passwordResetTokens)
       .where(lte(passwordResetTokens.expiresAt, new Date()));
+  }
+
+  // WhatsApp conversation methods
+  async createWhatsappConversation(insertConversation: InsertWhatsappConversation): Promise<WhatsappConversation> {
+    const [conversation] = await db.insert(whatsappConversations).values(insertConversation).returning();
+    return conversation;
+  }
+
+  async getWhatsappConversationsByClinic(clinicId: string): Promise<WhatsappConversation[]> {
+    return await db
+      .select()
+      .from(whatsappConversations)
+      .where(eq(whatsappConversations.clinicId, clinicId))
+      .orderBy(desc(whatsappConversations.lastMessageAt));
+  }
+
+  async getWhatsappConversationByPhone(clinicId: string, phone: string): Promise<WhatsappConversation | undefined> {
+    const [conversation] = await db
+      .select()
+      .from(whatsappConversations)
+      .where(
+        and(
+          eq(whatsappConversations.clinicId, clinicId),
+          eq(whatsappConversations.phone, phone)
+        )
+      );
+    return conversation || undefined;
+  }
+
+  async getWhatsappConversationById(id: string): Promise<WhatsappConversation | undefined> {
+    const [conversation] = await db
+      .select()
+      .from(whatsappConversations)
+      .where(eq(whatsappConversations.id, id));
+    return conversation || undefined;
+  }
+
+  async updateWhatsappConversation(id: string, updates: Partial<InsertWhatsappConversation>): Promise<WhatsappConversation | undefined> {
+    const [conversation] = await db
+      .update(whatsappConversations)
+      .set({ ...updates, lastMessageAt: new Date() })
+      .where(eq(whatsappConversations.id, id))
+      .returning();
+    return conversation || undefined;
+  }
+
+  // WhatsApp message methods
+  async createWhatsappMessage(insertMessage: InsertWhatsappMessage): Promise<WhatsappMessage> {
+    const [message] = await db.insert(whatsappMessages).values(insertMessage).returning();
+    // Update conversation lastMessageAt
+    await db
+      .update(whatsappConversations)
+      .set({ lastMessageAt: new Date() })
+      .where(eq(whatsappConversations.id, insertMessage.conversationId));
+    return message;
+  }
+
+  async getWhatsappMessagesByConversation(conversationId: string): Promise<WhatsappMessage[]> {
+    return await db
+      .select()
+      .from(whatsappMessages)
+      .where(eq(whatsappMessages.conversationId, conversationId))
+      .orderBy(whatsappMessages.createdAt);
   }
 }
 
