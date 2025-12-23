@@ -29,7 +29,10 @@ import {
   insertBudgetSummarySchema,
   insertTreatmentMovementSchema,
   insertClinicSchema,
+  insertWhatsappConversationSchema,
+  insertWhatsappMessageSchema,
 } from "@shared/schema";
+import { processPatientMessage } from "./whatsappAI";
 
 import multer from 'multer';
 
@@ -2263,6 +2266,231 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Error during migration",
         error: error.message
       });
+    }
+  });
+
+  // ========================================
+  // WhatsApp Integration Routes
+  // ========================================
+
+  // Webhook for receiving WhatsApp messages from Twilio
+  app.post("/api/whatsapp/webhook", async (req, res) => {
+    try {
+      const { From, Body, MessageSid } = req.body;
+      
+      if (!From || !Body) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // Normalize phone number (remove whatsapp: prefix if present)
+      const phone = From.replace("whatsapp:", "");
+      
+      // For now, use a default clinic ID - in production this would be determined by Twilio number
+      // You need to configure WHATSAPP_CLINIC_ID environment variable
+      const clinicId = process.env.WHATSAPP_CLINIC_ID;
+      if (!clinicId) {
+        console.error("WHATSAPP_CLINIC_ID not configured");
+        return res.status(200).send(); // Return 200 to prevent Twilio retries
+      }
+
+      // Find or create conversation
+      let conversation = await storage.getWhatsappConversationByPhone(clinicId, phone);
+      
+      if (!conversation) {
+        conversation = await storage.createWhatsappConversation({
+          clinicId,
+          phone,
+          status: 'ai',
+        });
+      }
+
+      // Save incoming message
+      await storage.createWhatsappMessage({
+        conversationId: conversation.id,
+        sender: 'patient',
+        text: Body,
+        twilioMessageSid: MessageSid,
+      });
+
+      // Check if conversation is in AI mode
+      if (conversation.status === 'ai') {
+        // Get conversation history for context
+        const messages = await storage.getWhatsappMessagesByConversation(conversation.id);
+        const history = messages.slice(-10).map(m => ({
+          role: m.sender,
+          text: m.text,
+        }));
+
+        // Process with Gemini AI
+        const aiResponse = await processPatientMessage(Body, history);
+
+        // Save AI response
+        await storage.createWhatsappMessage({
+          conversationId: conversation.id,
+          sender: 'ai',
+          text: aiResponse.message,
+          extractedIntent: JSON.stringify(aiResponse.extractedIntent),
+        });
+
+        // Check if AI detected human handoff intent
+        if (aiResponse.extractedIntent.intent === 'falar_com_humano') {
+          await storage.updateWhatsappConversation(conversation.id, {
+            status: 'human',
+          });
+        }
+
+        // Send response via Twilio (requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER)
+        const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+        const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+        const twilioWhatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+
+        if (twilioAccountSid && twilioAuthToken && twilioWhatsappNumber) {
+          try {
+            const twilioClient = require("twilio")(twilioAccountSid, twilioAuthToken);
+            await twilioClient.messages.create({
+              from: `whatsapp:${twilioWhatsappNumber}`,
+              to: From,
+              body: aiResponse.message,
+            });
+          } catch (twilioError) {
+            console.error("Error sending Twilio message:", twilioError);
+          }
+        }
+      }
+
+      // Always return 200 to Twilio
+      res.status(200).send();
+    } catch (error) {
+      console.error("WhatsApp webhook error:", error);
+      res.status(200).send(); // Return 200 to prevent Twilio retries
+    }
+  });
+
+  // Get all conversations for clinic
+  app.get("/api/whatsapp/conversations", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const conversations = await storage.getWhatsappConversationsByClinic(req.user!.clinicId);
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get messages for a conversation
+  app.get("/api/whatsapp/conversations/:id/messages", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const conversation = await storage.getWhatsappConversationById(id);
+      
+      if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      const messages = await storage.getWhatsappMessagesByConversation(id);
+      res.json({ conversation, messages });
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Take over conversation (human handoff)
+  app.post("/api/whatsapp/conversations/:id/takeover", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const conversation = await storage.getWhatsappConversationById(id);
+      
+      if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      const updated = await storage.updateWhatsappConversation(id, {
+        status: 'human',
+        assignedUserId: req.user!.id,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error taking over conversation:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Return conversation to AI
+  app.post("/api/whatsapp/conversations/:id/return-to-ai", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const conversation = await storage.getWhatsappConversationById(id);
+      
+      if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      const updated = await storage.updateWhatsappConversation(id, {
+        status: 'ai',
+        assignedUserId: null,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error returning conversation to AI:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Send manual message (staff response)
+  app.post("/api/whatsapp/conversations/:id/send", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { message } = req.body;
+
+      if (!message) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+
+      const conversation = await storage.getWhatsappConversationById(id);
+      
+      if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      // Save staff message
+      const savedMessage = await storage.createWhatsappMessage({
+        conversationId: id,
+        sender: 'staff',
+        text: message,
+      });
+
+      // Send via Twilio
+      const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+      const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+      const twilioWhatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+
+      if (twilioAccountSid && twilioAuthToken && twilioWhatsappNumber) {
+        try {
+          const twilioClient = require("twilio")(twilioAccountSid, twilioAuthToken);
+          const twilioMessage = await twilioClient.messages.create({
+            from: `whatsapp:${twilioWhatsappNumber}`,
+            to: `whatsapp:${conversation.phone}`,
+            body: message,
+          });
+
+          // Update message with Twilio SID
+          // Note: We don't have an update method for messages, so we just log it
+          console.log("Twilio message sent:", twilioMessage.sid);
+        } catch (twilioError) {
+          console.error("Error sending Twilio message:", twilioError);
+          return res.status(500).json({ message: "Failed to send message via WhatsApp" });
+        }
+      } else {
+        console.warn("Twilio credentials not configured - message saved but not sent");
+      }
+
+      res.json(savedMessage);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
