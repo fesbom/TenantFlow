@@ -1,0 +1,51 @@
+Atue como Dev Full Stack Senior.
+
+Preciso migrar minha camada de transporte de WhatsApp do Twilio para a Z-API, mantendo a lógica de IA (Gemini) e o sistema de extração de intenções já implementado no arquivo enviado.
+
+Requisitos da Migração:
+
+Módulo de Envio (Outbound):
+
+Substitua o SDK do Twilio por chamadas axios para a Z-API.
+
+Crie uma função sendWhatsAppMessage(phone, text) que utiliza as variáveis de ambiente ZAPI_INSTANCE e ZAPI_TOKEN.
+
+O payload deve seguir o padrão: { "phone": phone, "message": text }.
+
+Novo Webhook de Recebimento (Inbound):
+
+Crie uma rota POST /webhook/zapi para receber as mensagens dos pacientes.
+
+Esta rota deve extrair o telefone (sender) e o texto da mensagem do objeto ReceivedMessage da Z-API.
+
+Lógica de Transbordo: Verifique se o paciente está em "modo humano". Se estiver, ignore o processamento da IA e apenas salve/notifique. Caso contrário, chame a função processPatientMessage (já existente no código).
+
+Integração com Gemini: O retorno da função processPatientMessage (JSON com message e intent) deve ser usado para disparar a resposta automática via Z-API.
+
+Se a intent extraída for falar_com_humano, o sistema deve marcar esse chat como "atendimento manual" (pode usar um log ou variável em memória para este exemplo).
+
+Preservação da Inteligência:
+
+Não altere a lógica interna do SYSTEM_PROMPT nem a estrutura da AIResponse.
+
+Mantenha o tratamento de erros que já faz o fallback para o humano caso o JSON da IA falhe.
+
+Entrega:
+
+Reporte o código completo do servidor integrando a nova rota de webhook com a função de processamento de IA fornecida.
+
+Nota: Não execute testes funcionais agora. Apenas estruture o código para que eu possa configurar os Secrets e a URL do Webhook no painel da Z-API.
+
+O que este prompt vai garantir no seu código:
+Para sua visualização, o código final gerado pelo Replit seguirá este fluxo lógico:
+
+Entrada: A Z-API envia um JSON para o seu Replit.
+
+Decisão: O código verifica se o atendimento é IA ou Humano.
+
+Processamento: Se for IA, ele pega o histórico, envia para o Gemini (sua rotina atual), recebe o JSON de intenção e decide a resposta.
+
+Saída: Envia a resposta via axios.post para a Z-API.
+
+Dica para o Replit:
+Certifique-se de adicionar o axios nas dependências do package.json assim que o Agent terminar, ou peça para ele fazer isso.

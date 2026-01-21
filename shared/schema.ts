@@ -217,7 +217,7 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   sender: text("sender").notNull(), // 'patient', 'ai', 'staff'
   text: text("text").notNull(),
   extractedIntent: text("extracted_intent"), // JSON with intent data from Gemini
-  twilioMessageSid: text("twilio_message_sid"), // Twilio message ID for tracking
+  externalMessageId: text("external_message_id"), // Z-API or external provider message ID
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -15,8 +15,6 @@ import { eq, and, or, isNotNull, sql } from "drizzle-orm";
 import { upload, uploadCSV, uploadPatientPhoto } from "./middleware/upload";
 import { sendEmail, generatePasswordResetEmail } from "./email";
 import { ObjectStorageService } from "./objectStorage";
-import twilio from "twilio"; // Importação oficial da Twilio
-
 import {
   insertUserSchema,
   insertPatientSchema,
@@ -34,14 +32,9 @@ import {
   insertWhatsappMessageSchema,
 } from "@shared/schema";
 import { processPatientMessage } from "./whatsappAI";
+import { sendWhatsAppMessage, isZApiConfigured } from "./zapiService";
 
 import multer from 'multer';
-
-// Inicialização do cliente Twilio fora das rotas para performance
-const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
-const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-const twilioWhatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER;
-const twilioClient = (twilioAccountSid && twilioAuthToken) ? twilio(twilioAccountSid, twilioAuthToken) : null;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve uploaded files
@@ -1748,53 +1741,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
-  // WhatsApp Integration Routes (Twilio + Gemini)
+  // WhatsApp Integration Routes (Z-API + Gemini)
   // ========================================
 
-  // Webhook for receiving WhatsApp messages from Twilio
-  app.post("/api/whatsapp/webhook", async (req, res) => {
-    console.log("\n--- [DEBUG] INÍCIO DO WEBHOOK ---");
+  // Webhook for receiving WhatsApp messages from Z-API
+  app.post("/webhook/zapi", async (req, res) => {
+    console.log("\n--- [DEBUG] INÍCIO DO WEBHOOK Z-API ---");
     console.log("Conteúdo recebido (req.body):", JSON.stringify(req.body, null, 2));
 
     try {
-      const { From, Body, MessageSid } = req.body;
-
-      if (!From || !Body) {
-        console.warn("⚠️ [DEBUG] Campos obrigatórios ausentes (From ou Body).");
-        return res.status(400).json({ message: "Missing required fields" });
+      const receivedMessage = req.body;
+      
+      if (!receivedMessage || receivedMessage.isStatusReply) {
+        return res.status(200).json({ received: true });
       }
 
-      // Normaliza número (whatsapp:+55...)
-      const phone = From.replace("whatsapp:", "");
-      console.log(`📱 [DEBUG] Paciente: ${phone} | Mensagem: "${Body}"`);
+      const phone = receivedMessage.phone || receivedMessage.from;
+      const messageText = receivedMessage.text?.message || receivedMessage.body || receivedMessage.message;
+      const zapiMessageId = receivedMessage.messageId || receivedMessage.id?.id;
 
-      // ID da clínica (Idealmente vindo de configuração por número)
+      if (!phone || !messageText) {
+        console.warn("⚠️ [DEBUG] Campos obrigatórios ausentes (phone ou messageText).");
+        return res.status(200).json({ received: true, warning: "Missing required fields" });
+      }
+
+      const normalizedPhone = phone.replace(/\D/g, "");
+      console.log(`📱 [DEBUG] Paciente: ${normalizedPhone} | Mensagem: "${messageText}"`);
+
       const clinicId = process.env.WHATSAPP_CLINIC_ID || "1";
       console.log(`🏥 [DEBUG] Clinic ID em uso: ${clinicId}`);
 
-      // Busca ou cria conversa
-      let conversation = await storage.getWhatsappConversationByPhone(clinicId, phone);
+      let conversation = await storage.getWhatsappConversationByPhone(clinicId, normalizedPhone);
 
       if (!conversation) {
         console.log("🆕 [DEBUG] Conversa não encontrada. Criando nova conversa...");
         conversation = await storage.createWhatsappConversation({
           clinicId,
-          phone,
+          phone: normalizedPhone,
           status: 'ai',
         });
       }
       console.log(`✅ [DEBUG] ID da Conversa no Banco: ${conversation.id} | Status: ${conversation.status}`);
 
-      // Salva mensagem do paciente
       const savedMsg = await storage.createWhatsappMessage({
         conversationId: conversation.id,
         sender: 'patient',
-        text: Body,
-        twilioMessageSid: MessageSid,
+        text: messageText,
+        externalMessageId: zapiMessageId,
       });
       console.log(`💾 [DEBUG] Mensagem do paciente salva. ID: ${savedMsg.id}`);
 
-      // Se em modo IA, processa com Gemini
       if (conversation.status === 'ai') {
         console.log("🤖 [DEBUG] Modo IA ativo. Buscando histórico e chamando Gemini...");
 
@@ -1804,11 +1800,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           text: m.text,
         }));
 
-        // Chama a rotina do Gemini
-        const aiResponse = await processPatientMessage(Body, history);
+        const aiResponse = await processPatientMessage(messageText, history);
         console.log("🧠 [DEBUG] Resposta do Gemini:", JSON.stringify(aiResponse, null, 2));
 
-        // Salva resposta da IA
         const savedAiMsg = await storage.createWhatsappMessage({
           conversationId: conversation.id,
           sender: 'ai',
@@ -1817,41 +1811,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         console.log(`💾 [DEBUG] Mensagem da IA salva. ID: ${savedAiMsg.id}`);
 
-        // Handoff humano se detectado
         if (aiResponse.extractedIntent.intent === 'falar_com_humano') {
           console.log("👤 [DEBUG] Intenção de falar com humano detectada. Alterando status...");
           await storage.updateWhatsappConversation(conversation.id, { status: 'human' });
         }
 
-        // Envio real via Twilio
-        if (twilioClient && twilioWhatsappNumber) {
-          console.log(`📤 [DEBUG] Tentando enviar resposta via Twilio para ${From}...`);
-          try {
-            const twilioResult = await twilioClient.messages.create({
-              from: `whatsapp:${twilioWhatsappNumber}`,
-              to: From,
-              body: aiResponse.message,
-            });
-            console.log("✅ [DEBUG] Twilio confirmou envio. SID:", twilioResult.sid);
-          } catch (twilioError: any) {
-            console.error("❌ [DEBUG] Erro ao disparar API da Twilio:", twilioError.message);
-          }
-        } else {
-          console.warn("⚠️ [DEBUG] twilioClient ou twilioWhatsappNumber não configurados nos Secrets.");
+        const sendResult = await sendWhatsAppMessage(normalizedPhone, aiResponse.message);
+        if (!sendResult.success) {
+          console.error("❌ [DEBUG] Falha ao enviar resposta via Z-API:", sendResult.error);
         }
       } else {
         console.log("👤 [DEBUG] Conversa em modo HUMANO. IA não responderá.");
       }
 
-      console.log("--- [DEBUG] FIM DO WEBHOOK COM SUCESSO ---\n");
-      // Retorna TwiML vazio para Twilio saber que recebemos
-      res.type('text/xml');
-      res.status(200).send('<Response></Response>');
+      console.log("--- [DEBUG] FIM DO WEBHOOK Z-API COM SUCESSO ---\n");
+      res.status(200).json({ received: true });
 
     } catch (error: any) {
-      console.error("🔥 [DEBUG] ERRO FATAL NO WEBHOOK:", error);
-      res.type('text/xml');
-      res.status(200).send('<Response></Response>'); // Retorna 200 para evitar que Twilio fique tentando reenviar o erro
+      console.error("🔥 [DEBUG] ERRO FATAL NO WEBHOOK Z-API:", error);
+      res.status(200).json({ received: true, error: "Internal processing error" });
     }
   });
   // Dashboard de Atendimento
@@ -1896,7 +1874,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/whatsapp/conversations/:id/send", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
-      // Accept both 'message' and 'text' fields for compatibility
       const messageText = req.body.message || req.body.text;
 
       if (!messageText || messageText.trim() === '') {
@@ -1909,12 +1886,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Conversa não encontrada" });
       }
 
-      // Validate clinic ownership
       if (conversation.clinicId !== req.user!.clinicId) {
         return res.status(403).json({ message: "Acesso negado. Faça login novamente." });
       }
 
-      // Save staff message to database
       const savedMessage = await storage.createWhatsappMessage({
         conversationId: id,
         sender: 'staff',
@@ -1923,30 +1898,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`📤 Mensagem do atendente salva: ${savedMessage.id}`);
 
-      // Send via Twilio
-      if (twilioClient && twilioWhatsappNumber) {
-        try {
-          // Ensure phone number has whatsapp: prefix
-          const toNumber = conversation.phone.startsWith('whatsapp:') 
-            ? conversation.phone 
-            : `whatsapp:${conversation.phone}`;
-          
-          const twilioMessage = await twilioClient.messages.create({
-            from: `whatsapp:${twilioWhatsappNumber}`,
-            to: toNumber,
-            body: messageText.trim(),
-          });
-          
-          console.log(`✅ Twilio enviou mensagem: SID=${twilioMessage.sid}`);
-        } catch (twilioError: any) {
-          console.error("❌ Erro ao enviar via Twilio:", twilioError.message);
+      if (isZApiConfigured()) {
+        const sendResult = await sendWhatsAppMessage(conversation.phone, messageText.trim());
+        if (!sendResult.success) {
+          console.error("❌ Erro ao enviar via Z-API:", sendResult.error);
           return res.status(500).json({ 
             message: "Mensagem salva, mas falha ao enviar via WhatsApp",
             savedMessage 
           });
         }
       } else {
-        console.warn("⚠️ Twilio não configurado - mensagem salva mas não enviada");
+        console.warn("⚠️ Z-API não configurada - mensagem salva mas não enviada");
       }
 
       res.json(savedMessage);
@@ -1960,7 +1922,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/conversations/:id/send", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
-      // Accept both 'message' and 'text' fields for compatibility
       const messageText = req.body.message || req.body.text;
 
       if (!messageText || messageText.trim() === '') {
@@ -1973,12 +1934,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Conversa não encontrada" });
       }
 
-      // Validate clinic ownership
       if (conversation.clinicId !== req.user!.clinicId) {
         return res.status(403).json({ message: "Acesso negado. Faça login novamente." });
       }
 
-      // Save staff message to database
       const savedMessage = await storage.createWhatsappMessage({
         conversationId: id,
         sender: 'staff',
@@ -1987,30 +1946,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`📤 Mensagem do atendente salva: ${savedMessage.id}`);
 
-      // Send via Twilio
-      if (twilioClient && twilioWhatsappNumber) {
-        try {
-          // Ensure phone number has whatsapp: prefix
-          const toNumber = conversation.phone.startsWith('whatsapp:') 
-            ? conversation.phone 
-            : `whatsapp:${conversation.phone}`;
-          
-          const twilioMessage = await twilioClient.messages.create({
-            from: `whatsapp:${twilioWhatsappNumber}`,
-            to: toNumber,
-            body: messageText.trim(),
-          });
-          
-          console.log(`✅ Twilio enviou mensagem: SID=${twilioMessage.sid}`);
-        } catch (twilioError: any) {
-          console.error("❌ Erro ao enviar via Twilio:", twilioError.message);
+      if (isZApiConfigured()) {
+        const sendResult = await sendWhatsAppMessage(conversation.phone, messageText.trim());
+        if (!sendResult.success) {
+          console.error("❌ Erro ao enviar via Z-API:", sendResult.error);
           return res.status(500).json({ 
             message: "Mensagem salva, mas falha ao enviar via WhatsApp",
             savedMessage 
           });
         }
       } else {
-        console.warn("⚠️ Twilio não configurado - mensagem salva mas não enviada");
+        console.warn("⚠️ Z-API não configurada - mensagem salva mas não enviada");
       }
 
       res.json(savedMessage);
