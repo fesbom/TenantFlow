@@ -58,6 +58,73 @@ function handleAxiosError(error: any, context: string): string {
   return error.response?.data?.message || error.message || "Erro desconhecido";
 }
 
+async function tryConnectInstance(): Promise<EvolutionInstanceResult> {
+  const connectUrl = `${EVO_URL}/instance/connect/${EVO_INSTANCE}`;
+  console.log(`📱 [Evolution] GET ${connectUrl}`);
+  
+  const response = await axios.get(connectUrl, {
+    headers: {
+      "apikey": EVO_KEY,
+    },
+    timeout: 20000,
+  });
+
+  const qrCode = response.data?.base64 || response.data?.qrcode?.base64;
+  
+  if (qrCode) {
+    console.log(`✅ [Evolution] QR Code recebido da instância existente`);
+    return {
+      success: true,
+      qrCode,
+      status: "awaiting_scan",
+    };
+  }
+
+  if (response.data?.instance?.state === "open" || response.data?.state === "open") {
+    console.log(`✅ [Evolution] Instância já está conectada`);
+    return {
+      success: true,
+      status: "connected",
+    };
+  }
+
+  console.log(`ℹ️ [Evolution] Resposta do connect:`, JSON.stringify(response.data, null, 2));
+  return {
+    success: true,
+    status: response.data?.instance?.state || response.data?.state || "unknown",
+  };
+}
+
+async function createInstance(): Promise<EvolutionInstanceResult> {
+  const createUrl = `${EVO_URL}/instance/create`;
+  console.log(`🆕 [Evolution] POST ${createUrl}`);
+  console.log(`   - instanceName: ${EVO_INSTANCE}`);
+  
+  const response = await axios.post(
+    createUrl,
+    {
+      instanceName: EVO_INSTANCE,
+      qrcode: true,
+      integration: "WHATSAPP-BAILEYS",
+    },
+    {
+      headers: {
+        "apikey": EVO_KEY,
+        "Content-Type": "application/json",
+      },
+      timeout: 30000,
+    }
+  );
+
+  console.log(`✅ [Evolution] Instância criada com sucesso`);
+
+  return {
+    success: true,
+    qrCode: response.data?.qrcode?.base64,
+    status: "awaiting_scan",
+  };
+}
+
 export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
   if (!EVO_URL) {
     const errorMsg = "Evolution API não configurada: EVO_URL está vazia ou inválida";
@@ -72,83 +139,77 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
   }
 
   try {
-    const fetchInstancesUrl = `${EVO_URL}/instance/fetchInstances`;
-    console.log(`🔍 [Evolution] GET ${fetchInstancesUrl}`);
+    console.log(`🔄 [Evolution] Tentando conectar à instância existente '${EVO_INSTANCE}'...`);
+    return await tryConnectInstance();
     
-    const checkResponse = await axios.get(fetchInstancesUrl, {
-      headers: {
-        "apikey": EVO_KEY,
-      },
-      timeout: 15000,
-    });
+  } catch (connectError: any) {
+    const status = connectError.response?.status;
+    const errorMessage = connectError.response?.data?.message || "";
+    
+    console.log(`ℹ️ [Evolution] Conexão falhou. Status: ${status}, Mensagem: ${errorMessage}`);
 
-    console.log(`✅ [Evolution] fetchInstances respondeu com ${checkResponse.data?.length || 0} instância(s)`);
-
-    const instances = checkResponse.data || [];
-    const existingInstance = instances.find((inst: any) => inst.instance?.instanceName === EVO_INSTANCE);
-
-    if (existingInstance) {
-      const instanceStatus = existingInstance.instance?.status;
-      console.log(`✅ [Evolution] Instância '${EVO_INSTANCE}' encontrada. Status: ${instanceStatus}`);
+    if (status === 404 || errorMessage.includes("not found") || errorMessage.includes("não encontrada")) {
+      console.log(`🆕 [Evolution] Instância não existe. Criando nova...`);
       
-      if (instanceStatus === "open") {
-        return { 
-          success: true, 
-          status: "connected",
-          qrCode: undefined 
-        };
+      try {
+        return await createInstance();
+      } catch (createError: any) {
+        const createStatus = createError.response?.status;
+        const createMessage = createError.response?.data?.message || "";
+        
+        if (createStatus === 403 || createMessage.includes("already") || createMessage.includes("existe")) {
+          console.log(`ℹ️ [Evolution] Instância já existe (erro de criação). Tentando conectar novamente...`);
+          
+          try {
+            return await tryConnectInstance();
+          } catch (retryError: any) {
+            const errorMsg = handleAxiosError(retryError, "tryConnectInstance (retry)");
+            return { success: false, error: errorMsg };
+          }
+        }
+        
+        const errorMsg = handleAxiosError(createError, "createInstance");
+        return { success: false, error: errorMsg };
       }
-
-      const connectUrl = `${EVO_URL}/instance/connect/${EVO_INSTANCE}`;
-      console.log(`📱 [Evolution] GET ${connectUrl}`);
-      
-      const qrResponse = await axios.get(connectUrl, {
-        headers: {
-          "apikey": EVO_KEY,
-        },
-        timeout: 15000,
-      });
-
-      console.log(`✅ [Evolution] QR Code recebido`);
-
-      return {
-        success: true,
-        qrCode: qrResponse.data?.base64 || qrResponse.data?.qrcode?.base64,
-        status: "awaiting_scan",
-      };
     }
 
-    const createUrl = `${EVO_URL}/instance/create`;
-    console.log(`🆕 [Evolution] POST ${createUrl}`);
-    console.log(`   - instanceName: ${EVO_INSTANCE}`);
-    
-    const createResponse = await axios.post(
-      createUrl,
-      {
-        instanceName: EVO_INSTANCE,
-        qrcode: true,
-        integration: "WHATSAPP-BAILEYS",
-      },
-      {
-        headers: {
-          "apikey": EVO_KEY,
-          "Content-Type": "application/json",
-        },
-        timeout: 30000,
+    if (status === 403 || errorMessage.includes("already") || errorMessage.includes("in use")) {
+      console.log(`ℹ️ [Evolution] Instância existe mas está em uso. Buscando estado...`);
+      
+      try {
+        const stateUrl = `${EVO_URL}/instance/connectionState/${EVO_INSTANCE}`;
+        console.log(`🔍 [Evolution] GET ${stateUrl}`);
+        
+        const stateResponse = await axios.get(stateUrl, {
+          headers: {
+            "apikey": EVO_KEY,
+          },
+          timeout: 15000,
+        });
+
+        const state = stateResponse.data?.instance?.state || stateResponse.data?.state;
+        console.log(`ℹ️ [Evolution] Estado da instância: ${state}`);
+
+        if (state === "open") {
+          return { success: true, status: "connected" };
+        }
+
+        return await tryConnectInstance();
+        
+      } catch (stateError: any) {
+        console.log(`⚠️ [Evolution] Erro ao buscar estado. Tentando conectar diretamente...`);
+        
+        try {
+          return await tryConnectInstance();
+        } catch (finalError: any) {
+          const errorMsg = handleAxiosError(finalError, "tryConnectInstance (final)");
+          return { success: false, error: errorMsg };
+        }
       }
-    );
+    }
 
-    console.log(`✅ [Evolution] Instância criada com sucesso`);
-
-    return {
-      success: true,
-      qrCode: createResponse.data?.qrcode?.base64,
-      status: "awaiting_scan",
-    };
-
-  } catch (error: any) {
-    const errorMessage = handleAxiosError(error, "createOrGetInstance");
-    return { success: false, error: errorMessage };
+    const errorMsg = handleAxiosError(connectError, "createOrGetInstance");
+    return { success: false, error: errorMsg };
   }
 }
 
