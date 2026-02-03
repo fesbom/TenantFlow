@@ -2166,7 +2166,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="refresh" content="45">
+          <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+          <meta http-equiv="Pragma" content="no-cache">
+          <meta http-equiv="Expires" content="0">
           <title>Conectar WhatsApp - Clínica Denticare</title>
           <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2283,31 +2285,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
             </button>
             
             <p class="auto-refresh">
-              Atualização automática em <span class="countdown" id="countdown">45</span> segundos
+              Atualização automática em <span class="countdown" id="countdown">30</span> segundos
+            </p>
+            
+            <p class="debug-info" style="margin-top: 15px; font-size: 11px; color: #cbd5e1;">
+              Status: ${result.status || 'unknown'} | Base64: ${qrBase64.length} chars
             </p>
           </div>
           
           <script>
+            // Auto-reload every 30 seconds to prevent browser caching
+            setTimeout(() => { 
+              console.log('[QR Code] Recarregando página...');
+              window.location.reload(); 
+            }, 30000);
+            
             // Countdown timer
-            let seconds = 45;
+            let seconds = 30;
             const countdownEl = document.getElementById('countdown');
-            setInterval(() => {
+            const countdownInterval = setInterval(() => {
               seconds--;
               if (seconds >= 0) {
                 countdownEl.textContent = seconds;
+              } else {
+                clearInterval(countdownInterval);
               }
             }, 1000);
             
             // Verify image loaded
             const img = document.getElementById('qrcode');
             img.onerror = function() {
-              console.error('Erro ao carregar imagem do QR Code');
+              console.error('[QR Code] Erro ao carregar imagem');
               this.alt = 'Erro ao carregar QR Code - Clique em Atualizar';
               this.style.background = '#fee2e2';
               this.style.padding = '40px';
             };
             img.onload = function() {
-              console.log('QR Code carregado com sucesso!');
+              console.log('[QR Code] Imagem carregada com sucesso!');
+              console.log('[QR Code] Tamanho: ' + this.naturalWidth + 'x' + this.naturalHeight);
             };
           </script>
         </body>
