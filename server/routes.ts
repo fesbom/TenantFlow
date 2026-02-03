@@ -33,8 +33,11 @@ import {
 } from "@shared/schema";
 import { processPatientMessage } from "./whatsappAI";
 import { sendWhatsAppMessage, isZApiConfigured } from "./zapiService";
+import { createOrGetInstance, sendEvolutionMessage, isEvolutionConfigured } from "./evolutionService";
 
 import multer from 'multer';
+
+const ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN || "";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve uploaded files
@@ -1745,9 +1748,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========================================
 
   // Webhook for receiving WhatsApp messages from Z-API
+  // NOTE: This route does NOT require authenticateToken - it receives data from Z-API servers
   app.post("/webhook/zapi", async (req, res) => {
     console.log("\n--- [DEBUG] INÍCIO DO WEBHOOK Z-API ---");
     console.log("Conteúdo recebido (req.body):", JSON.stringify(req.body, null, 2));
+
+    // Optional: Validate Z-API Client-Token header for security
+    if (ZAPI_CLIENT_TOKEN) {
+      const clientToken = req.headers["client-token"] as string;
+      if (clientToken !== ZAPI_CLIENT_TOKEN) {
+        console.warn("⚠️ [Z-API Webhook] Invalid or missing Client-Token header");
+        return res.status(403).json({ error: "Invalid Client-Token" });
+      }
+      console.log("✅ [Z-API Webhook] Client-Token validated successfully");
+    }
 
     try {
       const receivedMessage = req.body;
@@ -1832,6 +1846,235 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(200).json({ received: true, error: "Internal processing error" });
     }
   });
+
+  // ========================================
+  // Evolution API Integration Routes
+  // ========================================
+
+  // Webhook for receiving WhatsApp messages from Evolution API
+  // NOTE: This route does NOT require authenticateToken - it receives data from Evolution API servers
+  app.post("/webhook/evolution", async (req, res) => {
+    console.log("\n--- [DEBUG] INÍCIO DO WEBHOOK EVOLUTION ---");
+    console.log("Conteúdo recebido (req.body):", JSON.stringify(req.body, null, 2));
+
+    try {
+      const data = req.body;
+      
+      // Evolution API sends different event types - we only process messages
+      if (!data || data.event !== "messages.upsert") {
+        return res.status(200).json({ received: true });
+      }
+
+      const messageData = data.data;
+      if (!messageData || messageData.key?.fromMe) {
+        return res.status(200).json({ received: true });
+      }
+
+      const phone = messageData.key?.remoteJid?.replace("@s.whatsapp.net", "") || "";
+      const messageText = messageData.message?.conversation || 
+                          messageData.message?.extendedTextMessage?.text || "";
+      const evolutionMessageId = messageData.key?.id;
+
+      if (!phone || !messageText) {
+        console.warn("⚠️ [Evolution Webhook] Campos obrigatórios ausentes (phone ou messageText).");
+        return res.status(200).json({ received: true, warning: "Missing required fields" });
+      }
+
+      const normalizedPhone = phone.replace(/\D/g, "");
+      console.log(`📱 [Evolution] Paciente: ${normalizedPhone} | Mensagem: "${messageText}"`);
+
+      const clinicId = process.env.WHATSAPP_CLINIC_ID || "1";
+      console.log(`🏥 [Evolution] Clinic ID em uso: ${clinicId}`);
+
+      let conversation = await storage.getWhatsappConversationByPhone(clinicId, normalizedPhone);
+
+      if (!conversation) {
+        console.log("🆕 [Evolution] Conversa não encontrada. Criando nova conversa...");
+        conversation = await storage.createWhatsappConversation({
+          clinicId,
+          phone: normalizedPhone,
+          status: 'ai',
+        });
+      }
+      console.log(`✅ [Evolution] ID da Conversa no Banco: ${conversation.id} | Status: ${conversation.status}`);
+
+      const savedMsg = await storage.createWhatsappMessage({
+        conversationId: conversation.id,
+        sender: 'patient',
+        text: messageText,
+        externalMessageId: evolutionMessageId,
+      });
+      console.log(`💾 [Evolution] Mensagem do paciente salva. ID: ${savedMsg.id}`);
+
+      if (conversation.status === 'ai') {
+        console.log("🤖 [Evolution] Modo IA ativo. Buscando histórico e chamando Gemini...");
+
+        const messages = await storage.getWhatsappMessagesByConversation(conversation.id);
+        const history = messages.slice(-10).map(m => ({
+          role: m.sender === 'patient' ? 'patient' : 'model',
+          text: m.text,
+        }));
+
+        const aiResponse = await processPatientMessage(messageText, history);
+        console.log("🧠 [Evolution] Resposta do Gemini:", JSON.stringify(aiResponse, null, 2));
+
+        const savedAiMsg = await storage.createWhatsappMessage({
+          conversationId: conversation.id,
+          sender: 'ai',
+          text: aiResponse.message,
+          extractedIntent: JSON.stringify(aiResponse.extractedIntent),
+        });
+        console.log(`💾 [Evolution] Mensagem da IA salva. ID: ${savedAiMsg.id}`);
+
+        if (aiResponse.extractedIntent.intent === 'falar_com_humano') {
+          console.log("👤 [Evolution] Intenção de falar com humano detectada. Alterando status...");
+          await storage.updateWhatsappConversation(conversation.id, { status: 'human' });
+        }
+
+        const sendResult = await sendEvolutionMessage(normalizedPhone, aiResponse.message);
+        if (!sendResult.success) {
+          console.error("❌ [Evolution] Falha ao enviar resposta:", sendResult.error);
+        }
+      } else {
+        console.log("👤 [Evolution] Conversa em modo HUMANO. IA não responderá.");
+      }
+
+      console.log("--- [DEBUG] FIM DO WEBHOOK EVOLUTION COM SUCESSO ---\n");
+      res.status(200).json({ received: true });
+
+    } catch (error: any) {
+      console.error("🔥 [Evolution] ERRO FATAL NO WEBHOOK:", error);
+      res.status(200).json({ received: true, error: "Internal processing error" });
+    }
+  });
+
+  // Admin route to setup WhatsApp via Evolution API (QR Code generation)
+  // NOTE: This route requires authentication to prevent unauthorized access
+  app.get("/admin/setup-whatsapp", authenticateToken, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
+    console.log("🔧 [Evolution] Iniciando setup do WhatsApp...");
+
+    if (!isEvolutionConfigured()) {
+      return res.status(503).send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Setup WhatsApp - Erro</title>
+          <style>
+            body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+            .error { color: #dc2626; background: #fef2f2; padding: 20px; border-radius: 8px; }
+          </style>
+        </head>
+        <body>
+          <h1>⚠️ Evolution API não configurada</h1>
+          <div class="error">
+            <p>Configure as variáveis de ambiente:</p>
+            <code>EVO_BASE_URL</code> e <code>EVO_KEY</code>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    try {
+      const result = await createOrGetInstance();
+
+      if (!result.success) {
+        return res.status(500).send(`
+          <!DOCTYPE html>
+          <html lang="pt-BR">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Setup WhatsApp - Erro</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+              .error { color: #dc2626; background: #fef2f2; padding: 20px; border-radius: 8px; }
+            </style>
+          </head>
+          <body>
+            <h1>❌ Erro ao configurar instância</h1>
+            <div class="error"><p>${result.error}</p></div>
+          </body>
+          </html>
+        `);
+      }
+
+      if (result.status === "connected") {
+        return res.send(`
+          <!DOCTYPE html>
+          <html lang="pt-BR">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Setup WhatsApp - Conectado</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+              .success { color: #16a34a; background: #f0fdf4; padding: 20px; border-radius: 8px; }
+            </style>
+          </head>
+          <body>
+            <h1>✅ WhatsApp Conectado!</h1>
+            <div class="success">
+              <p>A instância já está conectada e operacional.</p>
+              <p>Você pode começar a receber mensagens.</p>
+            </div>
+          </body>
+          </html>
+        `);
+      }
+
+      res.send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Setup WhatsApp - QR Code</title>
+          <style>
+            body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+            .qr-container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+            .qr-container img { max-width: 300px; border: 2px solid #e5e7eb; border-radius: 8px; }
+            .instructions { margin-top: 20px; color: #6b7280; }
+            .refresh-btn { margin-top: 20px; padding: 12px 24px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
+            .refresh-btn:hover { background: #1d4ed8; }
+          </style>
+        </head>
+        <body>
+          <h1>📱 Escaneie o QR Code</h1>
+          <div class="qr-container">
+            <img src="data:image/png;base64,${result.qrCode}" alt="QR Code WhatsApp" />
+            <div class="instructions">
+              <p>1. Abra o WhatsApp no celular da clínica</p>
+              <p>2. Vá em <strong>Configurações > Aparelhos conectados</strong></p>
+              <p>3. Toque em <strong>Conectar um aparelho</strong></p>
+              <p>4. Escaneie este QR Code</p>
+            </div>
+            <button class="refresh-btn" onclick="location.reload()">🔄 Atualizar</button>
+          </div>
+        </body>
+        </html>
+      `);
+
+    } catch (error: any) {
+      console.error("❌ [Evolution] Erro no setup:", error);
+      res.status(500).send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8">
+          <title>Setup WhatsApp - Erro</title>
+        </head>
+        <body>
+          <h1>❌ Erro interno</h1>
+          <p>${error.message}</p>
+        </body>
+        </html>
+      `);
+    }
+  });
+
   // Dashboard de Atendimento
   app.get("/api/conversations", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

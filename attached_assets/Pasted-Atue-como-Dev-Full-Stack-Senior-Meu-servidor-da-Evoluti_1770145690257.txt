@@ -1,0 +1,50 @@
+Atue como Dev Full Stack Senior.
+
+Meu servidor da Evolution API no Railway já está operacional. Agora, preciso integrar meu projeto no Replit a ele, mantendo a lógica de IA (Gemini) para atendimento da clínica odontológica.
+
+Requisitos Técnicos:
+
+Instância e QR Code:
+
+Crie uma rota GET /admin/setup-whatsapp.
+
+Ao ser acessada, ela deve verificar se a instância "clinica_principal" existe. Se não, deve criá-la via POST /instance/create usando a EVO_KEY no header apikey.
+
+A rota deve retornar uma página HTML simples exibindo o QR Code (base64) retornado pela API para que eu possa escanear.
+
+Webhook de Recebimento:
+
+Configure a rota POST /webhook/evolution. Importante: Esta rota não deve exigir token de autenticação interno (evitar erro 403).
+
+O código deve extrair o texto da mensagem (data.message.conversation) e o número do remetente (data.key.remoteJid).
+
+Envie esses dados para a função processPatientMessage (IA Gemini) que já possuo.
+
+Lógica de Resposta e Transbordo:
+
+Se a intenção extraída for falar_com_humano, o bot deve parar de responder esse número especificamente e apenas logar a necessidade de atendimento manual.
+
+Caso contrário, envie a resposta gerada pela IA de volta para o paciente usando o endpoint POST /message/sendText/clinica_principal da Evolution API.
+
+Segurança e Estabilidade:
+
+Use axios para todas as chamadas.
+
+Proteja as chaves usando process.env.
+
+Reporte a rotina completa do servidor, integrando o código de IA que te forneci anteriormente com estas novas rotas.
+
+Nota: Não execute testes funcionais agora. Apenas estruture o código e me forneça a rotina completa para que eu possa validar o fluxo.
+
+O que esperar do código gerado:
+Sincronização: Quando você acessar a rota de setup, o Replit dirá para a Evolution: "Ei, crie uma conexão chamada 'clinica_principal'".
+
+Visualização: O QR Code aparecerá no seu navegador. Assim que você escanear com o celular da clínica, a conexão estará ativa.
+
+Fluxo de Dados:
+
+Paciente manda mensagem -> Evolution recebe -> Evolution manda Webhook para o Replit.
+
+Replit recebe -> Manda para o Gemini -> Gemini interpreta a intenção (agendar/cancelar).
+
+Replit decide -> Se for automatizável, devolve a resposta pelo Railway. Se for humano, avisa no console/logs.
