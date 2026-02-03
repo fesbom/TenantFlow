@@ -33,11 +33,12 @@ import {
 } from "@shared/schema";
 import { processPatientMessage } from "./whatsappAI";
 import { sendWhatsAppMessage, isZApiConfigured } from "./zapiService";
-import { createOrGetInstance, sendEvolutionMessage, isEvolutionConfigured } from "./evolutionService";
+import { createOrGetInstance, sendEvolutionMessage, isEvolutionConfigured, getEvolutionInstanceName } from "./evolutionService";
 
 import multer from 'multer';
 
 const ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN || "";
+const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN || "setup123";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve uploaded files
@@ -1862,17 +1863,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Evolution API sends different event types - we only process messages
       if (!data || data.event !== "messages.upsert") {
+        console.log(`ℹ️ [Evolution] Evento ignorado: ${data?.event || 'undefined'}`);
         return res.status(200).json({ received: true });
       }
 
       const messageData = data.data;
       if (!messageData || messageData.key?.fromMe) {
+        console.log(`ℹ️ [Evolution] Mensagem própria ignorada`);
         return res.status(200).json({ received: true });
       }
 
       const phone = messageData.key?.remoteJid?.replace("@s.whatsapp.net", "") || "";
+      
+      // Extract text from various message formats
       const messageText = messageData.message?.conversation || 
-                          messageData.message?.extendedTextMessage?.text || "";
+                          messageData.message?.extendedTextMessage?.text ||
+                          messageData.data?.message?.conversation ||
+                          messageData.data?.message?.extendedTextMessage?.text || "";
       const evolutionMessageId = messageData.key?.id;
 
       if (!phone || !messageText) {
@@ -1949,8 +1956,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin route to setup WhatsApp via Evolution API (QR Code generation)
-  // NOTE: This route requires authentication to prevent unauthorized access
-  app.get("/admin/setup-whatsapp", authenticateToken, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
+  // NOTE: Protected by simple query param token (no JWT required)
+  // Usage: GET /admin/setup-whatsapp?token=YOUR_ADMIN_SETUP_TOKEN
+  app.get("/admin/setup-whatsapp", async (req, res) => {
+    const token = req.query.token as string;
+    
+    if (!token || token !== ADMIN_SETUP_TOKEN) {
+      console.warn("⚠️ [Evolution Setup] Token inválido ou ausente");
+      return res.status(403).send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Acesso Negado</title>
+          <style>
+            body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+            .error { color: #dc2626; background: #fef2f2; padding: 20px; border-radius: 8px; }
+          </style>
+        </head>
+        <body>
+          <h1>🔒 Acesso Negado</h1>
+          <div class="error">
+            <p>Token inválido ou ausente.</p>
+            <p>Use: <code>/admin/setup-whatsapp?token=SEU_TOKEN</code></p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
     console.log("🔧 [Evolution] Iniciando setup do WhatsApp...");
 
     if (!isEvolutionConfigured()) {
@@ -1970,7 +2005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           <h1>⚠️ Evolution API não configurada</h1>
           <div class="error">
             <p>Configure as variáveis de ambiente:</p>
-            <code>EVO_BASE_URL</code> e <code>EVO_KEY</code>
+            <code>EVO_URL</code> e <code>EVO_KEY</code>
           </div>
         </body>
         </html>

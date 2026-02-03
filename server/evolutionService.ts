@@ -1,8 +1,8 @@
 import axios from "axios";
 
-const EVO_BASE_URL = process.env.EVO_BASE_URL || "";
+const EVO_URL = process.env.EVO_URL || process.env.EVO_BASE_URL || "";
 const EVO_KEY = process.env.EVO_KEY || "";
-const EVO_INSTANCE = process.env.EVO_INSTANCE || "clinica_principal";
+const EVO_INSTANCE = process.env.EVO_INSTANCE || "clinica_odonto";
 
 export interface EvolutionSendResult {
   success: boolean;
@@ -18,13 +18,15 @@ export interface EvolutionInstanceResult {
 }
 
 export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
-  if (!EVO_BASE_URL || !EVO_KEY) {
-    return { success: false, error: "Evolution API não configurada (EVO_BASE_URL ou EVO_KEY ausentes)" };
+  if (!EVO_URL || !EVO_KEY) {
+    return { success: false, error: "Evolution API não configurada (EVO_URL ou EVO_KEY ausentes)" };
   }
 
   try {
+    console.log(`🔍 [Evolution] Verificando instâncias em ${EVO_URL}...`);
+    
     const checkResponse = await axios.get(
-      `${EVO_BASE_URL}/instance/fetchInstances`,
+      `${EVO_URL}/instance/fetchInstances`,
       {
         headers: {
           "apikey": EVO_KEY,
@@ -37,7 +39,7 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
     const existingInstance = instances.find((inst: any) => inst.instance?.instanceName === EVO_INSTANCE);
 
     if (existingInstance) {
-      console.log(`✅ [Evolution] Instância '${EVO_INSTANCE}' já existe.`);
+      console.log(`✅ [Evolution] Instância '${EVO_INSTANCE}' já existe. Status: ${existingInstance.instance?.status}`);
       
       if (existingInstance.instance?.status === "open") {
         return { 
@@ -47,8 +49,10 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
         };
       }
 
+      console.log(`📱 [Evolution] Buscando QR Code para instância '${EVO_INSTANCE}'...`);
+      
       const qrResponse = await axios.get(
-        `${EVO_BASE_URL}/instance/connect/${EVO_INSTANCE}`,
+        `${EVO_URL}/instance/connect/${EVO_INSTANCE}`,
         {
           headers: {
             "apikey": EVO_KEY,
@@ -67,7 +71,7 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
     console.log(`🆕 [Evolution] Criando instância '${EVO_INSTANCE}'...`);
     
     const createResponse = await axios.post(
-      `${EVO_BASE_URL}/instance/create`,
+      `${EVO_URL}/instance/create`,
       {
         instanceName: EVO_INSTANCE,
         qrcode: true,
@@ -91,13 +95,16 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
   } catch (error: any) {
     const errorMessage = error.response?.data?.message || error.message || "Erro desconhecido";
     console.error(`❌ [Evolution] Erro:`, errorMessage);
+    if (error.response?.data) {
+      console.error(`❌ [Evolution] Response data:`, JSON.stringify(error.response.data));
+    }
     return { success: false, error: errorMessage };
   }
 }
 
 export async function sendEvolutionMessage(phone: string, text: string): Promise<EvolutionSendResult> {
-  if (!EVO_BASE_URL || !EVO_KEY) {
-    console.warn("⚠️ Evolution API não configurada (EVO_BASE_URL ou EVO_KEY ausentes)");
+  if (!EVO_URL || !EVO_KEY) {
+    console.warn("⚠️ Evolution API não configurada (EVO_URL ou EVO_KEY ausentes)");
     return { success: false, error: "Evolution API não configurada" };
   }
 
@@ -107,7 +114,7 @@ export async function sendEvolutionMessage(phone: string, text: string): Promise
     console.log(`📤 [Evolution] Enviando mensagem para ${normalizedPhone}...`);
     
     const response = await axios.post(
-      `${EVO_BASE_URL}/message/sendText/${EVO_INSTANCE}`,
+      `${EVO_URL}/message/sendText/${EVO_INSTANCE}`,
       {
         number: normalizedPhone,
         text: text,
@@ -139,5 +146,9 @@ export async function sendEvolutionMessage(phone: string, text: string): Promise
 }
 
 export function isEvolutionConfigured(): boolean {
-  return !!(EVO_BASE_URL && EVO_KEY);
+  return !!(EVO_URL && EVO_KEY);
+}
+
+export function getEvolutionInstanceName(): string {
+  return EVO_INSTANCE;
 }
