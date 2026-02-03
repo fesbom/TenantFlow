@@ -180,19 +180,20 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
     return { success: false, error: errorMsg };
   }
 
+  console.log(`\n🔄 [Evolution] ========== INÍCIO DO SETUP ==========`);
+  
+  // PASSO 1: Deletar instância existente (limpar cache)
+  console.log(`\n📍 [Evolution] PASSO 1: Deletando instância existente...`);
+  await deleteInstance();
+  
+  // PASSO 2: Aguardar 1 segundo
+  console.log(`\n📍 [Evolution] PASSO 2: Aguardando 1 segundo...`);
+  await sleep(1000);
+  
+  // PASSO 3: Tentar criar nova instância
+  console.log(`\n📍 [Evolution] PASSO 3: Criando nova instância...`);
+  
   try {
-    console.log(`\n🔄 [Evolution] ========== INÍCIO DO SETUP ==========`);
-    
-    // PASSO 1: Deletar instância existente (limpar cache)
-    console.log(`\n📍 [Evolution] PASSO 1: Deletando instância existente...`);
-    await deleteInstance();
-    
-    // PASSO 2: Aguardar 1 segundo
-    console.log(`\n📍 [Evolution] PASSO 2: Aguardando 1 segundo...`);
-    await sleep(1000);
-    
-    // PASSO 3: Criar nova instância
-    console.log(`\n📍 [Evolution] PASSO 3: Criando nova instância...`);
     const createResult = await createInstance();
     
     if (createResult.qrCode) {
@@ -200,7 +201,7 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
       return createResult;
     }
     
-    // PASSO 4: Se não veio QR na criação, tentar connect
+    // Se não veio QR na criação, tentar connect
     console.log(`\n📍 [Evolution] PASSO 4: QR não veio na criação. Tentando connect...`);
     await sleep(500);
     
@@ -214,8 +215,40 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
     console.log(`\n⚠️ [Evolution] ========== SETUP CONCLUÍDO SEM QR CODE ==========\n`);
     return connectResult;
     
-  } catch (error: any) {
-    const errorMsg = handleAxiosError(error, "createOrGetInstance");
+  } catch (createError: any) {
+    const status = createError.response?.status;
+    const message = createError.response?.data?.response?.message?.[0] || 
+                    createError.response?.data?.message || "";
+    
+    console.log(`⚠️ [Evolution] Create falhou. Status: ${status}, Mensagem: ${message}`);
+    
+    // Se instância já existe, tentar conectar
+    if (status === 403 || message.includes("already") || message.includes("in use")) {
+      console.log(`\n📍 [Evolution] PASSO 4: Instância existe. Tentando connect...`);
+      
+      try {
+        const connectResult = await tryConnectInstance();
+        
+        if (connectResult.qrCode) {
+          console.log(`\n✅ [Evolution] ========== SETUP CONCLUÍDO COM SUCESSO ==========\n`);
+          return connectResult;
+        }
+        
+        if (connectResult.status === "connected" || connectResult.status === "open") {
+          console.log(`\n✅ [Evolution] ========== INSTÂNCIA JÁ CONECTADA ==========\n`);
+          return { success: true, status: "connected" };
+        }
+        
+        console.log(`\n⚠️ [Evolution] ========== SETUP CONCLUÍDO SEM QR CODE ==========\n`);
+        return connectResult;
+        
+      } catch (connectError: any) {
+        const errorMsg = handleAxiosError(connectError, "tryConnectInstance");
+        return { success: false, error: errorMsg };
+      }
+    }
+    
+    const errorMsg = handleAxiosError(createError, "createInstance");
     return { success: false, error: errorMsg };
   }
 }

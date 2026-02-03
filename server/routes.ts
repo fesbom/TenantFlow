@@ -2036,6 +2036,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `);
       }
 
+      // Log URL for user access
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000';
+      const fullUrl = `${protocol}://${host}/admin/setup-whatsapp?token=${ADMIN_SETUP_TOKEN}`;
+      console.log(`\n🔗 [Evolution] URL de acesso ao QR Code:`);
+      console.log(`   ${fullUrl}\n`);
+
       if (result.status === "connected") {
         return res.send(`
           <!DOCTYPE html>
@@ -2043,22 +2050,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Setup WhatsApp - Conectado</title>
+            <title>WhatsApp Conectado - Clínica Denticare</title>
             <style>
-              body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
-              .success { color: #16a34a; background: #f0fdf4; padding: 20px; border-radius: 8px; }
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body { 
+                font-family: 'Segoe UI', system-ui, sans-serif; 
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+              }
+              .container {
+                background: #ffffff;
+                padding: 40px;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                text-align: center;
+                max-width: 500px;
+                width: 100%;
+              }
+              h1 { color: #16a34a; font-size: 28px; margin-bottom: 20px; }
+              .success-icon { font-size: 80px; margin-bottom: 20px; }
+              .message { color: #374151; font-size: 18px; line-height: 1.6; }
             </style>
           </head>
           <body>
-            <h1>✅ WhatsApp Conectado!</h1>
-            <div class="success">
-              <p>A instância já está conectada e operacional.</p>
-              <p>Você pode começar a receber mensagens.</p>
+            <div class="container">
+              <div class="success-icon">✅</div>
+              <h1>WhatsApp Conectado!</h1>
+              <p class="message">
+                A instância já está conectada e operacional.<br>
+                Você pode começar a receber mensagens.
+              </p>
             </div>
           </body>
           </html>
         `);
       }
+
+      // Clean and prepare base64 string
+      let qrBase64 = result.qrCode || "";
+      
+      // Remove any line breaks or whitespace
+      qrBase64 = qrBase64.replace(/[\r\n\s]/g, "");
+      
+      // Remove data URI prefix if already present (to avoid duplication)
+      if (qrBase64.startsWith("data:image")) {
+        qrBase64 = qrBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+      }
+      
+      console.log(`📊 [Evolution] Base64 limpo: ${qrBase64.length} caracteres`);
+      console.log(`📊 [Evolution] Primeiros 50 chars: ${qrBase64.substring(0, 50)}...`);
+
+      // Fallback if no QR code
+      if (!qrBase64 || qrBase64.length < 100) {
+        console.error(`❌ [Evolution] QR Code base64 inválido ou vazio!`);
+        return res.status(500).send(`
+          <!DOCTYPE html>
+          <html lang="pt-BR">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="refresh" content="10">
+            <title>Erro - Clínica Denticare</title>
+            <style>
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body { 
+                font-family: 'Segoe UI', system-ui, sans-serif; 
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+                color: #fff;
+              }
+              .container {
+                background: #dc2626;
+                padding: 40px;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                text-align: center;
+                max-width: 500px;
+                width: 100%;
+              }
+              h1 { font-size: 28px; margin-bottom: 20px; }
+              .error-icon { font-size: 80px; margin-bottom: 20px; }
+              .message { font-size: 16px; line-height: 1.6; margin-bottom: 20px; }
+              .refresh-info { font-size: 14px; opacity: 0.8; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="error-icon">⚠️</div>
+              <h1>QR Code não disponível</h1>
+              <p class="message">
+                Não foi possível gerar o QR Code.<br>
+                A página será atualizada automaticamente em 10 segundos.
+              </p>
+              <p class="refresh-info">Status: ${result.status || 'unknown'}</p>
+            </div>
+          </body>
+          </html>
+        `);
+      }
+
+      // Build the complete data URI
+      const dataUri = `data:image/png;base64,${qrBase64}`;
 
       res.send(`
         <!DOCTYPE html>
@@ -2066,28 +2166,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Setup WhatsApp - QR Code</title>
+          <meta http-equiv="refresh" content="45">
+          <title>Conectar WhatsApp - Clínica Denticare</title>
           <style>
-            body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
-            .qr-container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-            .qr-container img { max-width: 300px; border: 2px solid #e5e7eb; border-radius: 8px; }
-            .instructions { margin-top: 20px; color: #6b7280; }
-            .refresh-btn { margin-top: 20px; padding: 12px 24px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
-            .refresh-btn:hover { background: #1d4ed8; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { 
+              font-family: 'Segoe UI', system-ui, sans-serif; 
+              background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 20px;
+            }
+            .container {
+              background: #ffffff;
+              padding: 40px;
+              border-radius: 20px;
+              box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+              text-align: center;
+              max-width: 500px;
+              width: 100%;
+            }
+            .logo { font-size: 48px; margin-bottom: 10px; }
+            h1 { 
+              color: #1e3a5f; 
+              font-size: 24px; 
+              margin-bottom: 25px;
+              font-weight: 600;
+            }
+            .qr-wrapper {
+              background: #f8fafc;
+              padding: 20px;
+              border-radius: 16px;
+              border: 3px solid #e2e8f0;
+              display: inline-block;
+              margin-bottom: 25px;
+            }
+            #qrcode {
+              max-width: 280px;
+              width: 100%;
+              height: auto;
+              display: block;
+              border-radius: 8px;
+            }
+            .instructions {
+              text-align: left;
+              background: #f0f9ff;
+              padding: 20px;
+              border-radius: 12px;
+              margin-bottom: 20px;
+            }
+            .instructions h3 {
+              color: #0369a1;
+              font-size: 16px;
+              margin-bottom: 12px;
+            }
+            .instructions ol {
+              color: #475569;
+              font-size: 14px;
+              line-height: 1.8;
+              padding-left: 20px;
+            }
+            .instructions li { margin-bottom: 5px; }
+            .refresh-btn {
+              background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+              color: white;
+              border: none;
+              padding: 14px 32px;
+              border-radius: 10px;
+              font-size: 16px;
+              font-weight: 600;
+              cursor: pointer;
+              transition: transform 0.2s, box-shadow 0.2s;
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+            }
+            .refresh-btn:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+            }
+            .auto-refresh {
+              margin-top: 15px;
+              font-size: 12px;
+              color: #94a3b8;
+            }
+            .countdown {
+              font-weight: bold;
+              color: #64748b;
+            }
           </style>
         </head>
         <body>
-          <h1>📱 Escaneie o QR Code</h1>
-          <div class="qr-container">
-            <img src="data:image/png;base64,${result.qrCode}" alt="QR Code WhatsApp" />
-            <div class="instructions">
-              <p>1. Abra o WhatsApp no celular da clínica</p>
-              <p>2. Vá em <strong>Configurações > Aparelhos conectados</strong></p>
-              <p>3. Toque em <strong>Conectar um aparelho</strong></p>
-              <p>4. Escaneie este QR Code</p>
+          <div class="container">
+            <div class="logo">📱</div>
+            <h1>Conectar WhatsApp - Clínica Denticare</h1>
+            
+            <div class="qr-wrapper">
+              <img id="qrcode" src="${dataUri}" alt="QR Code WhatsApp" />
             </div>
-            <button class="refresh-btn" onclick="location.reload()">🔄 Atualizar</button>
+            
+            <div class="instructions">
+              <h3>📋 Como conectar:</h3>
+              <ol>
+                <li>Abra o <strong>WhatsApp</strong> no celular da clínica</li>
+                <li>Toque em <strong>⋮ Menu</strong> (3 pontos) no canto superior</li>
+                <li>Selecione <strong>Aparelhos conectados</strong></li>
+                <li>Toque em <strong>Conectar um aparelho</strong></li>
+                <li>Aponte a câmera para este QR Code</li>
+              </ol>
+            </div>
+            
+            <button class="refresh-btn" onclick="location.reload()">
+              🔄 Atualizar QR Code
+            </button>
+            
+            <p class="auto-refresh">
+              Atualização automática em <span class="countdown" id="countdown">45</span> segundos
+            </p>
           </div>
+          
+          <script>
+            // Countdown timer
+            let seconds = 45;
+            const countdownEl = document.getElementById('countdown');
+            setInterval(() => {
+              seconds--;
+              if (seconds >= 0) {
+                countdownEl.textContent = seconds;
+              }
+            }, 1000);
+            
+            // Verify image loaded
+            const img = document.getElementById('qrcode');
+            img.onerror = function() {
+              console.error('Erro ao carregar imagem do QR Code');
+              this.alt = 'Erro ao carregar QR Code - Clique em Atualizar';
+              this.style.background = '#fee2e2';
+              this.style.padding = '40px';
+            };
+            img.onload = function() {
+              console.log('QR Code carregado com sucesso!');
+            };
+          </script>
         </body>
         </html>
       `);
