@@ -16,16 +16,18 @@ function sanitizeUrl(url: string | undefined): string {
   return sanitized;
 }
 
-const EVO_URL = sanitizeUrl(process.env.EVO_URL || process.env.EVO_BASE_URL);
+const EVO_URL = sanitizeUrl((process.env.EVO_URL || process.env.EVO_BASE_URL || "").trim());
 const EVO_KEY = (process.env.EVO_KEY || "").trim();
 const EVO_INSTANCE = (process.env.EVO_INSTANCE || "denticare").trim();
-const EVO_TOKEN = (process.env.EVO_TOKEN || EVO_KEY).trim();
+const EVO_TOKEN = (process.env.EVO_TOKEN || "token123").trim();
+const WEBHOOK_GLOBAL_URL = sanitizeUrl((process.env.WEBHOOK_GLOBAL_URL || "").trim());
 
 console.log("🔧 [Evolution] Configuração carregada:");
 console.log(`   - EVO_URL: ${EVO_URL || "(não configurada)"}`);
 console.log(`   - EVO_KEY: ${EVO_KEY ? `${EVO_KEY.substring(0, 8)}...` : "(não configurada)"}`);
 console.log(`   - EVO_INSTANCE: ${EVO_INSTANCE}`);
-console.log(`   - EVO_TOKEN: ${EVO_TOKEN ? `${EVO_TOKEN.substring(0, 8)}...` : "(usando EVO_KEY)"}`);
+console.log(`   - EVO_TOKEN: ${EVO_TOKEN}`);
+console.log(`   - WEBHOOK_GLOBAL_URL: ${WEBHOOK_GLOBAL_URL || "(não configurada)"}`);
 
 export interface EvolutionSendResult {
   success: boolean;
@@ -48,6 +50,10 @@ function handleAxiosError(error: any, context: string): string {
     console.error(`   - Código de erro: ${error.code}`);
   }
   
+  if (error.toJSON) {
+    console.error(`   - Error.toJSON():`, JSON.stringify(error.toJSON(), null, 2));
+  }
+  
   if (error.response) {
     console.error(`   - Status HTTP: ${error.response.status}`);
     console.error(`   - Response data:`, JSON.stringify(error.response.data, null, 2));
@@ -65,9 +71,46 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function getConnectionState(): Promise<{ state: string; connected: boolean }> {
+  const stateUrl = `${EVO_URL}/instance/connectionState/${EVO_INSTANCE}`;
+  console.log(`🔍 [Evolution] GET ${stateUrl}`);
+  
+  try {
+    const response = await axios.get(stateUrl, {
+      headers: {
+        "apikey": EVO_KEY,
+      },
+      timeout: 10000,
+    });
+    
+    console.log(`📋 [Evolution] Resposta connectionState:`);
+    console.log(JSON.stringify(response.data, null, 2));
+    
+    const state = response.data?.instance?.state || 
+                  response.data?.state || 
+                  "unknown";
+    const connected = state === "open" || state === "connected";
+    
+    console.log(`📊 [Evolution] Estado atual: ${state} (conectado: ${connected})`);
+    
+    return { state, connected };
+  } catch (error: any) {
+    const status = error.response?.status;
+    if (status === 404) {
+      console.log(`ℹ️ [Evolution] Instância não existe (404)`);
+      return { state: "NOT_FOUND", connected: false };
+    }
+    console.log(`⚠️ [Evolution] Erro ao verificar estado: ${error.message}`);
+    if (error.toJSON) {
+      console.log(`   - Error.toJSON():`, JSON.stringify(error.toJSON(), null, 2));
+    }
+    return { state: "ERROR", connected: false };
+  }
+}
+
 async function logoutInstance(): Promise<void> {
   const logoutUrl = `${EVO_URL}/instance/logout/${EVO_INSTANCE}`;
-  console.log(`🔓 [Evolution] POST ${logoutUrl}`);
+  console.log(`🔓 [Evolution] DELETE ${logoutUrl}`);
   
   try {
     await axios.delete(logoutUrl, {
@@ -82,12 +125,15 @@ async function logoutInstance(): Promise<void> {
     if (status === 404 || status === 400) {
       console.log(`ℹ️ [Evolution] Logout não necessário (${status})`);
     } else {
-      console.log(`⚠️ [Evolution] Erro no logout (ignorando): ${error.response?.data?.message || error.message}`);
+      console.log(`⚠️ [Evolution] Erro no logout: ${error.message}`);
+      if (error.toJSON) {
+        console.log(`   - Error.toJSON():`, JSON.stringify(error.toJSON(), null, 2));
+      }
     }
   }
 }
 
-async function deleteInstance(): Promise<void> {
+async function deleteInstance(): Promise<boolean> {
   const deleteUrl = `${EVO_URL}/instance/delete/${EVO_INSTANCE}`;
   console.log(`🗑️ [Evolution] DELETE ${deleteUrl}`);
   
@@ -100,13 +146,18 @@ async function deleteInstance(): Promise<void> {
     });
     console.log(`✅ [Evolution] Instância '${EVO_INSTANCE}' deletada com sucesso`);
     console.log(`   - Response:`, JSON.stringify(response.data, null, 2));
+    return true;
   } catch (error: any) {
     const status = error.response?.status;
     if (status === 404) {
-      console.log(`ℹ️ [Evolution] Instância não encontrada (404) - OK, continuando...`);
-    } else {
-      console.log(`⚠️ [Evolution] Erro ao deletar (ignorando): ${error.response?.data?.message || error.message}`);
+      console.log(`ℹ️ [Evolution] Instância não encontrada (404) - OK`);
+      return true;
     }
+    console.log(`⚠️ [Evolution] Erro ao deletar: ${error.message}`);
+    if (error.toJSON) {
+      console.log(`   - Error.toJSON():`, JSON.stringify(error.toJSON(), null, 2));
+    }
+    return false;
   }
 }
 
@@ -116,117 +167,121 @@ async function createInstance(): Promise<EvolutionInstanceResult> {
   const requestBody = {
     instanceName: EVO_INSTANCE,
     token: EVO_TOKEN,
-    qrcode: true,
-    integration: "WHATSAPP-BAILEYS",
+    qrcode: true
   };
   
   console.log(`🆕 [Evolution] POST ${createUrl}`);
   console.log(`   - Request Body:`, JSON.stringify(requestBody, null, 2));
   
-  const response = await axios.post(
-    createUrl,
-    requestBody,
-    {
-      headers: {
-        "apikey": EVO_KEY,
-        "Content-Type": "application/json",
-      },
-      timeout: 30000,
+  try {
+    const response = await axios.post(
+      createUrl,
+      requestBody,
+      {
+        headers: {
+          "apikey": EVO_KEY,
+          "Content-Type": "application/json",
+        },
+        timeout: 30000,
+      }
+    );
+
+    console.log(`\n📋 [Evolution] ========== RESPOSTA COMPLETA DO CREATE ==========`);
+    console.log(JSON.stringify(response.data, null, 2));
+    console.log(`📋 [Evolution] ========== FIM DA RESPOSTA ==========\n`);
+
+    const instanceState = response.data?.instance?.state || 
+                          response.data?.state || 
+                          response.data?.status ||
+                          "unknown";
+    console.log(`📊 [Evolution] Status da instância: ${instanceState}`);
+
+    const qrCode = response.data?.qrcode?.base64 || 
+                   response.data?.base64 ||
+                   response.data?.qrcode;
+    
+    if (qrCode && typeof qrCode === 'string' && qrCode.length > 100) {
+      console.log(`✅ [Evolution] QR Code capturado com sucesso (${qrCode.length} caracteres)`);
+      return {
+        success: true,
+        qrCode,
+        status: instanceState,
+        rawResponse: response.data,
+      };
     }
-  );
-
-  console.log(`\n📋 [Evolution] ========== RESPOSTA COMPLETA DO CREATE ==========`);
-  console.log(JSON.stringify(response.data, null, 2));
-  console.log(`📋 [Evolution] ========== FIM DA RESPOSTA ==========\n`);
-
-  const instanceState = response.data?.instance?.state || 
-                        response.data?.state || 
-                        response.data?.status ||
-                        "unknown";
-  console.log(`📊 [Evolution] Status da instância: ${instanceState}`);
-  
-  if (instanceState === "DISCONNECTED" || instanceState === "close") {
-    console.log(`✅ [Evolution] Instância está DISCONNECTED - pronta para gerar QR Code`);
-  } else if (instanceState === "open" || instanceState === "connected") {
-    console.log(`⚠️ [Evolution] Instância já está conectada!`);
+    
+    console.log(`⚠️ [Evolution] QR Code não encontrado na resposta do create`);
+    
     return {
       success: true,
-      status: "connected",
-      rawResponse: response.data,
-    };
-  }
-
-  const qrCode = response.data?.qrcode?.base64 || 
-                 response.data?.base64 ||
-                 response.data?.qrcode;
-  
-  if (qrCode) {
-    console.log(`✅ [Evolution] QR Code capturado com sucesso (${qrCode.length} caracteres)`);
-    return {
-      success: true,
-      qrCode,
       status: instanceState,
       rawResponse: response.data,
     };
+  } catch (error: any) {
+    console.error(`❌ [Evolution] Erro no create:`);
+    if (error.toJSON) {
+      console.error(`   - Error.toJSON():`, JSON.stringify(error.toJSON(), null, 2));
+    }
+    throw error;
   }
-  
-  console.log(`⚠️ [Evolution] QR Code não encontrado na resposta do create`);
-  
-  return {
-    success: true,
-    status: instanceState,
-    rawResponse: response.data,
-  };
 }
 
 async function tryConnectInstance(): Promise<EvolutionInstanceResult> {
   const connectUrl = `${EVO_URL}/instance/connect/${EVO_INSTANCE}`;
   console.log(`📱 [Evolution] GET ${connectUrl}`);
   
-  const response = await axios.get(connectUrl, {
-    headers: {
-      "apikey": EVO_KEY,
-    },
-    timeout: 20000,
-  });
+  try {
+    const response = await axios.get(connectUrl, {
+      headers: {
+        "apikey": EVO_KEY,
+      },
+      timeout: 20000,
+    });
 
-  console.log(`\n📋 [Evolution] ========== RESPOSTA COMPLETA DO CONNECT ==========`);
-  console.log(JSON.stringify(response.data, null, 2));
-  console.log(`📋 [Evolution] ========== FIM DA RESPOSTA ==========\n`);
+    console.log(`\n📋 [Evolution] ========== RESPOSTA COMPLETA DO CONNECT ==========`);
+    console.log(JSON.stringify(response.data, null, 2));
+    console.log(`📋 [Evolution] ========== FIM DA RESPOSTA ==========\n`);
 
-  const instanceState = response.data?.instance?.state || 
-                        response.data?.state || 
-                        "unknown";
-  console.log(`📊 [Evolution] Status da instância: ${instanceState}`);
+    const instanceState = response.data?.instance?.state || 
+                          response.data?.state || 
+                          "unknown";
+    console.log(`📊 [Evolution] Status da instância: ${instanceState}`);
 
-  const qrCode = response.data?.base64 || response.data?.qrcode?.base64;
-  
-  if (qrCode) {
-    console.log(`✅ [Evolution] QR Code recebido (${qrCode.length} caracteres)`);
+    const qrCode = response.data?.base64 || response.data?.qrcode?.base64;
+    
+    if (qrCode && typeof qrCode === 'string' && qrCode.length > 100) {
+      console.log(`✅ [Evolution] QR Code recebido (${qrCode.length} caracteres)`);
+      return {
+        success: true,
+        qrCode,
+        status: instanceState,
+        rawResponse: response.data,
+      };
+    }
+
+    if (instanceState === "open" || instanceState === "connected") {
+      console.log(`✅ [Evolution] Instância já está conectada`);
+      return {
+        success: true,
+        status: "connected",
+        rawResponse: response.data,
+      };
+    }
+
+    console.log(`⚠️ [Evolution] QR Code não encontrado no connect`);
+    
     return {
       success: true,
-      qrCode,
       status: instanceState,
       rawResponse: response.data,
     };
+  } catch (error: any) {
+    console.error(`❌ [Evolution] Erro no connect:`);
+    if (error.toJSON) {
+      console.error(`   - Error.toJSON():`, JSON.stringify(error.toJSON(), null, 2));
+    }
+    throw error;
   }
-
-  if (instanceState === "open" || instanceState === "connected") {
-    console.log(`✅ [Evolution] Instância já está conectada`);
-    return {
-      success: true,
-      status: "connected",
-      rawResponse: response.data,
-    };
-  }
-
-  console.log(`⚠️ [Evolution] QR Code não encontrado no connect`);
-  
-  return {
-    success: true,
-    status: instanceState,
-    rawResponse: response.data,
-  };
 }
 
 export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
@@ -242,50 +297,73 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
     return { success: false, error: errorMsg };
   }
 
-  console.log(`\n🔄 [Evolution] ========== DEEP RESET - INÍCIO ==========`);
+  console.log(`\n🔄 [Evolution] ========== SETUP RESILIENTE - INÍCIO ==========`);
   console.log(`⏰ [Evolution] Timestamp: ${new Date().toISOString()}`);
+  console.log(`🔗 [Evolution] EVO_URL: ${EVO_URL}`);
+  console.log(`📛 [Evolution] Instância: ${EVO_INSTANCE}`);
   
-  // PASSO 1: Logout forçado (desconecta sessão existente)
-  console.log(`\n📍 [Evolution] PASSO 1: Logout forçado...`);
-  await logoutInstance();
-  await sleep(500);
+  // PASSO 1: Verificar estado atual da conexão
+  console.log(`\n📍 [Evolution] PASSO 1: Verificando estado da conexão...`);
+  const { state, connected } = await getConnectionState();
   
-  // PASSO 2: Deletar instância existente
-  console.log(`\n📍 [Evolution] PASSO 2: Deletando instância '${EVO_INSTANCE}'...`);
-  await deleteInstance();
+  if (connected) {
+    console.log(`\n✅ [Evolution] ========== INSTÂNCIA JÁ CONECTADA ==========\n`);
+    return { success: true, status: "connected" };
+  }
   
-  // PASSO 3: Aguardar 2 segundos para garantir limpeza
-  console.log(`\n📍 [Evolution] PASSO 3: Aguardando 2 segundos...`);
-  await sleep(2000);
+  // PASSO 2: Se DISCONNECTED ou existe, forçar DELETE
+  if (state === "close" || state === "DISCONNECTED" || state !== "NOT_FOUND") {
+    console.log(`\n📍 [Evolution] PASSO 2: Estado '${state}' detectado. Forçando limpeza...`);
+    
+    // Logout primeiro
+    console.log(`   - Executando logout...`);
+    await logoutInstance();
+    await sleep(500);
+    
+    // Delete
+    console.log(`   - Executando delete...`);
+    const deleted = await deleteInstance();
+    if (deleted) {
+      console.log(`   - Aguardando 2 segundos após delete...`);
+      await sleep(2000);
+    }
+  } else {
+    console.log(`\n📍 [Evolution] PASSO 2: Instância não existe. Pulando limpeza.`);
+  }
   
-  // PASSO 4: Criar nova instância com token
-  console.log(`\n📍 [Evolution] PASSO 4: Criando nova instância com token...`);
+  // PASSO 3: Criar nova instância
+  console.log(`\n📍 [Evolution] PASSO 3: Criando nova instância...`);
   
   try {
     const createResult = await createInstance();
     
     if (createResult.status === "connected") {
-      console.log(`\n✅ [Evolution] ========== INSTÂNCIA JÁ CONECTADA ==========\n`);
+      console.log(`\n✅ [Evolution] ========== INSTÂNCIA CONECTADA ==========\n`);
       return createResult;
     }
     
     if (createResult.qrCode) {
-      console.log(`\n✅ [Evolution] ========== DEEP RESET CONCLUÍDO COM SUCESSO ==========\n`);
+      console.log(`\n✅ [Evolution] ========== QR CODE GERADO COM SUCESSO ==========\n`);
       return createResult;
     }
     
-    // Se não veio QR na criação, tentar connect
-    console.log(`\n📍 [Evolution] PASSO 5: QR não veio na criação. Tentando connect...`);
+    // PASSO 4: Se não veio QR na criação, tentar connect
+    console.log(`\n📍 [Evolution] PASSO 4: QR não veio no create. Tentando connect...`);
     await sleep(1000);
     
     const connectResult = await tryConnectInstance();
     
     if (connectResult.qrCode) {
-      console.log(`\n✅ [Evolution] ========== DEEP RESET CONCLUÍDO COM SUCESSO ==========\n`);
+      console.log(`\n✅ [Evolution] ========== QR CODE OBTIDO VIA CONNECT ==========\n`);
       return connectResult;
     }
     
-    console.log(`\n⚠️ [Evolution] ========== DEEP RESET CONCLUÍDO SEM QR CODE ==========\n`);
+    if (connectResult.status === "connected" || connectResult.status === "open") {
+      console.log(`\n✅ [Evolution] ========== INSTÂNCIA CONECTADA ==========\n`);
+      return { success: true, status: "connected" };
+    }
+    
+    console.log(`\n⚠️ [Evolution] ========== SETUP CONCLUÍDO SEM QR CODE ==========\n`);
     return connectResult;
     
   } catch (createError: any) {
@@ -294,26 +372,25 @@ export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
                     createError.response?.data?.message || "";
     
     console.log(`\n⚠️ [Evolution] Create falhou. Status: ${status}, Mensagem: ${message}`);
-    console.log(`   - Full error response:`, JSON.stringify(createError.response?.data, null, 2));
     
     // Se instância já existe, tentar conectar
     if (status === 403 || message.includes("already") || message.includes("in use")) {
-      console.log(`\n📍 [Evolution] PASSO 5: Instância ainda existe. Tentando connect...`);
+      console.log(`\n📍 [Evolution] PASSO 4: Instância ainda existe. Tentando connect...`);
       
       try {
         const connectResult = await tryConnectInstance();
         
         if (connectResult.qrCode) {
-          console.log(`\n✅ [Evolution] ========== DEEP RESET CONCLUÍDO COM SUCESSO ==========\n`);
+          console.log(`\n✅ [Evolution] ========== QR CODE OBTIDO VIA CONNECT ==========\n`);
           return connectResult;
         }
         
         if (connectResult.status === "connected" || connectResult.status === "open") {
-          console.log(`\n✅ [Evolution] ========== INSTÂNCIA JÁ CONECTADA ==========\n`);
+          console.log(`\n✅ [Evolution] ========== INSTÂNCIA CONECTADA ==========\n`);
           return { success: true, status: "connected", rawResponse: connectResult.rawResponse };
         }
         
-        console.log(`\n⚠️ [Evolution] ========== DEEP RESET CONCLUÍDO SEM QR CODE ==========\n`);
+        console.log(`\n⚠️ [Evolution] ========== SETUP CONCLUÍDO SEM QR CODE ==========\n`);
         return connectResult;
         
       } catch (connectError: any) {
