@@ -1961,6 +1961,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/admin/setup-whatsapp", async (req, res) => {
     const token = req.query.token as string;
     
+    // Prevenir cache de QR Codes antigos
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     if (!token || token !== ADMIN_SETUP_TOKEN) {
       console.warn("⚠️ [Evolution Setup] Token inválido ou ausente");
       return res.status(403).send(`
