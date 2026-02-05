@@ -1853,9 +1853,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Evolution API Integration Routes
   // ========================================
 
-  // Webhook for receiving WhatsApp messages from Evolution API
-  // NOTE: This route does NOT require authenticateToken - it receives data from Evolution API servers
-  app.post("/webhook/evolution", async (req, res) => {
+  // ============================================================
+  // WEBHOOK EVOLUTION API - VERSÃO SIMPLIFICADA PARA DIAGNÓSTICO
+  // ============================================================
+  app.post("/webhook/evolution", (req, res) => {
+    console.log("\n");
+    console.log("########################################");
+    console.log("🔔 WEBHOOK RECEBIDO!");
+    console.log("########################################");
+    console.log("⏰ Timestamp:", new Date().toISOString());
+    console.log("📋 Headers:", JSON.stringify(req.headers, null, 2));
+    console.log("📦 Corpo da Requisição:", JSON.stringify(req.body, null, 2));
+    console.log("########################################\n");
+    
+    res.status(200).json({ status: 'success', received: true });
+  });
+  
+  // ============================================================
+  // WEBHOOK EVOLUTION API - VERSÃO COMPLETA (COMENTADA PARA TESTE)
+  // ============================================================
+  // Descomente esta rota e comente a acima quando o diagnóstico estiver OK
+  /*
+  app.post("/webhook/evolution-full", async (req, res) => {
     console.log("\n========================================");
     console.log("📩 [WEBHOOK] Recebi algo do Webhook:", JSON.stringify(req.body, null, 2));
     console.log("========================================\n");
@@ -1863,7 +1882,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const data = req.body;
       
-      // Evolution API sends different event types - we only process messages
       if (!data || data.event !== "messages.upsert") {
         console.log(`ℹ️ [Evolution] Evento ignorado: ${data?.event || 'undefined'}`);
         return res.status(200).json({ received: true });
@@ -1877,7 +1895,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const remoteJid = messageData.key?.remoteJid || "";
       
-      // FILTRO: Ignorar grupos (apenas mensagens privadas @s.whatsapp.net)
       if (!remoteJid.endsWith("@s.whatsapp.net")) {
         console.log(`🚫 [Evolution] Mensagem de GRUPO ignorada: ${remoteJid}`);
         return res.status(200).json({ received: true, ignored: "group_message" });
@@ -1885,7 +1902,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const phone = remoteJid.replace("@s.whatsapp.net", "");
       
-      // Extract text from various message formats
       const messageText = messageData.message?.conversation || 
                           messageData.message?.extendedTextMessage?.text ||
                           messageData.data?.message?.conversation ||
@@ -1964,6 +1980,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(200).json({ received: true, error: "Internal processing error" });
     }
   });
+  */
 
   // Admin route to setup WhatsApp via Evolution API (QR Code generation)
   // NOTE: Protected by simple query param token (no JWT required)
