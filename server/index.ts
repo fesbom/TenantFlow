@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -9,6 +10,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+
+// CORS TOTALMENTE LIBERADO - Necessário para webhooks externos
+app.use(cors({ origin: '*' }));
 
 // MIDDLEWARE DE DIAGNÓSTICO GLOBAL - Captura TODOS os POSTs
 app.use((req, res, next) => {

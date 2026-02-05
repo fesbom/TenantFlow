@@ -1857,16 +1857,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // WEBHOOK EVOLUTION API - VERSÃO SIMPLIFICADA PARA DIAGNÓSTICO
   // ============================================================
   app.post("/webhook/evolution", (req, res) => {
+    // RESPOSTA IMEDIATA - Evita timeout do Railway
+    res.status(200).send("OK");
+    
+    // LOG APÓS RESPOSTA - Não bloqueia o retorno
     console.log("\n");
     console.log("########################################");
     console.log("🔔 WEBHOOK RECEBIDO!");
     console.log("########################################");
     console.log("⏰ Timestamp:", new Date().toISOString());
-    console.log("📋 Headers:", JSON.stringify(req.headers, null, 2));
-    console.log("📦 Corpo da Requisição:", JSON.stringify(req.body, null, 2));
+    console.log("📦 Body:", JSON.stringify(req.body, null, 2));
     console.log("########################################\n");
-    
-    res.status(200).json({ status: 'success', received: true });
   });
   
   // ============================================================
