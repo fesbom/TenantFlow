@@ -2396,16 +2396,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
     
-    // Detectar URL atual do Replit/Webview
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000';
-    const webhookUrl = `${protocol}://${host}/webhook/evolution`;
+    // PRIORIDADE 1: Usar WEBHOOK_GLOBAL_URL do Secret (se configurado)
+    // PRIORIDADE 2: Fallback para headers do request
+    const WEBHOOK_GLOBAL_URL = (process.env.WEBHOOK_GLOBAL_URL || "").trim().replace(/\/+$/, "");
+    
+    let webhookUrl: string;
+    
+    if (WEBHOOK_GLOBAL_URL) {
+      // Usar o Secret configurado
+      webhookUrl = WEBHOOK_GLOBAL_URL.endsWith("/webhook/evolution") 
+        ? WEBHOOK_GLOBAL_URL 
+        : `${WEBHOOK_GLOBAL_URL}/webhook/evolution`;
+      console.log(`✅ [Set Webhook] Usando WEBHOOK_GLOBAL_URL do Secret`);
+    } else {
+      // Fallback: montar URL a partir dos headers
+      const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+      if (host && !host.includes('localhost')) {
+        webhookUrl = `https://${host}/webhook/evolution`;
+        console.log(`⚠️ [Set Webhook] WEBHOOK_GLOBAL_URL não configurado. Usando headers: ${host}`);
+      } else {
+        console.error("❌ [Set Webhook] Não foi possível determinar a URL do webhook");
+        return res.status(400).json({
+          success: false,
+          error: "Configure WEBHOOK_GLOBAL_URL nos Secrets ou acesse via URL pública do Replit"
+        });
+      }
+    }
+    
+    // Garantir que a URL comece com https://
+    if (!webhookUrl.startsWith("https://")) {
+      webhookUrl = webhookUrl.replace(/^http:\/\//, "https://");
+      if (!webhookUrl.startsWith("https://")) {
+        webhookUrl = `https://${webhookUrl}`;
+      }
+    }
     
     console.log("\n========================================");
     console.log("🔧 [Set Webhook] Configurando webhook na Evolution API");
     console.log(`📍 [Set Webhook] EVO_URL: ${EVO_URL}`);
     console.log(`📛 [Set Webhook] Instância: ${EVO_INSTANCE}`);
-    console.log(`🌐 [Set Webhook] Webhook URL: ${webhookUrl}`);
+    console.log(`🌐 [Set Webhook] Configurando Webhook na URL REAL: ${webhookUrl}`);
     console.log("========================================\n");
     
     try {
