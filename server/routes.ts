@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import axios from "axios";
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -1855,8 +1856,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Webhook for receiving WhatsApp messages from Evolution API
   // NOTE: This route does NOT require authenticateToken - it receives data from Evolution API servers
   app.post("/webhook/evolution", async (req, res) => {
-    console.log("\n--- [DEBUG] INÍCIO DO WEBHOOK EVOLUTION ---");
-    console.log("Conteúdo recebido (req.body):", JSON.stringify(req.body, null, 2));
+    console.log("\n========================================");
+    console.log("📩 [WEBHOOK] Recebi algo do Webhook:", JSON.stringify(req.body, null, 2));
+    console.log("========================================\n");
 
     try {
       const data = req.body;
@@ -1873,7 +1875,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(200).json({ received: true });
       }
 
-      const phone = messageData.key?.remoteJid?.replace("@s.whatsapp.net", "") || "";
+      const remoteJid = messageData.key?.remoteJid || "";
+      
+      // FILTRO: Ignorar grupos (apenas mensagens privadas @s.whatsapp.net)
+      if (!remoteJid.endsWith("@s.whatsapp.net")) {
+        console.log(`🚫 [Evolution] Mensagem de GRUPO ignorada: ${remoteJid}`);
+        return res.status(200).json({ received: true, ignored: "group_message" });
+      }
+      
+      const phone = remoteJid.replace("@s.whatsapp.net", "");
       
       // Extract text from various message formats
       const messageText = messageData.message?.conversation || 
@@ -2351,6 +2361,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
         </body>
         </html>
       `);
+    }
+  });
+
+  // Admin route to auto-configure webhook on Evolution API
+  // Usage: GET /admin/set-webhook?token=YOUR_ADMIN_SETUP_TOKEN
+  app.get("/admin/set-webhook", async (req, res) => {
+    const token = req.query.token as string;
+    
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
+    if (!token || token !== ADMIN_SETUP_TOKEN) {
+      console.warn("⚠️ [Set Webhook] Token inválido ou ausente");
+      return res.status(403).json({ 
+        success: false, 
+        error: "Token inválido ou ausente",
+        usage: "/admin/set-webhook?token=SEU_TOKEN"
+      });
+    }
+    
+    const EVO_URL = (process.env.EVO_URL || "").trim().replace(/\/+$/, "");
+    const EVO_KEY = (process.env.EVO_KEY || "").trim();
+    const EVO_INSTANCE = (process.env.EVO_INSTANCE || "denticare").trim();
+    
+    if (!EVO_URL || !EVO_KEY) {
+      console.error("❌ [Set Webhook] EVO_URL ou EVO_KEY não configuradas");
+      return res.status(503).json({ 
+        success: false, 
+        error: "Evolution API não configurada (EVO_URL ou EVO_KEY ausentes)"
+      });
+    }
+    
+    // Detectar URL atual do Replit/Webview
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000';
+    const webhookUrl = `${protocol}://${host}/webhook/evolution`;
+    
+    console.log("\n========================================");
+    console.log("🔧 [Set Webhook] Configurando webhook na Evolution API");
+    console.log(`📍 [Set Webhook] EVO_URL: ${EVO_URL}`);
+    console.log(`📛 [Set Webhook] Instância: ${EVO_INSTANCE}`);
+    console.log(`🌐 [Set Webhook] Webhook URL: ${webhookUrl}`);
+    console.log("========================================\n");
+    
+    try {
+      const setWebhookUrl = `${EVO_URL}/webhook/set/${EVO_INSTANCE}`;
+      
+      const webhookConfig = {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          webhookByEvents: false,
+          webhookBase64: false,
+          events: [
+            "MESSAGES_UPSERT",
+            "CONNECTION_UPDATE"
+          ]
+        }
+      };
+      
+      console.log(`📤 [Set Webhook] POST ${setWebhookUrl}`);
+      console.log(`📤 [Set Webhook] Body:`, JSON.stringify(webhookConfig, null, 2));
+      
+      const response = await axios.post(setWebhookUrl, webhookConfig, {
+        headers: {
+          "apikey": EVO_KEY,
+          "Content-Type": "application/json",
+        },
+        timeout: 30000,
+      });
+      
+      console.log(`✅ [Set Webhook] Resposta:`, JSON.stringify(response.data, null, 2));
+      
+      return res.json({
+        success: true,
+        message: "Webhook configurado com sucesso!",
+        webhookUrl: webhookUrl,
+        instance: EVO_INSTANCE,
+        evolutionResponse: response.data
+      });
+      
+    } catch (error: any) {
+      console.error(`❌ [Set Webhook] Erro ao configurar webhook:`, error.message);
+      if (error.response?.data) {
+        console.error(`   - Response data:`, JSON.stringify(error.response.data, null, 2));
+      }
+      
+      return res.status(500).json({
+        success: false,
+        error: error.message,
+        details: error.response?.data || null
+      });
     }
   });
 
