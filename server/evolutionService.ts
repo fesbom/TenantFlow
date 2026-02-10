@@ -307,6 +307,8 @@ export async function sendEvolutionMessage(phone: string, text: string): Promise
       {
         number: normalizedPhone,
         text: text,
+        delay: 1200,
+        linkPreview: true,
       },
       {
         headers: {

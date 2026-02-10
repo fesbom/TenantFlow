@@ -33,7 +33,6 @@ import {
   insertWhatsappMessageSchema,
 } from "@shared/schema";
 import { processPatientMessage } from "./whatsappAI";
-import { sendWhatsAppMessage, isZApiConfigured } from "./zapiService";
 import { createOrGetInstance, sendEvolutionMessage, isEvolutionConfigured, getEvolutionInstanceName } from "./evolutionService";
 
 import multer from 'multer';
@@ -1832,9 +1831,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.updateWhatsappConversation(conversation.id, { status: 'human' });
         }
 
-        const sendResult = await sendWhatsAppMessage(normalizedPhone, aiResponse.message);
+        const sendResult = await sendEvolutionMessage(normalizedPhone, aiResponse.message);
         if (!sendResult.success) {
-          console.error("❌ [DEBUG] Falha ao enviar resposta via Z-API:", sendResult.error);
+          console.error("❌ [DEBUG] Falha ao enviar resposta via Evolution:", sendResult.error);
         }
       } else {
         console.log("👤 [DEBUG] Conversa em modo HUMANO. IA não responderá.");
@@ -2563,7 +2562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Send manual message (staff response) - WhatsApp endpoint
+  // Send manual message (staff response) - WhatsApp endpoint via Evolution API
   app.post("/api/whatsapp/conversations/:id/send", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
@@ -2589,29 +2588,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         text: messageText.trim(),
       });
 
-      console.log(`📤 Mensagem do atendente salva: ${savedMessage.id}`);
+      console.log(`📤 [EVOLUTION] Mensagem do atendente salva: ${savedMessage.id}`);
 
-      if (isZApiConfigured()) {
-        const sendResult = await sendWhatsAppMessage(conversation.phone, messageText.trim());
+      if (isEvolutionConfigured()) {
+        const sendResult = await sendEvolutionMessage(conversation.phone, messageText.trim());
         if (!sendResult.success) {
-          console.error("❌ Erro ao enviar via Z-API:", sendResult.error);
+          console.error(`❌ [EVOLUTION] Erro ao enviar: ${sendResult.error}`);
           return res.status(500).json({ 
             message: "Mensagem salva, mas falha ao enviar via WhatsApp",
             savedMessage 
           });
         }
+        console.log(`✅ [EVOLUTION] Mensagem enviada para ${conversation.phone}`);
       } else {
-        console.warn("⚠️ Z-API não configurada - mensagem salva mas não enviada");
+        console.warn("⚠️ [EVOLUTION] API não configurada - mensagem salva mas não enviada");
       }
 
       res.json(savedMessage);
     } catch (error: any) {
-      console.error("Erro ao enviar mensagem:", error);
+      console.error("[EVOLUTION] Erro ao enviar mensagem:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
     }
   });
 
-  // Alias route for support panel - POST /api/conversations/:id/send
+  // Alias route for support panel - POST /api/conversations/:id/send (Evolution API)
   app.post("/api/conversations/:id/send", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
@@ -2637,24 +2637,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         text: messageText.trim(),
       });
 
-      console.log(`📤 Mensagem do atendente salva: ${savedMessage.id}`);
+      console.log(`📤 [EVOLUTION] Mensagem do atendente salva: ${savedMessage.id}`);
 
-      if (isZApiConfigured()) {
-        const sendResult = await sendWhatsAppMessage(conversation.phone, messageText.trim());
+      if (isEvolutionConfigured()) {
+        const sendResult = await sendEvolutionMessage(conversation.phone, messageText.trim());
         if (!sendResult.success) {
-          console.error("❌ Erro ao enviar via Z-API:", sendResult.error);
+          console.error(`❌ [EVOLUTION] Erro ao enviar: ${sendResult.error}`);
           return res.status(500).json({ 
             message: "Mensagem salva, mas falha ao enviar via WhatsApp",
             savedMessage 
           });
         }
+        console.log(`✅ [EVOLUTION] Mensagem enviada para ${conversation.phone}`);
       } else {
-        console.warn("⚠️ Z-API não configurada - mensagem salva mas não enviada");
+        console.warn("⚠️ [EVOLUTION] API não configurada - mensagem salva mas não enviada");
       }
 
       res.json(savedMessage);
     } catch (error: any) {
-      console.error("Erro ao enviar mensagem:", error);
+      console.error("[EVOLUTION] Erro ao enviar mensagem:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
     }
   });
