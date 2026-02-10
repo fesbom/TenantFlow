@@ -1854,134 +1854,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========================================
 
   // ============================================================
-  // WEBHOOK EVOLUTION API - VERSÃO SIMPLIFICADA PARA DIAGNÓSTICO
+  // WEBHOOK EVOLUTION API - ROTA COMPLETA (PRODUÇÃO)
   // ============================================================
   app.post("/webhook/evolution", (req, res) => {
     // RESPOSTA IMEDIATA - Evita timeout do Railway
     res.status(200).send("OK");
-    
-    // LOG APÓS RESPOSTA - Não bloqueia o retorno
-    console.log("\n");
-    console.log("########################################");
-    console.log("🔔 WEBHOOK RECEBIDO!");
-    console.log("########################################");
-    console.log("⏰ Timestamp:", new Date().toISOString());
-    console.log("📦 Body:", JSON.stringify(req.body, null, 2));
-    console.log("########################################\n");
-  });
-  
-  // ============================================================
-  // WEBHOOK EVOLUTION API - VERSÃO COMPLETA (COMENTADA PARA TESTE)
-  // ============================================================
-  // Descomente esta rota e comente a acima quando o diagnóstico estiver OK
-  /*
-  app.post("/webhook/evolution-full", async (req, res) => {
-    console.log("\n========================================");
-    console.log("📩 [WEBHOOK] Recebi algo do Webhook:", JSON.stringify(req.body, null, 2));
-    console.log("========================================\n");
 
-    try {
-      const data = req.body;
-      
-      if (!data || data.event !== "messages.upsert") {
-        console.log(`ℹ️ [Evolution] Evento ignorado: ${data?.event || 'undefined'}`);
-        return res.status(200).json({ received: true });
-      }
+    // PROCESSAMENTO ASSÍNCRONO - Não bloqueia o retorno
+    (async () => {
+      try {
+        const data = req.body;
 
-      const messageData = data.data;
-      if (!messageData || messageData.key?.fromMe) {
-        console.log(`ℹ️ [Evolution] Mensagem própria ignorada`);
-        return res.status(200).json({ received: true });
-      }
+        // FILTRO DE EVENTOS: Só processa messages.upsert
+        if (!data || data.event !== "messages.upsert") {
+          console.log(`[WEBHOOK] Evento ignorado: ${data?.event || 'sem evento'}`);
+          return;
+        }
 
-      const remoteJid = messageData.key?.remoteJid || "";
-      
-      if (!remoteJid.endsWith("@s.whatsapp.net")) {
-        console.log(`🚫 [Evolution] Mensagem de GRUPO ignorada: ${remoteJid}`);
-        return res.status(200).json({ received: true, ignored: "group_message" });
-      }
-      
-      const phone = remoteJid.replace("@s.whatsapp.net", "");
-      
-      const messageText = messageData.message?.conversation || 
-                          messageData.message?.extendedTextMessage?.text ||
-                          messageData.data?.message?.conversation ||
-                          messageData.data?.message?.extendedTextMessage?.text || "";
-      const evolutionMessageId = messageData.key?.id;
+        const messageData = data.data;
+        if (!messageData || messageData.key?.fromMe) {
+          return;
+        }
 
-      if (!phone || !messageText) {
-        console.warn("⚠️ [Evolution Webhook] Campos obrigatórios ausentes (phone ou messageText).");
-        return res.status(200).json({ received: true, warning: "Missing required fields" });
-      }
+        const remoteJid = messageData.key?.remoteJid || "";
 
-      const normalizedPhone = phone.replace(/\D/g, "");
-      console.log(`📱 [Evolution] Paciente: ${normalizedPhone} | Mensagem: "${messageText}"`);
+        // FILTRO: Ignorar grupos (apenas mensagens privadas @s.whatsapp.net)
+        if (!remoteJid.endsWith("@s.whatsapp.net")) {
+          console.log(`[WEBHOOK] Grupo ignorado: ${remoteJid}`);
+          return;
+        }
 
-      const clinicId = process.env.WHATSAPP_CLINIC_ID || "1";
-      console.log(`🏥 [Evolution] Clinic ID em uso: ${clinicId}`);
+        const phone = remoteJid.replace("@s.whatsapp.net", "");
 
-      let conversation = await storage.getWhatsappConversationByPhone(clinicId, normalizedPhone);
+        // Extrair texto de vários formatos de mensagem
+        const messageText = messageData.message?.conversation ||
+                            messageData.message?.extendedTextMessage?.text ||
+                            messageData.data?.message?.conversation ||
+                            messageData.data?.message?.extendedTextMessage?.text || "";
+        const evolutionMessageId = messageData.key?.id;
 
-      if (!conversation) {
-        console.log("🆕 [Evolution] Conversa não encontrada. Criando nova conversa...");
-        conversation = await storage.createWhatsappConversation({
-          clinicId,
-          phone: normalizedPhone,
-          status: 'ai',
-        });
-      }
-      console.log(`✅ [Evolution] ID da Conversa no Banco: ${conversation.id} | Status: ${conversation.status}`);
+        if (!phone || !messageText) {
+          console.log(`[WEBHOOK] Campos ausentes - phone: ${!!phone}, text: ${!!messageText}`);
+          return;
+        }
 
-      const savedMsg = await storage.createWhatsappMessage({
-        conversationId: conversation.id,
-        sender: 'patient',
-        text: messageText,
-        externalMessageId: evolutionMessageId,
-      });
-      console.log(`💾 [Evolution] Mensagem do paciente salva. ID: ${savedMsg.id}`);
+        const normalizedPhone = phone.replace(/\D/g, "");
+        console.log(`[WEBHOOK] Mensagem de ${normalizedPhone}: "${messageText.substring(0, 80)}"`);
 
-      if (conversation.status === 'ai') {
-        console.log("🤖 [Evolution] Modo IA ativo. Buscando histórico e chamando Gemini...");
+        const clinicId = process.env.WHATSAPP_CLINIC_ID || "1";
 
-        const messages = await storage.getWhatsappMessagesByConversation(conversation.id);
-        const history = messages.slice(-10).map(m => ({
-          role: m.sender === 'patient' ? 'patient' : 'model',
-          text: m.text,
-        }));
+        // Buscar ou criar conversa
+        let conversation = await storage.getWhatsappConversationByPhone(clinicId, normalizedPhone);
 
-        const aiResponse = await processPatientMessage(messageText, history);
-        console.log("🧠 [Evolution] Resposta do Gemini:", JSON.stringify(aiResponse, null, 2));
+        if (!conversation) {
+          conversation = await storage.createWhatsappConversation({
+            clinicId,
+            phone: normalizedPhone,
+            status: 'ai',
+          });
+          console.log(`[WEBHOOK] Nova conversa criada: ${conversation.id}`);
+        }
 
-        const savedAiMsg = await storage.createWhatsappMessage({
+        // Salvar mensagem do paciente
+        const savedMsg = await storage.createWhatsappMessage({
           conversationId: conversation.id,
-          sender: 'ai',
-          text: aiResponse.message,
-          extractedIntent: JSON.stringify(aiResponse.extractedIntent),
+          sender: 'patient',
+          text: messageText,
+          externalMessageId: evolutionMessageId,
         });
-        console.log(`💾 [Evolution] Mensagem da IA salva. ID: ${savedAiMsg.id}`);
 
-        if (aiResponse.extractedIntent.intent === 'falar_com_humano') {
-          console.log("👤 [Evolution] Intenção de falar com humano detectada. Alterando status...");
-          await storage.updateWhatsappConversation(conversation.id, { status: 'human' });
+        // Processar com IA se conversa está em modo AI
+        if (conversation.status === 'ai') {
+          const messages = await storage.getWhatsappMessagesByConversation(conversation.id);
+          const history = messages.slice(-10).map(m => ({
+            role: m.sender === 'patient' ? 'patient' : 'model',
+            text: m.text,
+          }));
+
+          const aiResponse = await processPatientMessage(messageText, history);
+
+          // Salvar resposta da IA
+          await storage.createWhatsappMessage({
+            conversationId: conversation.id,
+            sender: 'ai',
+            text: aiResponse.message,
+            extractedIntent: JSON.stringify(aiResponse.extractedIntent),
+          });
+
+          // Transferir para humano se necessário
+          if (aiResponse.extractedIntent.intent === 'falar_com_humano') {
+            await storage.updateWhatsappConversation(conversation.id, { status: 'human' });
+            console.log(`[WEBHOOK] Conversa ${conversation.id} transferida para humano`);
+          }
+
+          // Enviar resposta via Evolution API
+          console.log(`[BOT] Respondendo para ${remoteJid}...`);
+          const sendResult = await sendEvolutionMessage(normalizedPhone, aiResponse.message);
+          if (!sendResult.success) {
+            console.error(`[BOT] Falha ao enviar: ${sendResult.error}`);
+          } else {
+            console.log(`[BOT] Resposta enviada para ${normalizedPhone}`);
+          }
+        } else {
+          console.log(`[WEBHOOK] Conversa ${conversation.id} em modo HUMANO - IA não responde`);
         }
 
-        const sendResult = await sendEvolutionMessage(normalizedPhone, aiResponse.message);
-        if (!sendResult.success) {
-          console.error("❌ [Evolution] Falha ao enviar resposta:", sendResult.error);
-        }
-      } else {
-        console.log("👤 [Evolution] Conversa em modo HUMANO. IA não responderá.");
+      } catch (error: any) {
+        console.error(`[WEBHOOK] ERRO: ${error.message}`);
       }
-
-      console.log("--- [DEBUG] FIM DO WEBHOOK EVOLUTION COM SUCESSO ---\n");
-      res.status(200).json({ received: true });
-
-    } catch (error: any) {
-      console.error("🔥 [Evolution] ERRO FATAL NO WEBHOOK:", error);
-      res.status(200).json({ received: true, error: "Internal processing error" });
-    }
+    })();
   });
-  */
 
   // Admin route to setup WhatsApp via Evolution API (QR Code generation)
   // NOTE: Protected by simple query param token (no JWT required)
