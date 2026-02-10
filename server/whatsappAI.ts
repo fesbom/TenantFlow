@@ -25,7 +25,12 @@ export interface AIResponse {
   extractedIntent: ExtractedIntent;
 }
 
-const SYSTEM_PROMPT = `Você é um assistente virtual de uma clínica odontológica. Seu objetivo é ajudar pacientes a agendar consultas, responder dúvidas e, quando necessário, transferir para um atendente humano.
+export interface PatientContext {
+  isRegistered: boolean;
+  name: string | null;
+}
+
+const SYSTEM_PROMPT_BASE = `Você é um assistente virtual de uma clínica odontológica. Seu objetivo é ajudar pacientes a agendar consultas, responder dúvidas e, quando necessário, transferir para um atendente humano.
 
 REGRAS:
 1. Seja sempre educado, profissional e objetivo
@@ -55,16 +60,41 @@ Exemplos de intenções:
 - "Quero falar com alguém" / "Isso é ridículo" → intent: "falar_com_humano"
 - "Qual o horário de funcionamento?" → intent: "informacao"`;
 
+function buildSystemPrompt(patientContext?: PatientContext): string {
+  let contextBlock = "";
+
+  if (patientContext?.isRegistered && patientContext.name) {
+    contextBlock = `\n\nCONTEXTO DO CONTATO:
+Este contato é um PACIENTE CADASTRADO na clínica.
+Nome do paciente: ${patientContext.name}
+- Trate-o pelo nome
+- Não precisa pedir nome completo novamente ao agendar
+- Pode perguntar diretamente sobre data/horário/procedimento desejado`;
+  } else {
+    contextBlock = `\n\nCONTEXTO DO CONTATO:
+Este contato é um NOVO INTERESSADO (não cadastrado na clínica).
+- Solicite o nome completo logo no início da conversa
+- Pergunte como conheceu a clínica (se oportuno)
+- Colete dados básicos: nome completo, data/horário preferido, tipo de procedimento
+- Seja especialmente acolhedor para causar uma boa primeira impressão`;
+  }
+
+  return SYSTEM_PROMPT_BASE + contextBlock;
+}
+
 export async function processPatientMessage(
   patientMessage: string,
-  conversationHistory: Array<{ role: string; text: string }>
+  conversationHistory: Array<{ role: string; text: string }>,
+  patientContext?: PatientContext
 ): Promise<AIResponse> {
   try {
+    const systemPrompt = buildSystemPrompt(patientContext);
+
     const historyContent = conversationHistory
       .map(msg => `${msg.role === 'patient' ? 'Paciente' : 'Assistente'}: ${msg.text}`)
       .join('\n');
 
-    const fullPrompt = `${SYSTEM_PROMPT}\n\nHistórico da conversa:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS com o JSON válido:`;
+    const fullPrompt = `${systemPrompt}\n\nHistórico da conversa:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS com o JSON válido:`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",

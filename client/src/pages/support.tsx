@@ -18,7 +18,8 @@ import {
   UserCheck, 
   Sparkles,
   Phone,
-  Clock
+  Clock,
+  AlertTriangle
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -31,7 +32,7 @@ export default function Support() {
   const [messageText, setMessageText] = useState("");
   const { toast } = useToast();
 
-  const { data: conversations = [], isLoading: conversationsLoading } = useQuery<WhatsappConversation[]>({
+  const { data: conversations = [], isLoading: conversationsLoading } = useQuery<(WhatsappConversation & { patientName?: string | null })[]>({
     queryKey: ["/api/conversations"],
   });
 
@@ -159,6 +160,17 @@ export default function Support() {
                               )}
                             </Badge>
                           </div>
+                          {conversation.patientName ? (
+                            <div className="flex items-center gap-1 mt-1 text-xs text-green-600">
+                              <UserCheck className="h-3 w-3" />
+                              {conversation.patientName}
+                            </div>
+                          ) : !conversation.patientId ? (
+                            <div className="flex items-center gap-1 mt-1 text-xs text-amber-600">
+                              <AlertTriangle className="h-3 w-3" />
+                              Contato não vinculado
+                            </div>
+                          ) : null}
                           <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
                             <Clock className="h-3 w-3" />
                             {conversation.lastMessageAt
@@ -184,9 +196,16 @@ export default function Support() {
                         </div>
                         <div>
                           <h3 className="font-medium">
-                            {selectedConversation?.phone}
+                            {(selectedConversation as any)?.patientName || selectedConversation?.phone}
                           </h3>
+                          {!selectedConversation?.patientId && (
+                            <p className="text-xs text-amber-600 flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              Contato não vinculado a um paciente cadastrado
+                            </p>
+                          )}
                           <p className="text-sm text-gray-500">
+                            {selectedConversation?.patientId ? selectedConversation?.phone + " · " : ""}
                             {selectedConversation?.status === "ai" ? "Atendimento IA" : "Atendimento Humano"}
                           </p>
                         </div>

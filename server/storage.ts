@@ -47,7 +47,7 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, and, desc, gte, lte, count, sql, isNotNull } from "drizzle-orm";
+import { eq, and, desc, gte, lte, count, sql, isNotNull, or, ilike } from "drizzle-orm";
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -163,6 +163,9 @@ export interface IStorage {
     attendanceRate: number;
   }>;
 
+  // Patient lookup by phone
+  getPatientByPhone(clinicId: string, phone: string): Promise<Patient | undefined>;
+
   // WhatsApp conversation methods
   createWhatsappConversation(conversation: InsertWhatsappConversation): Promise<WhatsappConversation>;
   getWhatsappConversationsByClinic(clinicId: string): Promise<WhatsappConversation[]>;
@@ -276,6 +279,20 @@ export class DatabaseStorage implements IStorage {
         sql`"external_id" = ${externalId}`,
         eq(patients.clinicId, clinicId)
       ));
+    return patient || undefined;
+  }
+
+  async getPatientByPhone(clinicId: string, phone: string): Promise<Patient | undefined> {
+    const normalizedPhone = phone.replace(/\D/g, "");
+    const [patient] = await db
+      .select()
+      .from(patients)
+      .where(
+        and(
+          eq(patients.clinicId, clinicId),
+          sql`REGEXP_REPLACE(${patients.phone}, '[^0-9]', '', 'g') = ${normalizedPhone}`
+        )
+      );
     return patient || undefined;
   }
 

@@ -1903,6 +1903,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const clinicId = (process.env.WHATSAPP_CLINIC_ID || "1").trim();
 
+        // Validar clinic_id: buscar clínica no banco antes de inserir
+        const clinic = await storage.getClinicById(clinicId);
+        if (!clinic) {
+          console.error(`[WEBHOOK] ERRO: clinic_id "${clinicId}" não encontrado no banco. Abortando.`);
+          return;
+        }
+        console.log(`[WEBHOOK] Clínica validada: "${clinic.name}" (${clinic.id})`);
+
+        // Buscar paciente pelo telefone
+        const patient = await storage.getPatientByPhone(clinicId, normalizedPhone);
+        const isRegisteredPatient = !!patient;
+        if (patient) {
+          console.log(`[WEBHOOK] Paciente encontrado: ${patient.fullName} (${patient.id})`);
+        } else {
+          console.log(`[WEBHOOK] Contato NÃO vinculado a paciente cadastrado: ${normalizedPhone}`);
+        }
+
         // Buscar ou criar conversa
         let conversation = await storage.getWhatsappConversationByPhone(clinicId, normalizedPhone);
 
@@ -1910,9 +1927,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           conversation = await storage.createWhatsappConversation({
             clinicId,
             phone: normalizedPhone,
+            patientId: patient?.id || null,
             status: 'ai',
           });
-          console.log(`[WEBHOOK] Nova conversa criada: ${conversation.id}`);
+          console.log(`[WEBHOOK] Nova conversa criada: ${conversation.id} (paciente: ${patient?.id || 'NULL'})`);
+        } else if (patient && !conversation.patientId) {
+          // Vincular paciente se foi cadastrado depois
+          conversation = (await storage.updateWhatsappConversation(conversation.id, { patientId: patient.id }))!;
+          console.log(`[WEBHOOK] Conversa atualizada com paciente: ${patient.fullName}`);
         }
 
         // Salvar mensagem do paciente
@@ -1931,7 +1953,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             text: m.text,
           }));
 
-          const aiResponse = await processPatientMessage(messageText, history);
+          const patientContext = isRegisteredPatient
+            ? { isRegistered: true, name: patient!.fullName }
+            : { isRegistered: false, name: null };
+
+          const aiResponse = await processPatientMessage(messageText, history, patientContext);
 
           // Salvar resposta da IA
           await storage.createWhatsappMessage({
@@ -2493,7 +2519,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/conversations", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const conversationsList = await storage.getWhatsappConversationsByClinic(req.user!.clinicId);
-      res.json(conversationsList);
+      const enriched = await Promise.all(
+        conversationsList.map(async (conv) => {
+          let patientName: string | null = null;
+          if (conv.patientId) {
+            const patient = await storage.getPatientById(conv.patientId, req.user!.clinicId);
+            patientName = patient?.fullName || null;
+          }
+          return { ...conv, patientName };
+        })
+      );
+      res.json(enriched);
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
     }
