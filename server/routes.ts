@@ -1936,10 +1936,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`[WEBHOOK] Conversa atualizada com paciente: ${patient.fullName}`);
         }
 
-        // Salvar mensagem do paciente
+        // Salvar mensagem do paciente (inbound)
         const savedMsg = await storage.createWhatsappMessage({
           conversationId: conversation.id,
           sender: 'patient',
+          direction: 'inbound',
           text: messageText,
           externalMessageId: evolutionMessageId,
         });
@@ -1958,10 +1959,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const aiResponse = await processPatientMessage(messageText, history, patientContext);
 
-          // Salvar resposta da IA
+          // Salvar resposta da IA (outbound)
           await storage.createWhatsappMessage({
             conversationId: conversation.id,
             sender: 'ai',
+            direction: 'outbound',
             text: aiResponse.message,
             extractedIntent: JSON.stringify(aiResponse.extractedIntent),
           });
@@ -2585,6 +2587,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const savedMessage = await storage.createWhatsappMessage({
         conversationId: id,
         sender: 'staff',
+        direction: 'outbound',
         text: messageText.trim(),
       });
 
@@ -2634,6 +2637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const savedMessage = await storage.createWhatsappMessage({
         conversationId: id,
         sender: 'staff',
+        direction: 'outbound',
         text: messageText.trim(),
       });
 

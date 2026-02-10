@@ -215,9 +215,10 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   conversationId: varchar("conversation_id").notNull().references(() => whatsappConversations.id),
   sender: text("sender").notNull(), // 'patient', 'ai', 'staff'
+  direction: text("direction").notNull().default('inbound'), // 'inbound' = received, 'outbound' = sent
   text: text("text").notNull(),
   extractedIntent: text("extracted_intent"), // JSON with intent data from Gemini
-  externalMessageId: text("external_message_id"), // Z-API or external provider message ID
+  externalMessageId: text("external_message_id"), // Evolution API message ID
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

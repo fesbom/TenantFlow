@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
@@ -19,11 +19,15 @@ import {
   Sparkles,
   Phone,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  ArrowDown
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { WhatsappConversation, WhatsappMessage } from "@shared/schema";
+
+const CONVERSATIONS_POLL_INTERVAL = 5000;
+const MESSAGES_POLL_INTERVAL = 3000;
 
 export default function Support() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -31,9 +35,12 @@ export default function Support() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
   const { toast } = useToast();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef<number>(0);
 
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<(WhatsappConversation & { patientName?: string | null })[]>({
     queryKey: ["/api/conversations"],
+    refetchInterval: CONVERSATIONS_POLL_INTERVAL,
   });
 
   const { data: conversationData, isLoading: messagesLoading } = useQuery<{
@@ -42,7 +49,24 @@ export default function Support() {
   }>({
     queryKey: ["/api/conversations", selectedConversationId, "messages"],
     enabled: !!selectedConversationId,
+    refetchInterval: MESSAGES_POLL_INTERVAL,
   });
+
+  useEffect(() => {
+    const currentCount = conversationData?.messages?.length || 0;
+    if (currentCount > prevMessageCountRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMessageCountRef.current = currentCount;
+  }, [conversationData?.messages?.length]);
+
+  useEffect(() => {
+    if (selectedConversationId) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
+  }, [selectedConversationId]);
 
   const takeoverMutation = useMutation({
     mutationFn: async (conversationId: string) => {
@@ -77,7 +101,6 @@ export default function Support() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] });
       setMessageText("");
-      toast({ title: "Mensagem enviada" });
     },
     onError: () => {
       toast({ title: "Erro ao enviar mensagem", variant: "destructive" });
@@ -237,7 +260,10 @@ export default function Support() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/conversations"] })}
+                          onClick={() => {
+                            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+                            queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] });
+                          }}
                           data-testid="button-refresh"
                         >
                           <RefreshCw className="h-4 w-4" />
@@ -256,12 +282,12 @@ export default function Support() {
                             <div
                               key={message.id}
                               className={`flex ${
-                                message.sender === "patient" ? "justify-start" : "justify-end"
+                                message.direction === "inbound" || message.sender === "patient" ? "justify-start" : "justify-end"
                               }`}
                             >
                               <div
                                 className={`max-w-[70%] p-3 rounded-lg ${
-                                  message.sender === "patient"
+                                  message.direction === "inbound" || message.sender === "patient"
                                     ? "bg-gray-100 text-gray-900"
                                     : message.sender === "ai"
                                     ? "bg-purple-100 text-purple-900"
@@ -284,6 +310,11 @@ export default function Support() {
                                       ? "IA"
                                       : "Atendente"}
                                   </span>
+                                  {message.direction && (
+                                    <span className="text-xs opacity-50">
+                                      {message.direction === "inbound" ? "recebida" : "enviada"}
+                                    </span>
+                                  )}
                                 </div>
                                 <p className="text-sm whitespace-pre-wrap">{message.text}</p>
                                 <p className="text-xs opacity-50 mt-1 text-right">
@@ -292,6 +323,7 @@ export default function Support() {
                               </div>
                             </div>
                           ))}
+                          <div ref={messagesEndRef} />
                         </div>
                       )}
                     </ScrollArea>
