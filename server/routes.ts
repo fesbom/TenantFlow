@@ -1901,7 +1901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const normalizedPhone = phone.replace(/\D/g, "");
         console.log(`[WEBHOOK] Mensagem de ${normalizedPhone}: "${messageText.substring(0, 80)}"`);
 
-        const clinicId = process.env.WHATSAPP_CLINIC_ID || "1";
+        const clinicId = (process.env.WHATSAPP_CLINIC_ID || "1").trim();
 
         // Buscar ou criar conversa
         let conversation = await storage.getWhatsappConversationByPhone(clinicId, normalizedPhone);

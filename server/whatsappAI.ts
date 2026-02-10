@@ -1,14 +1,11 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
-// Configuração utilizando a sua chave real configurada nos Secrets
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
-
-// Seleção do modelo (Sugestão: 1.5-flash ou 2.0-flash para velocidade no WhatsApp)
-const model = genAI.getGenerativeModel({ 
-  model: "gemini-1.5-flash",
-  generationConfig: {
-    responseMimeType: "application/json",
-  }
+const ai = new GoogleGenAI({
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  httpOptions: {
+    apiVersion: "",
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+  },
 });
 
 export interface ExtractedIntent {
@@ -63,28 +60,28 @@ export async function processPatientMessage(
   conversationHistory: Array<{ role: string; text: string }>
 ): Promise<AIResponse> {
   try {
-    // Preparação do chat com o histórico
-    const chat = model.startChat({
-      history: [
-        { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-        { role: "model", parts: [{ text: "Entendido. Estou pronto para ajudar os pacientes de forma profissional e retornar apenas JSON." }] },
-        ...conversationHistory.map(msg => ({
-          role: msg.role === 'patient' ? 'user' : 'model',
-          parts: [{ text: msg.text }],
-        }))
-      ],
+    const historyContent = conversationHistory
+      .map(msg => `${msg.role === 'patient' ? 'Paciente' : 'Assistente'}: ${msg.text}`)
+      .join('\n');
+
+    const fullPrompt = `${SYSTEM_PROMPT}\n\nHistórico da conversa:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS com o JSON válido:`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: fullPrompt,
+      config: {
+        responseMimeType: "application/json",
+      },
     });
 
-    const result = await chat.sendMessage(patientMessage);
-    const responseText = result.response.text() || '{}';
+    const responseText = response.text || '{}';
 
     let parsed;
     try {
-      // Remove possíveis blocos de código Markdown que a IA possa enviar por engano
       const cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
       parsed = JSON.parse(cleanJson);
     } catch (e) {
-      console.error("Erro ao parsear JSON da IA:", responseText);
+      console.error("[AI] Erro ao parsear JSON:", responseText);
       return {
         message: "Desculpe, tive um problema ao processar sua mensagem. Vou transferir você para um atendente.",
         extractedIntent: {
@@ -110,7 +107,7 @@ export async function processPatientMessage(
       }
     };
   } catch (error) {
-    console.error("Error processing message with Gemini:", error);
+    console.error("[AI] Erro Gemini:", error);
     return {
       message: "Desculpe, estamos com dificuldades técnicas. Um atendente entrará em contato em breve.",
       extractedIntent: {
