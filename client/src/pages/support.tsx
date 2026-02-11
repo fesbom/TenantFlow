@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { 
   MessageSquare, 
@@ -20,7 +19,6 @@ import {
   Phone,
   Clock,
   AlertTriangle,
-  ArrowDown
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -36,6 +34,7 @@ export default function Support() {
   const [messageText, setMessageText] = useState("");
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
 
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<(WhatsappConversation & { patientName?: string | null })[]>({
@@ -52,21 +51,25 @@ export default function Support() {
     refetchInterval: MESSAGES_POLL_INTERVAL,
   });
 
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  }, []);
+
   useEffect(() => {
     const currentCount = conversationData?.messages?.length || 0;
     if (currentCount > prevMessageCountRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      requestAnimationFrame(() => scrollToBottom("smooth"));
     }
     prevMessageCountRef.current = currentCount;
-  }, [conversationData?.messages?.length]);
+  }, [conversationData?.messages?.length, scrollToBottom]);
 
   useEffect(() => {
     if (selectedConversationId) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+      setTimeout(() => scrollToBottom("auto"), 150);
     }
-  }, [selectedConversationId]);
+  }, [selectedConversationId, scrollToBottom]);
 
   const takeoverMutation = useMutation({
     mutationFn: async (conversationId: string) => {
@@ -129,23 +132,24 @@ export default function Support() {
       <div className="main-content">
         <Header title="Atendimento IA" onMenuClick={() => setSidebarOpen(true)} />
         
-        <main className="p-4 lg:p-6 flex-grow">
-          <div className="mb-6">
+        <main className="p-4 lg:p-6 flex-grow overflow-hidden">
+          <div className="mb-4">
             <p className="text-gray-600">
               Gerencie conversas do WhatsApp com pacientes
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-            <Card className="lg:col-span-1">
-              <CardHeader className="pb-3">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-180px)]">
+
+            <Card className="lg:col-span-1 flex flex-col overflow-hidden">
+              <CardHeader className="pb-3 shrink-0">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <MessageSquare className="h-5 w-5" />
                   Conversas
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-320px)]">
+              <CardContent className="p-0 flex-1 overflow-hidden">
+                <div className="h-full overflow-y-scroll scrollbar-visible">
                   {conversationsLoading ? (
                     <div className="p-4 text-center text-gray-500">Carregando...</div>
                   ) : conversations.length === 0 ? (
@@ -204,21 +208,21 @@ export default function Support() {
                       ))}
                     </div>
                   )}
-                </ScrollArea>
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="lg:col-span-2 flex flex-col">
+            <Card className="lg:col-span-2 flex flex-col overflow-hidden">
               {selectedConversationId ? (
                 <>
-                  <CardHeader className="pb-3 border-b">
+                  <CardHeader className="pb-3 border-b shrink-0">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center">
+                        <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
                           <User className="h-5 w-5 text-primary" />
                         </div>
-                        <div>
-                          <h3 className="font-medium">
+                        <div className="min-w-0">
+                          <h3 className="font-medium truncate">
                             {(selectedConversation as any)?.patientName || selectedConversation?.phone}
                           </h3>
                           {!selectedConversation?.patientId && (
@@ -233,7 +237,7 @@ export default function Support() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         {selectedConversation?.status === "ai" ? (
                           <Button
                             variant="outline"
@@ -272,12 +276,22 @@ export default function Support() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="flex-1 p-0 overflow-hidden">
-                    <ScrollArea className="h-[calc(100vh-450px)] p-4">
+                  <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                    <div
+                      ref={messagesContainerRef}
+                      className="flex-1 overflow-y-scroll bg-slate-50/80 border-y border-slate-200/60 p-4 messages-scroll"
+                    >
                       {messagesLoading ? (
-                        <div className="text-center text-gray-500">Carregando mensagens...</div>
+                        <div className="flex items-center justify-center h-full text-gray-500">Carregando mensagens...</div>
+                      ) : conversationData?.messages.length === 0 ? (
+                        <div className="flex items-center justify-center h-full text-gray-400">
+                          <div className="text-center">
+                            <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">Nenhuma mensagem ainda</p>
+                          </div>
+                        </div>
                       ) : (
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                           {conversationData?.messages.map((message) => (
                             <div
                               key={message.id}
@@ -286,38 +300,33 @@ export default function Support() {
                               }`}
                             >
                               <div
-                                className={`max-w-[70%] p-3 rounded-lg ${
+                                className={`max-w-[75%] p-3 rounded-2xl shadow-sm ${
                                   message.direction === "inbound" || message.sender === "patient"
-                                    ? "bg-gray-100 text-gray-900"
+                                    ? "bg-white text-gray-900 border border-gray-200/80 rounded-bl-md"
                                     : message.sender === "ai"
-                                    ? "bg-purple-100 text-purple-900"
-                                    : "bg-primary text-white"
+                                    ? "bg-purple-100 text-purple-900 border border-purple-200/60 rounded-br-md"
+                                    : "bg-primary text-white rounded-br-md"
                                 }`}
                                 data-testid={`message-${message.id}`}
                               >
                                 <div className="flex items-center gap-2 mb-1">
                                   {message.sender === "patient" ? (
-                                    <User className="h-3 w-3" />
+                                    <User className="h-3 w-3 opacity-60" />
                                   ) : message.sender === "ai" ? (
-                                    <Bot className="h-3 w-3" />
+                                    <Bot className="h-3 w-3 opacity-60" />
                                   ) : (
-                                    <UserCheck className="h-3 w-3" />
+                                    <UserCheck className="h-3 w-3 opacity-60" />
                                   )}
-                                  <span className="text-xs opacity-75">
+                                  <span className="text-xs font-medium opacity-70">
                                     {message.sender === "patient"
                                       ? "Paciente"
                                       : message.sender === "ai"
                                       ? "IA"
                                       : "Atendente"}
                                   </span>
-                                  {message.direction && (
-                                    <span className="text-xs opacity-50">
-                                      {message.direction === "inbound" ? "recebida" : "enviada"}
-                                    </span>
-                                  )}
                                 </div>
-                                <p className="text-sm whitespace-pre-wrap">{message.text}</p>
-                                <p className="text-xs opacity-50 mt-1 text-right">
+                                <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                                <p className="text-[10px] opacity-40 mt-1.5 text-right">
                                   {format(new Date(message.createdAt!), "HH:mm", { locale: ptBR })}
                                 </p>
                               </div>
@@ -326,17 +335,18 @@ export default function Support() {
                           <div ref={messagesEndRef} />
                         </div>
                       )}
-                    </ScrollArea>
-                  </CardContent>
+                    </div>
+                  </div>
 
                   {selectedConversation?.status === "human" && (
-                    <div className="p-4 border-t">
+                    <div className="p-3 border-t bg-white shrink-0">
                       <div className="flex gap-2">
                         <Input
                           value={messageText}
                           onChange={(e) => setMessageText(e.target.value)}
                           placeholder="Digite sua mensagem..."
                           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()}
+                          className="flex-1"
                           data-testid="input-message"
                         />
                         <Button
