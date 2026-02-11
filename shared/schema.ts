@@ -218,7 +218,7 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   direction: text("direction").notNull().default('inbound'), // 'inbound' = received, 'outbound' = sent
   text: text("text").notNull(),
   extractedIntent: text("extracted_intent"), // JSON with intent data from Gemini
-  externalMessageId: text("external_message_id"), // Evolution API message ID
+  externalMessageId: text("external_message_id").unique(), // Evolution API message ID (UNIQUE para idempotência)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
