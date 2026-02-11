@@ -1900,6 +1900,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const normalizedPhone = phone.replace(/\D/g, "");
         console.log(`[WEBHOOK] Mensagem de ${normalizedPhone}: "${messageText.substring(0, 80)}"`);
 
+        // IDEMPOTÊNCIA: Verificar se mensagem já foi processada
+        if (evolutionMessageId) {
+          const existingMessage = await storage.getWhatsappMessageByExternalId(evolutionMessageId);
+          if (existingMessage) {
+            console.log(`[WEBHOOK] Mensagem duplicada ignorada (externalId: ${evolutionMessageId})`);
+            return;
+          }
+        }
+
         const clinicId = (process.env.WHATSAPP_CLINIC_ID || "1").trim();
 
         // Validar clinic_id: buscar clínica no banco antes de inserir
@@ -1936,14 +1945,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`[WEBHOOK] Conversa atualizada com paciente: ${patient.fullName}`);
         }
 
-        // Salvar mensagem do paciente (inbound)
-        const savedMsg = await storage.createWhatsappMessage({
-          conversationId: conversation.id,
-          sender: 'patient',
-          direction: 'inbound',
-          text: messageText,
-          externalMessageId: evolutionMessageId,
-        });
+        // Salvar mensagem do paciente (inbound) com proteção contra race condition
+        let savedMsg;
+        try {
+          savedMsg = await storage.createWhatsappMessage({
+            conversationId: conversation.id,
+            sender: 'patient',
+            direction: 'inbound',
+            text: messageText,
+            externalMessageId: evolutionMessageId,
+          });
+        } catch (err: any) {
+          if (err?.code === '23505' || err?.message?.includes('unique') || err?.message?.includes('duplicate')) {
+            console.log(`[WEBHOOK] Duplicata detectada via constraint (externalId: ${evolutionMessageId})`);
+            return;
+          }
+          throw err;
+        }
 
         // Processar com IA se conversa está em modo AI
         if (conversation.status === 'ai') {

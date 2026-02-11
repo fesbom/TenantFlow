@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
@@ -51,6 +51,16 @@ export default function Support() {
     refetchInterval: MESSAGES_POLL_INTERVAL,
   });
 
+  const dedupedMessages = useMemo(() => {
+    const msgs = conversationData?.messages || [];
+    const seen = new Set<string>();
+    return msgs.filter((m) => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+  }, [conversationData?.messages]);
+
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
@@ -58,12 +68,12 @@ export default function Support() {
   }, []);
 
   useEffect(() => {
-    const currentCount = conversationData?.messages?.length || 0;
+    const currentCount = dedupedMessages.length;
     if (currentCount > prevMessageCountRef.current) {
       requestAnimationFrame(() => scrollToBottom("smooth"));
     }
     prevMessageCountRef.current = currentCount;
-  }, [conversationData?.messages?.length, scrollToBottom]);
+  }, [dedupedMessages.length, scrollToBottom]);
 
   useEffect(() => {
     if (selectedConversationId) {
@@ -283,7 +293,7 @@ export default function Support() {
                     >
                       {messagesLoading ? (
                         <div className="flex items-center justify-center h-full text-gray-500">Carregando mensagens...</div>
-                      ) : conversationData?.messages.length === 0 ? (
+                      ) : dedupedMessages.length === 0 ? (
                         <div className="flex items-center justify-center h-full text-gray-400">
                           <div className="text-center">
                             <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -292,7 +302,7 @@ export default function Support() {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {conversationData?.messages.map((message) => (
+                          {dedupedMessages.map((message) => (
                             <div
                               key={message.id}
                               className={`flex ${
