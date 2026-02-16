@@ -1856,17 +1856,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // WEBHOOK EVOLUTION API - ROTA COMPLETA (PRODUÇÃO)
   // ============================================================
   app.post("/webhook/evolution", (req, res) => {
-    // RESPOSTA IMEDIATA - Evita timeout do Railway
+    // RESPOSTA IMEDIATA - Evita timeout do Railway e retentativas da Evolution
     res.status(200).send("OK");
 
-    // PROCESSAMENTO ASSÍNCRONO - Não bloqueia o retorno
+    // PROCESSAMENTO ASSÍNCRONO
     (async () => {
       try {
         const data = req.body;
 
         // FILTRO DE EVENTOS: Só processa messages.upsert
         if (!data || data.event !== "messages.upsert") {
-          console.log(`[WEBHOOK] Evento ignorado: ${data?.event || 'sem evento'}`);
           return;
         }
 
@@ -1875,60 +1874,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return;
         }
 
-        const remoteJid = messageData.key?.remoteJid || "";
+        // TRAVA DE SEGURANÇA: Ignorar mensagens com mais de 10 minutos (Sincronização de Histórico)
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const messageTime = messageData.messageTimestamp;
+        if (messageTime && (nowInSeconds - messageTime > 600)) {
+          return;
+        }
 
-        // FILTRO: Ignorar grupos (apenas mensagens privadas @s.whatsapp.net)
+        // EXTRAÇÃO DO JID: Suporta múltiplos formatos da Evolution v2
+        const remoteJid = messageData.key?.remoteJid || messageData.remoteJid || "";
+
+        // FILTRO: Ignorar grupos
         if (!remoteJid.endsWith("@s.whatsapp.net")) {
-          console.log(`[WEBHOOK] Grupo ignorado: ${remoteJid}`);
           return;
         }
 
         const phone = remoteJid.replace("@s.whatsapp.net", "");
 
-        // Extrair texto de vários formatos de mensagem
+        // Extrair texto de vários formatos possíveis no JSON da Evolution
         const messageText = messageData.message?.conversation ||
                             messageData.message?.extendedTextMessage?.text ||
                             messageData.data?.message?.conversation ||
                             messageData.data?.message?.extendedTextMessage?.text || "";
+
         const evolutionMessageId = messageData.key?.id;
 
         if (!phone || !messageText) {
-          console.log(`[WEBHOOK] Campos ausentes - phone: ${!!phone}, text: ${!!messageText}`);
           return;
         }
 
         const normalizedPhone = phone.replace(/\D/g, "");
-        console.log(`[WEBHOOK] Mensagem de ${normalizedPhone}: "${messageText.substring(0, 80)}"`);
-
-        // IDEMPOTÊNCIA: Verificar se mensagem já foi processada
-        if (evolutionMessageId) {
-          const existingMessage = await storage.getWhatsappMessageByExternalId(evolutionMessageId);
-          if (existingMessage) {
-            console.log(`[WEBHOOK] Mensagem duplicada ignorada (externalId: ${evolutionMessageId})`);
-            return;
-          }
-        }
-
         const clinicId = (process.env.WHATSAPP_CLINIC_ID || "1").trim();
 
-        // Validar clinic_id: buscar clínica no banco antes de inserir
-        const clinic = await storage.getClinicById(clinicId);
-        if (!clinic) {
-          console.error(`[WEBHOOK] ERRO: clinic_id "${clinicId}" não encontrado no banco. Abortando.`);
-          return;
+        // IDEMPOTÊNCIA: Evitar processar a mesma mensagem duas vezes
+        if (evolutionMessageId) {
+          const existingMessage = await storage.getWhatsappMessageByExternalId(evolutionMessageId);
+          if (existingMessage) return;
         }
-        console.log(`[WEBHOOK] Clínica validada: "${clinic.name}" (${clinic.id})`);
 
-        // Buscar paciente pelo telefone
+        // Validar clínica
+        const clinic = await storage.getClinicById(clinicId);
+        if (!clinic) return;
+
+        // Buscar paciente e conversa
         const patient = await storage.getPatientByPhone(clinicId, normalizedPhone);
         const isRegisteredPatient = !!patient;
-        if (patient) {
-          console.log(`[WEBHOOK] Paciente encontrado: ${patient.fullName} (${patient.id})`);
-        } else {
-          console.log(`[WEBHOOK] Contato NÃO vinculado a paciente cadastrado: ${normalizedPhone}`);
-        }
 
-        // Buscar ou criar conversa
         let conversation = await storage.getWhatsappConversationByPhone(clinicId, normalizedPhone);
 
         if (!conversation) {
@@ -1938,32 +1929,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             patientId: patient?.id || null,
             status: 'ai',
           });
-          console.log(`[WEBHOOK] Nova conversa criada: ${conversation.id} (paciente: ${patient?.id || 'NULL'})`);
         } else if (patient && !conversation.patientId) {
-          // Vincular paciente se foi cadastrado depois
           conversation = (await storage.updateWhatsappConversation(conversation.id, { patientId: patient.id }))!;
-          console.log(`[WEBHOOK] Conversa atualizada com paciente: ${patient.fullName}`);
         }
 
-        // Salvar mensagem do paciente (inbound) com proteção contra race condition
-        let savedMsg;
-        try {
-          savedMsg = await storage.createWhatsappMessage({
-            conversationId: conversation.id,
-            sender: 'patient',
-            direction: 'inbound',
-            text: messageText,
-            externalMessageId: evolutionMessageId,
-          });
-        } catch (err: any) {
-          if (err?.code === '23505' || err?.message?.includes('unique') || err?.message?.includes('duplicate')) {
-            console.log(`[WEBHOOK] Duplicata detectada via constraint (externalId: ${evolutionMessageId})`);
-            return;
-          }
-          throw err;
-        }
+        // Salvar mensagem do paciente no banco
+        await storage.createWhatsappMessage({
+          conversationId: conversation.id,
+          sender: 'patient',
+          direction: 'inbound',
+          text: messageText,
+          externalMessageId: evolutionMessageId,
+        });
 
-        // Processar com IA se conversa está em modo AI
+        // Lógica da IA
         if (conversation.status === 'ai') {
           const messages = await storage.getWhatsappMessagesByConversation(conversation.id);
           const history = messages.slice(-10).map(m => ({
@@ -1977,7 +1956,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const aiResponse = await processPatientMessage(messageText, history, patientContext);
 
-          // Salvar resposta da IA (outbound)
+          // --- AGENDAMENTO AUTOMÁTICO ---
+          if (aiResponse.extractedIntent.intent === 'agendar') {
+            const { date, time } = aiResponse.extractedIntent;
+
+            if (date && time) {
+              const scheduledDate = new Date(`${date}T00:00:00`);
+              const appointments = await storage.getAppointmentsByDate(clinicId, scheduledDate);
+              const isBusy = appointments.some(app => app.scheduledTime === time);
+
+              if (isBusy) {
+                aiResponse.message = "Poxa, esse horário já está ocupado. Gostaria de tentar outro horário ou data?";
+              } else {
+                await storage.createAppointment({
+                  clinicId,
+                  patientId: conversation.patientId || null,
+                  scheduledDate: scheduledDate,
+                  scheduledTime: time,
+                  status: 'pending',
+                  notes: !conversation.patientId 
+                    ? `[NOVO PACIENTE WHATSAPP] Dados: ${aiResponse.extractedIntent.tempData || 'Não informados'}`
+                    : 'Agendamento automático via IA'
+                });
+                aiResponse.message = `Perfeito! Seu agendamento foi pré-confirmado para o dia ${date} às ${time}.`;
+              }
+            }
+          }
+
+          // Salvar resposta da IA
           await storage.createWhatsappMessage({
             conversationId: conversation.id,
             sender: 'ai',
@@ -1986,56 +1992,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             extractedIntent: JSON.stringify(aiResponse.extractedIntent),
           });
 
-          // Transferir para humano se necessário
+          // Mudar para humano se solicitado
           if (aiResponse.extractedIntent.intent === 'falar_com_humano') {
             await storage.updateWhatsappConversation(conversation.id, { status: 'human' });
-            console.log(`[WEBHOOK] Conversa ${conversation.id} transferida para humano`);
           }
 
-          // Processar agendamento automático
-          if (conversation.status === 'ai' && aiResponse.extractedIntent.intent === 'agendar') {
-              const { date, time } = aiResponse.extractedIntent; // Dados vindos da IA
-
-              // 2. CONSULTA: Verificar disponibilidade
-              const existingAppointment = await storage.getAppointmentsByDate(clinicId, new Date(date));
-              const isBusy = existingAppointment.some(app => app.scheduledTime === time);
-
-              if (isBusy) {
-                  await sendEvolutionMessage(normalizedPhone, "Poxa, esse horário já está ocupado. Pode ser em outro?");
-                  return;
-              }
-
-              // 3. REGISTRO: Inserir Agendamento
-              // Se não houver patientId, salvamos os dados coletados na observação
-              const appointmentData = {
-                  clinicId,
-                  patientId: conversation.patientId || null, // Pode ser null se for contato novo
-                  scheduledDate: new Date(date),
-                  scheduledTime: time,
-                  status: 'pending',
-                  notes: !conversation.patientId 
-                      ? `Agendamento via WhatsApp. Dados coletados: ${aiResponse.extractedIntent.tempData || 'Não informados'}`
-                      : 'Agendamento automático via IA'
-              };
-
-              await storage.createAppointment(appointmentData);
-              await sendEvolutionMessage(normalizedPhone, `Perfeito! Seu agendamento foi pré-confirmado para o dia ${date} às ${time}.`);
-          }
-
-          // Enviar resposta via Evolution API
-          console.log(`[BOT] Respondendo para ${remoteJid}...`);
-          const sendResult = await sendEvolutionMessage(normalizedPhone, aiResponse.message);
-          if (!sendResult.success) {
-            console.error(`[BOT] Falha ao enviar: ${sendResult.error}`);
-          } else {
-            console.log(`[BOT] Resposta enviada para ${normalizedPhone}`);
-          }
-        } else {
-          console.log(`[WEBHOOK] Conversa ${conversation.id} em modo HUMANO - IA não responde`);
+          // Enviar para o WhatsApp via Evolution
+          await sendEvolutionMessage(normalizedPhone, aiResponse.message);
         }
-
       } catch (error: any) {
-        console.error(`[WEBHOOK] ERRO: ${error.message}`);
+        console.error(`[WEBHOOK ERROR]: ${error.message}`);
       }
     })();
   });
