@@ -2018,6 +2018,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
+          console.log(`[IA DEBUG] Intenção: ${aiResponse.extractedIntent.intent} | Data: ${aiResponse.extractedIntent.date} | Hora: ${aiResponse.extractedIntent.time} | Dentista: ${aiResponse.extractedIntent.dentistName}`);
+          
           // Salvar resposta da IA
           await storage.createWhatsappMessage({
             conversationId: conversation.id,
