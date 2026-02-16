@@ -1874,14 +1874,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return;
         }
 
-        // TRAVA DE SEGURANÇA: Ignorar mensagens com mais de 10 minutos (Sincronização de Histórico)
+        // TRAVA DE SEGURANÇA: Ignorar mensagens com mais de 10 minutos
         const nowInSeconds = Math.floor(Date.now() / 1000);
         const messageTime = messageData.messageTimestamp;
         if (messageTime && (nowInSeconds - messageTime > 600)) {
           return;
         }
 
-        // EXTRAÇÃO DO JID: Suporta múltiplos formatos da Evolution v2
+        // EXTRAÇÃO DO JID
         const remoteJid = messageData.key?.remoteJid || messageData.remoteJid || "";
 
         // FILTRO: Ignorar grupos
@@ -1891,7 +1891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const phone = remoteJid.replace("@s.whatsapp.net", "");
 
-        // Extrair texto de vários formatos possíveis no JSON da Evolution
+        // Extrair texto de vários formatos
         const messageText = messageData.message?.conversation ||
                             messageData.message?.extendedTextMessage?.text ||
                             messageData.data?.message?.conversation ||
@@ -1906,10 +1906,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const normalizedPhone = phone.replace(/\D/g, "");
         const clinicId = (process.env.WHATSAPP_CLINIC_ID || "1").trim();
 
-        // IDEMPOTÊNCIA: Evitar processar a mesma mensagem duas vezes
+        // 1. IDEMPOTÊNCIA (CORREÇÃO PARA O ERRO DE DUPLICATE KEY)
         if (evolutionMessageId) {
           const existingMessage = await storage.getWhatsappMessageByExternalId(evolutionMessageId);
-          if (existingMessage) return;
+          if (existingMessage) {
+            console.log(`[WEBHOOK] Mensagem duplicada ignorada: ${evolutionMessageId}`);
+            return;
+          }
         }
 
         // Validar clínica
@@ -1933,31 +1936,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           conversation = (await storage.updateWhatsappConversation(conversation.id, { patientId: patient.id }))!;
         }
 
-        // Salvar mensagem do paciente no banco
-        // Salvar mensagem do paciente com tratamento de duplicata
+        // Salvar mensagem do paciente (Inbound) com proteção de erro
         try {
-          if (evolutionMessageId) {
-            const existing = await storage.getWhatsappMessageByExternalId(evolutionMessageId);
-            if (existing) {
-              console.log(`[WEBHOOK] Mensagem ${evolutionMessageId} já processada. Ignorando.`);
-              return; // Para a execução aqui se for repetida
-            }
-          }
-
           await storage.createWhatsappMessage({
             conversationId: conversation.id,
             sender: 'patient',
             direction: 'inbound',
             text: messageText,
-            externalMessageId: evolutionMessageId, // O ID que causou o erro
+            externalMessageId: evolutionMessageId,
           });
         } catch (err: any) {
-          // Se mesmo com a checagem acima der erro de unique constraint, apenas ignore e siga
-          if (err.code === '23505') { 
-            console.log("[WEBHOOK] Mensagem duplicada ignorada via DB Constraint.");
-            return;
-          }
-          throw err; // Outros erros ainda devem ser logados
+          if (err.code === '23505') return;
+          throw err;
         }
 
         // Lógica da IA
@@ -1974,34 +1964,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const aiResponse = await processPatientMessage(messageText, history, patientContext);
 
-          // --- AGENDAMENTO AUTOMÁTICO COM VALIDAÇÃO ---
+          // --- 2. AGENDAMENTO AUTOMÁTICO (CORREÇÃO PARA DENTIST NAME UNDEFINED) ---
           if (aiResponse.extractedIntent.intent === 'agendar') {
-            const { date, time, dentistName } = aiResponse.extractedIntent;
+            const { date, time } = aiResponse.extractedIntent;
+            // Tenta pegar o nome do dentista de chaves diferentes caso a IA mude
+            const dentistNameRaw = aiResponse.extractedIntent.dentistName || aiResponse.extractedIntent.dentist;
 
-            // SÓ TENTA O AGENDAMENTO SE TIVERMOS OS 3 PILARES
-            if (date && time && dentistName) {
-              // 1. Tentar encontrar o ID do dentista pelo nome mencionado
-              // Você pode precisar criar esse método no storage ou fazer um find simples
+            if (date && time && dentistNameRaw) {
               const allUsers = await storage.getUsersByClinic(clinicId);
+              // Limpa o nome para busca (remove Dr, Dra, etc)
+              const cleanDentistName = dentistNameRaw.replace(/Dr\.|Dra\.|doutor|doutora/gi, "").trim();
+
               const dentist = allUsers.find(u => 
                 u.role === 'dentist' && 
-                u.fullName.toLowerCase().includes(dentistName.toLowerCase())
+                (u.fullName.toLowerCase().includes(cleanDentistName.toLowerCase()) || 
+                 cleanDentistName.toLowerCase().includes(u.fullName.toLowerCase()))
               );
 
               if (!dentist) {
-                aiResponse.message = `Entendido, mas não consegui localizar o cadastro do ${dentistName}. Vou verificar com a equipe e já te retorno.`;
+                console.log(`[AGENDAMENTO] Dentista "${dentistNameRaw}" não localizado.`);
               } else {
                 const scheduledDate = new Date(`${date}T00:00:00`);
                 const appointments = await storage.getAppointmentsByDate(clinicId, scheduledDate);
-                const isBusy = appointments.some(app => app.scheduledTime === time);
+                const isBusy = appointments.some(app => app.scheduledTime === time && app.dentistId === dentist.id);
 
                 if (isBusy) {
-                  aiResponse.message = "Poxa, esse horário já está ocupado. Gostaria de tentar outro horário ou data?";
+                  aiResponse.message = `Desculpe, Salete, mas o ${dentist.fullName} já tem um agendamento às ${time}. Teria outro horário?`;
                 } else {
                   await storage.createAppointment({
                     clinicId,
                     patientId: conversation.patientId || null,
-                    dentistId: dentist.id, // <--- AGORA COM O ID CORRETO
+                    dentistId: dentist.id, 
                     scheduledDate: scheduledDate,
                     scheduledTime: time,
                     status: 'pending',
@@ -2009,18 +2002,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       ? `[NOVO PACIENTE] Dados: ${aiResponse.extractedIntent.tempData || 'Não informados'}`
                       : 'Agendamento automático via IA'
                   });
-                  aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi pré-confirmado para o dia ${date} às ${time}.`;
+                  aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${date} às ${time}.`;
                 }
               }
             } else {
-              // SE FALTA ALGO, A IA APENAS CONTINUA A CONVERSA (NÃO TENTA O INSERT)
-              console.log("[AGENDAMENTO] Dados incompletos. IA continuará coletando informações.");
+              console.log(`[AGENDAMENTO] Dados incompletos -> Data: ${!!date}, Hora: ${!!time}, Dentista: ${!!dentistNameRaw}`);
             }
           }
 
-          console.log(`[IA DEBUG] Intenção: ${aiResponse.extractedIntent.intent} | Data: ${aiResponse.extractedIntent.date} | Hora: ${aiResponse.extractedIntent.time} | Dentista: ${aiResponse.extractedIntent.dentistName}`);
-          
-          // Salvar resposta da IA
+          console.log(`[IA DEBUG] Intenção: ${aiResponse.extractedIntent.intent} | Data: ${aiResponse.extractedIntent.date} | Hora: ${aiResponse.extractedIntent.time} | Dentista: ${aiResponse.extractedIntent.dentistName || aiResponse.extractedIntent.dentist}`);
+
+          // Salvar resposta da IA e Enviar
           await storage.createWhatsappMessage({
             conversationId: conversation.id,
             sender: 'ai',
@@ -2029,12 +2021,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             extractedIntent: JSON.stringify(aiResponse.extractedIntent),
           });
 
-          // Mudar para humano se solicitado
           if (aiResponse.extractedIntent.intent === 'falar_com_humano') {
             await storage.updateWhatsappConversation(conversation.id, { status: 'human' });
           }
 
-          // Enviar para o WhatsApp via Evolution
           await sendEvolutionMessage(normalizedPhone, aiResponse.message);
         }
       } catch (error: any) {
