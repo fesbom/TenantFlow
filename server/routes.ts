@@ -1956,30 +1956,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const aiResponse = await processPatientMessage(messageText, history, patientContext);
 
-          // --- AGENDAMENTO AUTOMÁTICO ---
+          // --- AGENDAMENTO AUTOMÁTICO COM VALIDAÇÃO ---
           if (aiResponse.extractedIntent.intent === 'agendar') {
-            const { date, time } = aiResponse.extractedIntent;
+            const { date, time, dentistName } = aiResponse.extractedIntent;
 
-            if (date && time) {
-              const scheduledDate = new Date(`${date}T00:00:00`);
-              const appointments = await storage.getAppointmentsByDate(clinicId, scheduledDate);
-              const isBusy = appointments.some(app => app.scheduledTime === time);
+            // SÓ TENTA O AGENDAMENTO SE TIVERMOS OS 3 PILARES
+            if (date && time && dentistName) {
+              // 1. Tentar encontrar o ID do dentista pelo nome mencionado
+              // Você pode precisar criar esse método no storage ou fazer um find simples
+              const allUsers = await storage.getUsersByClinic(clinicId);
+              const dentist = allUsers.find(u => 
+                u.role === 'dentist' && 
+                u.fullName.toLowerCase().includes(dentistName.toLowerCase())
+              );
 
-              if (isBusy) {
-                aiResponse.message = "Poxa, esse horário já está ocupado. Gostaria de tentar outro horário ou data?";
+              if (!dentist) {
+                aiResponse.message = `Entendido, mas não consegui localizar o cadastro do ${dentistName}. Vou verificar com a equipe e já te retorno.`;
               } else {
-                await storage.createAppointment({
-                  clinicId,
-                  patientId: conversation.patientId || null,
-                  scheduledDate: scheduledDate,
-                  scheduledTime: time,
-                  status: 'pending',
-                  notes: !conversation.patientId 
-                    ? `[NOVO PACIENTE WHATSAPP] Dados: ${aiResponse.extractedIntent.tempData || 'Não informados'}`
-                    : 'Agendamento automático via IA'
-                });
-                aiResponse.message = `Perfeito! Seu agendamento foi pré-confirmado para o dia ${date} às ${time}.`;
+                const scheduledDate = new Date(`${date}T00:00:00`);
+                const appointments = await storage.getAppointmentsByDate(clinicId, scheduledDate);
+                const isBusy = appointments.some(app => app.scheduledTime === time);
+
+                if (isBusy) {
+                  aiResponse.message = "Poxa, esse horário já está ocupado. Gostaria de tentar outro horário ou data?";
+                } else {
+                  await storage.createAppointment({
+                    clinicId,
+                    patientId: conversation.patientId || null,
+                    dentistId: dentist.id, // <--- AGORA COM O ID CORRETO
+                    scheduledDate: scheduledDate,
+                    scheduledTime: time,
+                    status: 'pending',
+                    notes: !conversation.patientId 
+                      ? `[NOVO PACIENTE] Dados: ${aiResponse.extractedIntent.tempData || 'Não informados'}`
+                      : 'Agendamento automático via IA'
+                  });
+                  aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi pré-confirmado para o dia ${date} às ${time}.`;
+                }
               }
+            } else {
+              // SE FALTA ALGO, A IA APENAS CONTINUA A CONVERSA (NÃO TENTA O INSERT)
+              console.log("[AGENDAMENTO] Dados incompletos. IA continuará coletando informações.");
             }
           }
 

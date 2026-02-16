@@ -31,6 +31,7 @@ export interface PatientContext {
 }
 
 const SYSTEM_PROMPT_BASE = `Você é um assistente virtual de uma clínica odontológica. Seu objetivo é ajudar pacientes a agendar consultas, responder dúvidas e, quando necessário, transferir para um atendente humano.
+Para agendamentos, você deve obrigatoriamente coletar: 1) Nome do dentista, 2) Data e 3) Horário. Somente quando tiver essas três informações confirmadas, retorne a intenção 'agendar'. Se o paciente apenas disser 'quero marcar', pergunte com qual dentista e qual o melhor dia/horário. Se o paciente não for cadastrado, peça também o Nome Completo.
 
 REGRAS:
 1. Seja sempre educado, profissional e objetivo
