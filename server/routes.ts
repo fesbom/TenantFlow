@@ -1934,13 +1934,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Salvar mensagem do paciente no banco
-        await storage.createWhatsappMessage({
-          conversationId: conversation.id,
-          sender: 'patient',
-          direction: 'inbound',
-          text: messageText,
-          externalMessageId: evolutionMessageId,
-        });
+        // Salvar mensagem do paciente com tratamento de duplicata
+        try {
+          if (evolutionMessageId) {
+            const existing = await storage.getWhatsappMessageByExternalId(evolutionMessageId);
+            if (existing) {
+              console.log(`[WEBHOOK] Mensagem ${evolutionMessageId} já processada. Ignorando.`);
+              return; // Para a execução aqui se for repetida
+            }
+          }
+
+          await storage.createWhatsappMessage({
+            conversationId: conversation.id,
+            sender: 'patient',
+            direction: 'inbound',
+            text: messageText,
+            externalMessageId: evolutionMessageId, // O ID que causou o erro
+          });
+        } catch (err: any) {
+          // Se mesmo com a checagem acima der erro de unique constraint, apenas ignore e siga
+          if (err.code === '23505') { 
+            console.log("[WEBHOOK] Mensagem duplicada ignorada via DB Constraint.");
+            return;
+          }
+          throw err; // Outros erros ainda devem ser logados
+        }
 
         // Lógica da IA
         if (conversation.status === 'ai') {
