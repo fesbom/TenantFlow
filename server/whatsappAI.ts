@@ -8,15 +8,15 @@ const ai = new GoogleGenAI({
   },
 });
 
+// Interface sincronizada com o routes.ts
 export interface ExtractedIntent {
-  // Ajustado para aceitar 'conversar' ou 'outro' conforme seu routes
   intent: 'agendar' | 'cancelar' | 'remarcar' | 'falar_com_humano' | 'informacao' | 'outro' | 'conversar';
   date?: string;
   time?: string;
   specialty?: string;
-  dentistName?: string; // Alterado de doctorName para dentistName (igual ao routes)
+  dentistName?: string; // IMPORTANTE: Sincronizado com o routes
   patientName?: string;
-  tempData?: string;    // Adicionado para coletar nome de novos pacientes
+  tempData?: string;    // Para dados de novos pacientes
   phone?: string;
   reason?: string;
   confidence: number;
@@ -32,27 +32,28 @@ export interface PatientContext {
   name: string | null;
 }
 
-const SYSTEM_PROMPT_BASE = `Você é um assistente virtual de uma clínica odontológica. Seu objetivo é ajudar pacientes a agendar consultas, responder dúvidas e transferir para humanos se necessário.
+const SYSTEM_PROMPT_BASE = `Você é um assistente virtual de uma clínica odontológica. Seu objetivo é ajudar pacientes a agendar consultas.
 
-REGRAS PARA AGENDAMENTO:
-1. Você DEVE coletar: Nome do Dentista, Data e Horário.
-2. Só defina a intent como 'agendar' se tiver os 3 dados confirmados. Caso contrário, use 'conversar'.
-3. Formatos obrigatórios: Data (YYYY-MM-DD), Hora (HH:mm).
-4. Nome do Dentista: Extraia o nome e coloque na chave 'dentistName'.
+REGRAS OBRIGATÓRIAS PARA AGENDAMENTO:
+1. Você deve coletar: Data, Horário e Nome do Dentista.
+2. Defina a intent como 'agendar' APENAS quando tiver esses 3 dados confirmados pelo paciente.
+3. Se faltar qualquer dado, use intent 'conversar' e peça o dado que falta.
+4. Formato de Data: YYYY-MM-DD.
+5. Formato de Hora: HH:mm.
+6. Nome do Dentista: Extraia e coloque na chave 'dentistName'.
 
 PACIENTES NÃO CADASTRADOS:
-- Se o contexto indicar que não é cadastrado, você DEVE pedir o Nome Completo antes de finalizar.
-- Coloque o nome completo do interessado no campo 'tempData'.
+- Se o paciente não for cadastrado, peça o Nome Completo e coloque na chave 'tempData'.
 
-FORMATO DE RESPOSTA (JSON APENAS):
+FORMATO DE RETORNO (JSON):
 {
-  "message": "sua resposta amigável",
-  "intent": "agendar" | "conversar" | "cancelar" | "falar_com_humano" | "informacao",
+  "message": "sua resposta",
+  "intent": "agendar" | "conversar" | "cancelar" | "falar_com_humano",
   "date": "YYYY-MM-DD",
   "time": "HH:mm",
   "dentistName": "Nome do Dentista",
-  "tempData": "Nome completo se novo paciente",
-  "confidence": 0.0 a 1.0
+  "tempData": "Nome completo se novo",
+  "confidence": 0.9
 }`;
 
 function buildSystemPrompt(patientContext?: PatientContext): string {
@@ -60,7 +61,7 @@ function buildSystemPrompt(patientContext?: PatientContext): string {
   if (patientContext?.isRegistered && patientContext.name) {
     contextBlock = `\n\nCONTEXTO: Paciente CADASTRADO: ${patientContext.name}.`;
   } else {
-    contextBlock = `\n\nCONTEXTO: Novo interessado NÃO cadastrado. Peça o nome completo.`;
+    contextBlock = `\n\nCONTEXTO: Novo interessado NÃO cadastrado. Solicite o nome completo.`;
   }
   return SYSTEM_PROMPT_BASE + contextBlock;
 }
@@ -79,7 +80,7 @@ export async function processPatientMessage(
     const fullPrompt = `${systemPrompt}\n\nHistórico:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS JSON:`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash", // Use o modelo disponível no seu plano
+      model: "gemini-1.5-flash",
       contents: fullPrompt,
       config: { responseMimeType: "application/json" },
     });
@@ -92,15 +93,16 @@ export async function processPatientMessage(
         intent: parsed.intent || 'conversar',
         date: parsed.date,
         time: parsed.time,
-        dentistName: parsed.dentistName, // Sincronizado com o Routes
-        tempData: parsed.tempData,       // Sincronizado com o Routes
+        specialty: parsed.specialty,
+        dentistName: parsed.dentistName || parsed.doctorName, // Fallback se a IA errar a chave
+        tempData: parsed.tempData,
         confidence: parsed.confidence || 0.7,
       }
     };
   } catch (error) {
     console.error("[AI Error]:", error);
     return {
-      message: "Tive um problema técnico. Um atendente já vai te ajudar.",
+      message: "Desculpe, tive um erro técnico. Um atendente vai te ajudar.",
       extractedIntent: { intent: 'falar_com_humano', confidence: 1.0 }
     };
   }
