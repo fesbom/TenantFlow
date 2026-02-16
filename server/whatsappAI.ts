@@ -9,12 +9,14 @@ const ai = new GoogleGenAI({
 });
 
 export interface ExtractedIntent {
-  intent: 'agendar' | 'cancelar' | 'remarcar' | 'falar_com_humano' | 'informacao' | 'outro';
+  // Ajustado para aceitar 'conversar' ou 'outro' conforme seu routes
+  intent: 'agendar' | 'cancelar' | 'remarcar' | 'falar_com_humano' | 'informacao' | 'outro' | 'conversar';
   date?: string;
   time?: string;
   specialty?: string;
-  doctorName?: string;
+  dentistName?: string; // Alterado de doctorName para dentistName (igual ao routes)
   patientName?: string;
+  tempData?: string;    // Adicionado para coletar nome de novos pacientes
   phone?: string;
   reason?: string;
   confidence: number;
@@ -30,66 +32,36 @@ export interface PatientContext {
   name: string | null;
 }
 
-const SYSTEM_PROMPT_BASE = `Você é um assistente virtual de uma clínica odontológica. Seu objetivo é ajudar pacientes a agendar consultas, responder dúvidas e, quando necessário, transferir para um atendente humano.
-Para agendamentos, você deve obrigatoriamente coletar: 1) Nome do dentista, 2) Data e 3) Horário. Somente quando tiver essas três informações confirmadas, retorne a intenção 'agendar'. Se o paciente apenas disser 'quero marcar', pergunte com qual dentista e qual o melhor dia/horário. Se o paciente não for cadastrado, peça também o Nome Completo.
+const SYSTEM_PROMPT_BASE = `Você é um assistente virtual de uma clínica odontológica. Seu objetivo é ajudar pacientes a agendar consultas, responder dúvidas e transferir para humanos se necessário.
 
-IMPORTANTE: Você só deve definir a intenção como 'agendar' no JSON de resposta se você tiver certeza absoluta desses 3 valores.
+REGRAS PARA AGENDAMENTO:
+1. Você DEVE coletar: Nome do Dentista, Data e Horário.
+2. Só defina a intent como 'agendar' se tiver os 3 dados confirmados. Caso contrário, use 'conversar'.
+3. Formatos obrigatórios: Data (YYYY-MM-DD), Hora (HH:mm).
+4. Nome do Dentista: Extraia o nome e coloque na chave 'dentistName'.
 
-Formato da data: YYYY-MM-DD
+PACIENTES NÃO CADASTRADOS:
+- Se o contexto indicar que não é cadastrado, você DEVE pedir o Nome Completo antes de finalizar.
+- Coloque o nome completo do interessado no campo 'tempData'.
 
-Formato da hora: HH:mm
-
-Nome do dentista: Nome fornecido pelo usuário.
-
-Se algum desses dados faltar, mantenha a intenção como 'conversar' e pergunte educadamente o dado que falta. Se o paciente não estiver cadastrado (verifique o contexto), peça o nome completo e inclua no campo tempData.
-
-REGRAS:
-1. Seja sempre educado, profissional e objetivo
-2. Quando o paciente quiser agendar, pergunte: nome completo, data/horário preferido, tipo de procedimento
-3. Se o paciente pedir para falar com uma pessoa ou demonstrar frustração, transfira imediatamente
-4. Forneça informações básicas sobre procedimentos comuns (limpeza, clareamento, etc.)
-5. Nunca invente informações sobre preços ou disponibilidade de horários
-
-FORMATO DE RESPOSTA:
-Você DEVE retornar um JSON válido com a seguinte estrutura:
+FORMATO DE RESPOSTA (JSON APENAS):
 {
-  "message": "sua resposta para o paciente",
-  "intent": "agendar" | "cancelar" | "remarcar" | "falar_com_humano" | "informacao" | "outro",
-  "date": "YYYY-MM-DD se mencionado",
-  "time": "HH:MM se mencionado",
-  "specialty": "tipo de procedimento se mencionado",
-  "doctorName": "nome do dentista se mencionado",
-  "patientName": "nome do paciente se mencionado",
-  "reason": "motivo da consulta ou cancelamento",
+  "message": "sua resposta amigável",
+  "intent": "agendar" | "conversar" | "cancelar" | "falar_com_humano" | "informacao",
+  "date": "YYYY-MM-DD",
+  "time": "HH:mm",
+  "dentistName": "Nome do Dentista",
+  "tempData": "Nome completo se novo paciente",
   "confidence": 0.0 a 1.0
-}
-
-Exemplos de intenções:
-- "Quero marcar uma consulta" → intent: "agendar"
-- "Preciso cancelar minha consulta" → intent: "cancelar"
-- "Quero mudar o horário" → intent: "remarcar"
-- "Quero falar com alguém" / "Isso é ridículo" → intent: "falar_com_humano"
-- "Qual o horário de funcionamento?" → intent: "informacao"`;
+}`;
 
 function buildSystemPrompt(patientContext?: PatientContext): string {
   let contextBlock = "";
-
   if (patientContext?.isRegistered && patientContext.name) {
-    contextBlock = `\n\nCONTEXTO DO CONTATO:
-Este contato é um PACIENTE CADASTRADO na clínica.
-Nome do paciente: ${patientContext.name}
-- Trate-o pelo nome
-- Não precisa pedir nome completo novamente ao agendar
-- Pode perguntar diretamente sobre data/horário/procedimento desejado`;
+    contextBlock = `\n\nCONTEXTO: Paciente CADASTRADO: ${patientContext.name}.`;
   } else {
-    contextBlock = `\n\nCONTEXTO DO CONTATO:
-Este contato é um NOVO INTERESSADO (não cadastrado na clínica).
-- Solicite o nome completo logo no início da conversa
-- Pergunte como conheceu a clínica (se oportuno)
-- Colete dados básicos: nome completo, data/horário preferido, tipo de procedimento
-- Seja especialmente acolhedor para causar uma boa primeira impressão`;
+    contextBlock = `\n\nCONTEXTO: Novo interessado NÃO cadastrado. Peça o nome completo.`;
   }
-
   return SYSTEM_PROMPT_BASE + contextBlock;
 }
 
@@ -100,62 +72,36 @@ export async function processPatientMessage(
 ): Promise<AIResponse> {
   try {
     const systemPrompt = buildSystemPrompt(patientContext);
-
     const historyContent = conversationHistory
       .map(msg => `${msg.role === 'patient' ? 'Paciente' : 'Assistente'}: ${msg.text}`)
       .join('\n');
 
-    const fullPrompt = `${systemPrompt}\n\nHistórico da conversa:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS com o JSON válido:`;
+    const fullPrompt = `${systemPrompt}\n\nHistórico:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS JSON:`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash", // Use o modelo disponível no seu plano
       contents: fullPrompt,
-      config: {
-        responseMimeType: "application/json",
-      },
+      config: { responseMimeType: "application/json" },
     });
 
-    const responseText = response.text || '{}';
-
-    let parsed;
-    try {
-      const cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-      parsed = JSON.parse(cleanJson);
-    } catch (e) {
-      console.error("[AI] Erro ao parsear JSON:", responseText);
-      return {
-        message: "Desculpe, tive um problema ao processar sua mensagem. Vou transferir você para um atendente.",
-        extractedIntent: {
-          intent: 'falar_com_humano',
-          confidence: 0.5,
-          reason: 'Erro de formatação na resposta da IA'
-        }
-      };
-    }
+    const parsed = JSON.parse(response.text || '{}');
 
     return {
-      message: parsed.message || "Como posso ajudar você hoje?",
+      message: parsed.message || "Como posso ajudar?",
       extractedIntent: {
-        intent: parsed.intent || 'outro',
+        intent: parsed.intent || 'conversar',
         date: parsed.date,
         time: parsed.time,
-        specialty: parsed.specialty,
-        doctorName: parsed.doctorName,
-        patientName: parsed.patientName,
-        phone: parsed.phone,
-        reason: parsed.reason,
+        dentistName: parsed.dentistName, // Sincronizado com o Routes
+        tempData: parsed.tempData,       // Sincronizado com o Routes
         confidence: parsed.confidence || 0.7,
       }
     };
   } catch (error) {
-    console.error("[AI] Erro Gemini:", error);
+    console.error("[AI Error]:", error);
     return {
-      message: "Desculpe, estamos com dificuldades técnicas. Um atendente entrará em contato em breve.",
-      extractedIntent: {
-        intent: 'falar_com_humano',
-        confidence: 1.0,
-        reason: 'Erro técnico na API'
-      }
+      message: "Tive um problema técnico. Um atendente já vai te ajudar.",
+      extractedIntent: { intent: 'falar_com_humano', confidence: 1.0 }
     };
   }
 }
