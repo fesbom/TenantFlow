@@ -1992,6 +1992,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`[WEBHOOK] Conversa ${conversation.id} transferida para humano`);
           }
 
+          // Processar agendamento automático
+          if (conversation.status === 'ai' && aiResponse.extractedIntent.intent === 'agendar') {
+              const { date, time } = aiResponse.extractedIntent; // Dados vindos da IA
+
+              // 2. CONSULTA: Verificar disponibilidade
+              const existingAppointment = await storage.getAppointmentsByDate(clinicId, new Date(date));
+              const isBusy = existingAppointment.some(app => app.scheduledTime === time);
+
+              if (isBusy) {
+                  await sendEvolutionMessage(normalizedPhone, "Poxa, esse horário já está ocupado. Pode ser em outro?");
+                  return;
+              }
+
+              // 3. REGISTRO: Inserir Agendamento
+              // Se não houver patientId, salvamos os dados coletados na observação
+              const appointmentData = {
+                  clinicId,
+                  patientId: conversation.patientId || null, // Pode ser null se for contato novo
+                  scheduledDate: new Date(date),
+                  scheduledTime: time,
+                  status: 'pending',
+                  notes: !conversation.patientId 
+                      ? `Agendamento via WhatsApp. Dados coletados: ${aiResponse.extractedIntent.tempData || 'Não informados'}`
+                      : 'Agendamento automático via IA'
+              };
+
+              await storage.createAppointment(appointmentData);
+              await sendEvolutionMessage(normalizedPhone, `Perfeito! Seu agendamento foi pré-confirmado para o dia ${date} às ${time}.`);
+          }
+
           // Enviar resposta via Evolution API
           console.log(`[BOT] Respondendo para ${remoteJid}...`);
           const sendResult = await sendEvolutionMessage(normalizedPhone, aiResponse.message);
