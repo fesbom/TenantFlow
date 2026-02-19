@@ -1998,6 +1998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     scheduledDate: scheduledDate,
                     scheduledTime: time,
                     status: 'pending',
+                    procedure: aiResponse.extractedIntent.specialty || null,
                     notes: !conversation.patientId 
                       ? `[NOVO PACIENTE] Dados: ${aiResponse.extractedIntent.tempData || 'Não informados'}`
                       : 'Agendamento automático via IA'

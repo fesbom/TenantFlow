@@ -73,11 +73,16 @@ export async function processPatientMessage(
 ): Promise<AIResponse> {
   try {
     const systemPrompt = buildSystemPrompt(patientContext);
+
+    const now = new Date();
+    // Formata para algo legível pela IA: "Quinta-feira, 19 de Fevereiro de 2026"
+    const currentDateInfo = `DATA ATUAL DO SISTEMA: ${now.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Hora: ${now.getHours()}:${now.getMinutes()}`;
+    
     const historyContent = conversationHistory
       .map(msg => `${msg.role === 'patient' ? 'Paciente' : 'Assistente'}: ${msg.text}`)
       .join('\n');
 
-    const fullPrompt = `${systemPrompt}\n\nHistórico:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS JSON:`;
+    const fullPrompt = `${systemPrompt}\n\n${currentDateInfo}\n\nHistórico:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS JSON:`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
