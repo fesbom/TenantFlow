@@ -80,7 +80,7 @@ export async function processPatientMessage(
     const fullPrompt = `${systemPrompt}\n\nHistórico:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS JSON:`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       contents: fullPrompt,
       config: { responseMimeType: "application/json" },
     });
