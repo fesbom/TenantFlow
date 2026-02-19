@@ -1984,8 +1984,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (!dentist) {
                 console.log(`[AGENDAMENTO] Dentista "${dentistNameRaw}" não localizado.`);
               } else {
-                const scheduledDate = new Date(`${date}T00:00:00`);
-                const appointments = await storage.getAppointmentsByDate(clinicId, scheduledDate);
+                const scheduledDate = new Date(`${date}T${time}:00`);
+                const appointments = await storage.getAppointmentsByDate(clinicId, new Date(`${date}T00:00:00`));
                 const isBusy = appointments.some(app => app.scheduledTime === time && app.dentistId === dentist.id);
 
                 if (isBusy) {
