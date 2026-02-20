@@ -2011,7 +2011,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          console.log(`[IA DEBUG] Intenção: ${aiResponse.extractedIntent.intent} | Data: ${aiResponse.extractedIntent.date} | Hora: ${aiResponse.extractedIntent.time} | Dentista: ${aiResponse.extractedIntent.dentistName || aiResponse.extractedIntent.dentist}`);
+          console.log(`[IA DEBUG] Intenção: ${aiResponse.extractedIntent.intent} | Data: ${aiResponse.extractedIntent.date} | Hora: ${aiResponse.extractedIntent.time} | Dentista: ${aiResponse.extractedIntent.dentistName || aiResponse.extractedIntent.dentist} | Procedimento: ${aiResponse.extractedIntent.specialty}`);
 
           // Salvar resposta da IA e Enviar
           await storage.createWhatsappMessage({
