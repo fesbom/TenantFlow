@@ -1977,26 +1977,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const dentist = allUsers.find(u => u.role === 'dentist' && u.fullName.toLowerCase().includes(cleanName.toLowerCase()));
 
               if (dentist) {
+                // 1. Criamos o objeto Date exato para o agendamento
                 const scheduledDate = new Date(`${date}T${time}:00`);
 
-                // MONTAGEM DA NOTA INTELIGENTE
-                let customNotes = `[IA]: ${summary || 'Agendamento via WhatsApp'}`;
+                // 2. Buscamos TODOS os agendamentos do dia para este dentista específico
+                const dayStart = new Date(`${date}T00:00:00`);
+                const appointments = await storage.getAppointmentsByDate(clinicId, dayStart);
 
-                if (!conversation.patientId) {
-                  customNotes += `\n[DADOS COLETADOS]: Nome: ${tempData || 'Não informado'} | Tel: ${normalizedPhone}`;
-                }
-
-                await storage.createAppointment({
-                  clinicId,
-                  patientId: conversation.patientId || null,
-                  dentistId: dentist.id,
-                  scheduledDate: scheduledDate,
-                  scheduledTime: time,
-                  status: 'pending',
-                  notes: customNotes // <--- Aqui gravamos o resumo e os dados do novo paciente
+                // 3. Filtro rigoroso: mesmo dentista E mesmo horário
+                const isBusy = appointments.some(app => {
+                  const sameDentist = app.dentistId === dentist.id;
+                  // Comparamos a string do horário (ex: "15:00") para evitar erro de objeto Date
+                  const sameTime = app.scheduledTime === time; 
+                  return sameDentist && sameTime;
                 });
 
-                aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${date} às ${time}.`;
+                if (isBusy) {
+                  // Se o horário estiver ocupado, a IA avisa o paciente e NÃO executa o storage.createAppointment
+                  aiResponse.message = `Poxa, verifiquei aqui e o ${dentist.fullName} já possui um agendamento para o dia ${date} às ${time}. Você teria disponibilidade em outro horário ou data?`;
+
+                  // Log para seu controle no Replit
+                  console.log(`[BLOQUEIO] Tentativa de agendamento duplicado para ${dentist.fullName} às ${time}`);
+                } else {
+                  // 4. Se estiver livre, aí sim gravamos
+                  let customNotes = `[IA]: ${summary || 'Agendamento via WhatsApp'}`;
+                  if (!conversation.patientId) {
+                    customNotes += `\n[DADOS COLETADOS]: Nome: ${tempData || 'Não informado'} | Tel: ${normalizedPhone}`;
+                  }
+
+                  await storage.createAppointment({
+                    clinicId,
+                    patientId: conversation.patientId || null,
+                    dentistId: dentist.id,
+                    scheduledDate: scheduledDate,
+                    scheduledTime: time,
+                    status: 'pending',
+                    notes: customNotes
+                  });
+
+                  aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${date} às ${time}.`;
+                }
               }
             }
           }
