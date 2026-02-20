@@ -1965,53 +1965,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const aiResponse = await processPatientMessage(messageText, history, patientContext);
 
           // --- 2. AGENDAMENTO AUTOMÁTICO (CORREÇÃO PARA DENTIST NAME UNDEFINED) ---
+          // --- DENTRO DA ROTA WEBHOOK EVOLUTION ---
+
           if (aiResponse.extractedIntent.intent === 'agendar') {
-            const { date, time } = aiResponse.extractedIntent;
-            // Tenta pegar o nome do dentista de chaves diferentes caso a IA mude
-            const dentistNameRaw = aiResponse.extractedIntent.dentistName || aiResponse.extractedIntent.dentist;
+            const { date, time, summary, tempData } = aiResponse.extractedIntent;
+            const dentistNameRaw = aiResponse.extractedIntent.dentistName || aiResponse.extractedIntent.doctorName;
 
             if (date && time && dentistNameRaw) {
               const allUsers = await storage.getUsersByClinic(clinicId);
-              // Limpa o nome para busca (remove Dr, Dra, etc)
-              const cleanDentistName = dentistNameRaw.replace(/Dr\.|Dra\.|doutor|doutora/gi, "").trim();
+              const cleanName = dentistNameRaw.replace(/Dr\.|Dra\.|doutor|doutora/gi, "").trim();
+              const dentist = allUsers.find(u => u.role === 'dentist' && u.fullName.toLowerCase().includes(cleanName.toLowerCase()));
 
-              const dentist = allUsers.find(u => 
-                u.role === 'dentist' && 
-                (u.fullName.toLowerCase().includes(cleanDentistName.toLowerCase()) || 
-                 cleanDentistName.toLowerCase().includes(u.fullName.toLowerCase()))
-              );
-
-              if (!dentist) {
-                console.log(`[AGENDAMENTO] Dentista "${dentistNameRaw}" não localizado.`);
-              } else {
+              if (dentist) {
                 const scheduledDate = new Date(`${date}T${time}:00`);
-                const appointments = await storage.getAppointmentsByDate(clinicId, new Date(`${date}T00:00:00`));
-                const isBusy = appointments.some(app => app.scheduledTime === time && app.dentistId === dentist.id);
 
-                if (isBusy) {
-                  aiResponse.message = `Desculpe, Salete, mas o ${dentist.fullName} já tem um agendamento às ${time}. Teria outro horário?`;
-                } else {
-                  await storage.createAppointment({
-                    clinicId,
-                    patientId: conversation.patientId || null,
-                    dentistId: dentist.id, 
-                    scheduledDate: scheduledDate,
-                    scheduledTime: time,
-                    status: 'pending',
-                    procedure: aiResponse.extractedIntent.specialty || null,
-                    notes: !conversation.patientId 
-                      ? `[NOVO PACIENTE] Dados: ${aiResponse.extractedIntent.tempData || 'Não informados'}`
-                      : 'Agendamento automático via IA'
-                  });
-                  aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${date} às ${time}.`;
+                // MONTAGEM DA NOTA INTELIGENTE
+                let customNotes = `[IA]: ${summary || 'Agendamento via WhatsApp'}`;
+
+                if (!conversation.patientId) {
+                  customNotes += `\n[DADOS COLETADOS]: Nome: ${tempData || 'Não informado'} | Tel: ${normalizedPhone}`;
                 }
+
+                await storage.createAppointment({
+                  clinicId,
+                  patientId: conversation.patientId || null,
+                  dentistId: dentist.id,
+                  scheduledDate: scheduledDate,
+                  scheduledTime: time,
+                  status: 'pending',
+                  notes: customNotes // <--- Aqui gravamos o resumo e os dados do novo paciente
+                });
+
+                aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${date} às ${time}.`;
               }
-            } else {
-              console.log(`[AGENDAMENTO] Dados incompletos -> Data: ${!!date}, Hora: ${!!time}, Dentista: ${!!dentistNameRaw}`);
             }
           }
 
-          console.log(`[IA DEBUG] Intenção: ${aiResponse.extractedIntent.intent} | Data: ${aiResponse.extractedIntent.date} | Hora: ${aiResponse.extractedIntent.time} | Dentista: ${aiResponse.extractedIntent.dentistName || aiResponse.extractedIntent.dentist} | Procedimento: ${aiResponse.extractedIntent.specialty}`);
+          // Log de debug atualizado para você ver o resumo
+          console.log(`[IA DEBUG] Intenção: ${aiResponse.extractedIntent.intent} | Data: ${aiResponse.extractedIntent.date} | Hora: ${aiResponse.extractedIntent.time} | Resumo: ${aiResponse.extractedIntent.summary}`);
 
           // Salvar resposta da IA e Enviar
           await storage.createWhatsappMessage({

@@ -17,6 +17,7 @@ export interface ExtractedIntent {
   dentistName?: string; // IMPORTANTE: Sincronizado com o routes
   patientName?: string;
   tempData?: string;    // Para dados de novos pacientes
+  summary?: string;
   phone?: string;
   reason?: string;
   confidence: number;
@@ -41,9 +42,9 @@ REGRAS OBRIGATÓRIAS PARA AGENDAMENTO:
 4. Formato de Data: YYYY-MM-DD.
 5. Formato de Hora: HH:mm.
 6. Nome do Dentista: Extraia e coloque na chave 'dentistName'.
-
-PACIENTES NÃO CADASTRADOS:
-- Se o paciente não for cadastrado, peça o Nome Completo e coloque na chave 'tempData'.
+7. Sempre que identificar uma intenção de agendamento, você deve criar um resumo curto na chave summary.
+Exemplo: 'Limpeza com Dr. Ericson solicitado via WhatsApp'.
+8. Se o paciente não for cadastrado, inclua o nome que ele informou e o telefone no resumo e no tempdata.
 
 FORMATO DE RETORNO (JSON):
 {
@@ -53,6 +54,7 @@ FORMATO DE RETORNO (JSON):
   "time": "HH:mm",
   "dentistName": "Nome do Dentista",
   "tempData": "Nome completo se novo",
+  "summary": "Resumo curto do agendamento",
   "confidence": 0.9
 }`;
 
@@ -101,6 +103,7 @@ export async function processPatientMessage(
         specialty: parsed.specialty,
         dentistName: parsed.dentistName || parsed.doctorName, // Fallback se a IA errar a chave
         tempData: parsed.tempData,
+        summary: parsed.summary,
         confidence: parsed.confidence || 0.7,
       }
     };
