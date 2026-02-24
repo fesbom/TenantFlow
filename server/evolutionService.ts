@@ -49,19 +49,28 @@ function sleep(ms: number): Promise<void> {
 
 async function createInstance(): Promise<EvolutionInstanceResult> {
   const url = `${EVO_URL}/instance/create`;
-  
+
   const requestBody = {
     instanceName: EVO_INSTANCE,
     token: EVO_TOKEN,
     qrcode: true,
-    integration: "WHATSAPP-BAILEYS"
+    integration: "WHATSAPP-BAILEYS",
+    // --- ADIÇÃO DOS PARÂMETROS DE OTIMIZAÇÃO ---
+    config: {
+      syncFullHistory: false,    // Evita carregar milhares de msgs/contatos antigos
+      readMessages: false,      // Não marca como lido automaticamente
+      groupsIgnore: true,       // Ignora mensagens de grupos (poupando CPU/Logs)
+      readStatus: false,        // Ignora atualizações de status
+      alwaysOnline: false
+    }
+    // -------------------------------------------
   };
-  
-  console.log(`\n🆕 [Evolution] POST ${url}`);
+
+  console.log(`\n🆕 [Evolution] POST ${url} (Otimizado para evitar log flood)`);
   console.log(`   - Request Body:`, JSON.stringify(requestBody, null, 2));
-  
+
   const startTime = Date.now();
-  
+
   try {
     const response = await axios.post(
       url,
@@ -76,7 +85,7 @@ async function createInstance(): Promise<EvolutionInstanceResult> {
     );
 
     const elapsedTime = Date.now() - startTime;
-    
+
     console.log(`⏱️ [Evolution] Tempo de resposta: ${elapsedTime}ms`);
     console.log(`📋 [Evolution] Resposta:`);
     console.log(JSON.stringify(response.data, null, 2));
@@ -90,7 +99,7 @@ async function createInstance(): Promise<EvolutionInstanceResult> {
     const qrCode = response.data?.qrcode?.base64 || 
                    response.data?.base64 ||
                    response.data?.qrcode;
-    
+
     if (qrCode && typeof qrCode === 'string' && qrCode.length > 100) {
       console.log(`✅ [Evolution] QR Code capturado com sucesso (${qrCode.length} caracteres)`);
       return {
@@ -100,9 +109,9 @@ async function createInstance(): Promise<EvolutionInstanceResult> {
         rawResponse: response.data,
       };
     }
-    
+
     console.log(`⚠️ [Evolution] QR Code não encontrado na resposta do create`);
-    
+
     return {
       success: true,
       status: instanceState,
@@ -110,16 +119,16 @@ async function createInstance(): Promise<EvolutionInstanceResult> {
     };
   } catch (error: any) {
     const elapsedTime = Date.now() - startTime;
-    
+
     console.error(`❌ [Evolution] Erro no create após ${elapsedTime}ms:`);
-    
+
     if (error.response) {
       console.error(`   - Status HTTP: ${error.response.status}`);
       console.error(`   - Response data:`, JSON.stringify(error.response.data, null, 2));
     } else {
       console.error(`   - Erro: ${error.message}`);
     }
-    
+
     throw error;
   }
 }
