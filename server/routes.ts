@@ -391,25 +391,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Create user error:", error);
         if (error.code === "23505") {
           if (error.constraint?.includes("username")) {
-            return res
-              .status(400)
-              .json({
-                message: "Este nome de usuário já está em uso. Escolha outro.",
-              });
+            return res.status(400).json({
+              message: "Este nome de usuário já está em uso. Escolha outro.",
+            });
           }
           if (error.constraint?.includes("email")) {
-            return res
-              .status(400)
-              .json({
-                message: "Este email já está cadastrado. Use outro email.",
-              });
-          }
-          return res
-            .status(400)
-            .json({
-              message:
-                "Dados duplicados. Verifique as informações preenchidas.",
+            return res.status(400).json({
+              message: "Este email já está cadastrado. Use outro email.",
             });
+          }
+          return res.status(400).json({
+            message: "Dados duplicados. Verifique as informações preenchidas.",
+          });
         }
         if (error.name === "ZodError") {
           const fieldErrors = error.errors
@@ -454,25 +447,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Update user error:", error);
         if (error.code === "23505") {
           if (error.constraint?.includes("username")) {
-            return res
-              .status(400)
-              .json({
-                message: "Este nome de usuário já está em uso. Escolha outro.",
-              });
+            return res.status(400).json({
+              message: "Este nome de usuário já está em uso. Escolha outro.",
+            });
           }
           if (error.constraint?.includes("email")) {
-            return res
-              .status(400)
-              .json({
-                message: "Este email já está cadastrado. Use outro email.",
-              });
-          }
-          return res
-            .status(400)
-            .json({
-              message:
-                "Dados duplicados. Verifique as informações preenchidas.",
+            return res.status(400).json({
+              message: "Este email já está cadastrado. Use outro email.",
             });
+          }
+          return res.status(400).json({
+            message: "Dados duplicados. Verifique as informações preenchidas.",
+          });
         }
         if (error.name === "ZodError") {
           const fieldErrors = error.errors
@@ -523,18 +509,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Update clinic error:", error);
         if (error.code === "23505") {
           if (error.constraint?.includes("email")) {
-            return res
-              .status(400)
-              .json({
-                message: "Este email já está em uso por outra clínica.",
-              });
-          }
-          return res
-            .status(400)
-            .json({
-              message:
-                "Dados duplicados. Verifique as informações preenchidas.",
+            return res.status(400).json({
+              message: "Este email já está em uso por outra clínica.",
             });
+          }
+          return res.status(400).json({
+            message: "Dados duplicados. Verifique as informações preenchidas.",
+          });
         }
         if (error.name === "ZodError") {
           const fieldErrors = error.errors
@@ -643,12 +624,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({ logoUrl, clinic: updatedClinic });
       } catch (error: any) {
         console.error("Upload logo error:", error);
-        res
-          .status(500)
-          .json({
-            message: "Erro ao fazer upload do logo",
-            error: error.message,
-          });
+        res.status(500).json({
+          message: "Erro ao fazer upload do logo",
+          error: error.message,
+        });
       }
     },
   );
@@ -681,11 +660,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "image/webp",
         ];
         if (!allowedTypes.includes(req.file.mimetype)) {
-          return res
-            .status(400)
-            .json({
-              message: "Tipo de arquivo inválido. Use: JPG, PNG ou WEBP",
-            });
+          return res.status(400).json({
+            message: "Tipo de arquivo inválido. Use: JPG, PNG ou WEBP",
+          });
         }
 
         const clinicId = req.user!.clinicId;
@@ -795,12 +772,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({ photoUrl, patient: updatedPatient });
       } catch (error: any) {
         console.error("Upload patient photo error:", error);
-        res
-          .status(500)
-          .json({
-            message: "Erro ao fazer upload da foto",
-            error: error.message,
-          });
+        res.status(500).json({
+          message: "Erro ao fazer upload da foto",
+          error: error.message,
+        });
       }
     },
   );
@@ -926,18 +901,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Create patient error:", error);
         if (error.code === "23503") {
           if (error.constraint?.includes("responsible_dentist_id")) {
-            return res
-              .status(400)
-              .json({
-                message:
-                  "Dentista responsável inválido. Selecione um dentista válido.",
-              });
-          }
-          return res
-            .status(400)
-            .json({
-              message: "Referência inválida. Verifique os dados preenchidos.",
+            return res.status(400).json({
+              message:
+                "Dentista responsável inválido. Selecione um dentista válido.",
             });
+          }
+          return res.status(400).json({
+            message: "Referência inválida. Verifique os dados preenchidos.",
+          });
         }
         if (error.code === "23505") {
           if (error.constraint?.includes("cpf")) {
@@ -950,20 +921,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .status(400)
               .json({ message: "Este email já está cadastrado no sistema." });
           }
-          return res
-            .status(400)
-            .json({
-              message:
-                "Dados duplicados. Verifique as informações preenchidas.",
-            });
+          return res.status(400).json({
+            message: "Dados duplicados. Verifique as informações preenchidas.",
+          });
         }
         if (error.code === "22007") {
-          return res
-            .status(400)
-            .json({
-              message:
-                "Data inválida. Verifique o formato das datas preenchidas.",
-            });
+          return res.status(400).json({
+            message:
+              "Data inválida. Verifique o formato das datas preenchidas.",
+          });
         }
         if (error.name === "ZodError") {
           const fieldErrors = error.errors
@@ -1109,18 +1075,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Update patient error:", error);
         if (error.code === "23503") {
           if (error.constraint?.includes("responsible_dentist_id")) {
-            return res
-              .status(400)
-              .json({
-                message:
-                  "Dentista responsável inválido. Selecione um dentista válido.",
-              });
-          }
-          return res
-            .status(400)
-            .json({
-              message: "Referência inválida. Verifique os dados preenchidos.",
+            return res.status(400).json({
+              message:
+                "Dentista responsável inválido. Selecione um dentista válido.",
             });
+          }
+          return res.status(400).json({
+            message: "Referência inválida. Verifique os dados preenchidos.",
+          });
         }
         if (error.code === "23505") {
           if (error.constraint?.includes("cpf")) {
@@ -1133,20 +1095,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .status(400)
               .json({ message: "Este email já está cadastrado no sistema." });
           }
-          return res
-            .status(400)
-            .json({
-              message:
-                "Dados duplicados. Verifique as informações preenchidas.",
-            });
+          return res.status(400).json({
+            message: "Dados duplicados. Verifique as informações preenchidas.",
+          });
         }
         if (error.code === "22007") {
-          return res
-            .status(400)
-            .json({
-              message:
-                "Data inválida. Verifique o formato das datas preenchidas.",
-            });
+          return res.status(400).json({
+            message:
+              "Data inválida. Verifique o formato das datas preenchidas.",
+          });
         }
         if (error.name === "ZodError") {
           const fieldErrors = error.errors
@@ -1214,11 +1171,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (requestData.duration) {
           if (requestData.duration < 5) {
-            return res
-              .status(400)
-              .json({
-                message: "A duração mínima do agendamento é de 5 minutos.",
-              });
+            return res.status(400).json({
+              message: "A duração mínima do agendamento é de 5 minutos.",
+            });
           }
           if (requestData.scheduledDate) {
             const scheduledDateTime = new Date(requestData.scheduledDate);
@@ -1227,12 +1182,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const diffMs = nextDayStart.getTime() - scheduledDateTime.getTime();
             const maxMinutes = Math.ceil(diffMs / (1000 * 60));
             if (requestData.duration > maxMinutes) {
-              return res
-                .status(400)
-                .json({
-                  message:
-                    "A duração do agendamento não pode ultrapassar a meia-noite.",
-                });
+              return res.status(400).json({
+                message:
+                  "A duração do agendamento não pode ultrapassar a meia-noite.",
+              });
             }
           }
         }
@@ -1244,32 +1197,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Create appointment error:", error);
         if (error.code === "23503") {
           if (error.constraint?.includes("patient_id")) {
-            return res
-              .status(400)
-              .json({
-                message: "Paciente inválido. Selecione um paciente válido.",
-              });
+            return res.status(400).json({
+              message: "Paciente inválido. Selecione um paciente válido.",
+            });
           }
           if (error.constraint?.includes("dentist_id")) {
-            return res
-              .status(400)
-              .json({
-                message: "Dentista inválido. Selecione um dentista válido.",
-              });
-          }
-          return res
-            .status(400)
-            .json({
-              message: "Referência inválida. Verifique os dados preenchidos.",
+            return res.status(400).json({
+              message: "Dentista inválido. Selecione um dentista válido.",
             });
+          }
+          return res.status(400).json({
+            message: "Referência inválida. Verifique os dados preenchidos.",
+          });
         }
         if (error.code === "22007") {
-          return res
-            .status(400)
-            .json({
-              message:
-                "Data/hora inválida. Verifique o horário do agendamento.",
-            });
+          return res.status(400).json({
+            message: "Data/hora inválida. Verifique o horário do agendamento.",
+          });
         }
         if (error.name === "ZodError") {
           const fieldErrors = error.errors
@@ -1298,11 +1242,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (updateData.duration !== undefined) {
           if (updateData.duration < 5) {
-            return res
-              .status(400)
-              .json({
-                message: "A duração mínima do agendamento é de 5 minutos.",
-              });
+            return res.status(400).json({
+              message: "A duração mínima do agendamento é de 5 minutos.",
+            });
           }
           const scheduledDate =
             updateData.scheduledDate ||
@@ -1319,12 +1261,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const diffMs = nextDayStart.getTime() - scheduledDateTime.getTime();
             const maxMinutes = Math.ceil(diffMs / (1000 * 60));
             if (updateData.duration > maxMinutes) {
-              return res
-                .status(400)
-                .json({
-                  message:
-                    "A duração do agendamento não pode ultrapassar a meia-noite.",
-                });
+              return res.status(400).json({
+                message:
+                  "A duração do agendamento não pode ultrapassar a meia-noite.",
+              });
             }
           }
         }
@@ -1344,32 +1284,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Update appointment error:", error);
         if (error.code === "23503") {
           if (error.constraint?.includes("patient_id")) {
-            return res
-              .status(400)
-              .json({
-                message: "Paciente inválido. Selecione um paciente válido.",
-              });
+            return res.status(400).json({
+              message: "Paciente inválido. Selecione um paciente válido.",
+            });
           }
           if (error.constraint?.includes("dentist_id")) {
-            return res
-              .status(400)
-              .json({
-                message: "Dentista inválido. Selecione um dentista válido.",
-              });
-          }
-          return res
-            .status(400)
-            .json({
-              message: "Referência inválida. Verifique os dados preenchidos.",
+            return res.status(400).json({
+              message: "Dentista inválido. Selecione um dentista válido.",
             });
+          }
+          return res.status(400).json({
+            message: "Referência inválida. Verifique os dados preenchidos.",
+          });
         }
         if (error.code === "22007") {
-          return res
-            .status(400)
-            .json({
-              message:
-                "Data/hora inválida. Verifique o horário do agendamento.",
-            });
+          return res.status(400).json({
+            message: "Data/hora inválida. Verifique o horário do agendamento.",
+          });
         }
         if (error.name === "ZodError") {
           const fieldErrors = error.errors
@@ -1404,11 +1335,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.status(204).send();
       } catch (error) {
         console.error("Delete appointment error:", error);
-        res
-          .status(500)
-          .json({
-            message: "Erro ao excluir agendamento. Por favor, tente novamente.",
-          });
+        res.status(500).json({
+          message: "Erro ao excluir agendamento. Por favor, tente novamente.",
+        });
       }
     },
   );
@@ -1684,12 +1613,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = insertTreatmentSchema.safeParse(req.body);
       if (!result.success) {
-        return res
-          .status(400)
-          .json({
-            message: "Invalid treatment data",
-            errors: result.error.errors,
-          });
+        return res.status(400).json({
+          message: "Invalid treatment data",
+          errors: result.error.errors,
+        });
       }
       const authReq = req as AuthenticatedRequest;
       const treatmentData = {
@@ -1748,12 +1675,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authReq = req as AuthenticatedRequest;
       const result = insertTreatmentSchema.partial().safeParse(req.body);
       if (!result.success) {
-        return res
-          .status(400)
-          .json({
-            message: "Invalid treatment data",
-            errors: result.error.errors,
-          });
+        return res.status(400).json({
+          message: "Invalid treatment data",
+          errors: result.error.errors,
+        });
       }
       const treatment = await storage.updateTreatment(
         id,
@@ -1798,12 +1723,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = insertBudgetItemSchema.safeParse(req.body);
       if (!result.success) {
-        return res
-          .status(400)
-          .json({
-            message: "Invalid budget item data",
-            errors: result.error.errors,
-          });
+        return res.status(400).json({
+          message: "Invalid budget item data",
+          errors: result.error.errors,
+        });
       }
       const budgetItem = await storage.createBudgetItem(result.data);
       res.status(201).json(budgetItem);
@@ -1833,12 +1756,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const result = insertBudgetItemSchema.partial().safeParse(req.body);
       if (!result.success) {
-        return res
-          .status(400)
-          .json({
-            message: "Invalid budget item data",
-            errors: result.error.errors,
-          });
+        return res.status(400).json({
+          message: "Invalid budget item data",
+          errors: result.error.errors,
+        });
       }
       const budgetItem = await storage.updateBudgetItem(id, result.data);
       if (!budgetItem) {
@@ -1870,12 +1791,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const result = insertBudgetSummarySchema.safeParse(req.body);
       if (!result.success) {
-        return res
-          .status(400)
-          .json({
-            message: "Invalid budget summary data",
-            errors: result.error.errors,
-          });
+        return res.status(400).json({
+          message: "Invalid budget summary data",
+          errors: result.error.errors,
+        });
       }
       const budgetSummary = await storage.createOrUpdateBudgetSummary(
         result.data,
@@ -1916,12 +1835,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const result = insertTreatmentMovementSchema.safeParse(movementData);
         if (!result.success) {
-          return res
-            .status(400)
-            .json({
-              message: "Invalid treatment movement data",
-              errors: result.error.errors,
-            });
+          return res.status(400).json({
+            message: "Invalid treatment movement data",
+            errors: result.error.errors,
+          });
         }
         const movement = await storage.createTreatmentMovement(result.data);
         res.status(201).json(movement);
@@ -1968,12 +1885,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .partial()
           .safeParse(movementData);
         if (!result.success) {
-          return res
-            .status(400)
-            .json({
-              message: "Invalid treatment movement data",
-              errors: result.error.errors,
-            });
+          return res.status(400).json({
+            message: "Invalid treatment movement data",
+            errors: result.error.errors,
+          });
         }
 
         const validatedData = result.data;
@@ -2111,12 +2026,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const result = insertAnamnesisResponseSchema.safeParse(req.body);
         if (!result.success) {
-          return res
-            .status(400)
-            .json({
-              message: "Invalid anamnesis response data",
-              errors: result.error.errors,
-            });
+          return res.status(400).json({
+            message: "Invalid anamnesis response data",
+            errors: result.error.errors,
+          });
         }
         const response = await storage.createOrUpdateAnamnesisResponse(
           result.data,
@@ -2325,12 +2238,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         if (csvData.length === 0) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message: "CSV file is empty or formatted incorrectly.",
-            });
+          return res.status(400).json({
+            success: false,
+            message: "CSV file is empty or formatted incorrectly.",
+          });
         }
 
         const idMapping = new Map<string, string>();
@@ -2935,51 +2846,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
               );
 
               if (dentist) {
-                // 1. Criamos o objeto Date exato
-                const scheduledDate = new Date(`${date}T${time}:00`);
+                // 1. Criamos a data que o paciente quer (Data + Hora)
+                const requestedDate = new Date(`${date}T${time}:00`);
+                const requestedTimestamp = requestedDate.getTime();
 
-                // 2. Buscamos agendamentos.
-                // IMPORTANTE: Garantir que dayStart cubra o dia todo de forma neutra
-                const dayStart = new Date(date + "T00:00:00");
+                // 2. Buscamos os agendamentos do dia
+                const dayStart = new Date(`${date}T00:00:00`);
                 const appointments = await storage.getAppointmentsByDate(
                   clinicId,
                   dayStart,
                 );
 
-                // LOG DE DEBUG OBRIGATÓRIO
-                console.log(
-                  `[CHECK DB] Buscando para Dentista: ${dentist.fullName} | Data: ${date} | Encontrados: ${appointments.length}`,
-                );
-
-                // 3. Filtro rigoroso:
-                // Comparamos apenas a STRING da hora e o ID do dentista para evitar problemas de fuso horário do objeto Date
-                // 3. Filtro com normalização agressiva e log de comparação
-                const isBusy = appointments.some(app => {
+                // 3. Filtro por tempo real (timestamp)
+                const isBusy = appointments.some((app) => {
                   const sameDentist = app.dentistId === dentist.id;
 
-                  // Normalizamos o tempo do banco: garantimos que seja string e pegamos apenas HH:mm
-                  // Alguns drivers retornam "15:00:00", outros "2026-02-24T15:00:00"
-                  const rawDbTime = app.scheduledTime ? String(app.scheduledTime) : "";
-                  const dbTimeMatch = rawDbTime.match(/(\d{2}:\d{2})/);
-                  const dbTime = dbTimeMatch ? dbTimeMatch[1] : "";
+                  // Se o seu banco grava a hora no campo 'scheduledDate', comparamos ele.
+                  // Caso contrário, tentamos reconstruir a data do banco para comparar.
+                  const dbDate = new Date(app.scheduledDate);
+                  const dbTimestamp = dbDate.getTime();
 
-                  // Normalizamos o tempo da IA (HH:mm)
-                  const aiTimeMatch = String(time).match(/(\d{2}:\d{2})/);
-                  const aiTime = aiTimeMatch ? aiTimeMatch[1] : "";
+                  const sameTime = dbTimestamp === requestedTimestamp;
 
-                  const sameTime = dbTime === aiTime && aiTime !== "";
-
-                  // LOG DE DEBUG PARA MATAR A CHARADA
-                  console.log(`[COMPARAÇÃO] DB: "${dbTime}" (Original: ${rawDbTime}) | IA: "${aiTime}" | Conflito: ${sameTime && sameDentist}`);
+                  // Log de debug para você ver os números batendo no console
+                  console.log(
+                    `[CHECK] DB Time: ${dbDate.toISOString()} | Req Time: ${requestedDate.toISOString()} | Match: ${sameTime}`,
+                  );
 
                   return sameDentist && sameTime;
                 });
 
                 if (isBusy) {
+                  aiResponse.message = `Poxa, o ${dentist.fullName} já está ocupado no dia ${date} às ${time}. Teria outro horário?`;
                   console.log(
-                    `[BLOQUEIO] Agendamento duplicado detectado para ${dentist.fullName} às ${time}`,
+                    `[BLOQUEIO] Conflito de horário detectado para ${dentist.fullName}`,
                   );
-                  aiResponse.message = `Poxa, verifiquei aqui e o ${dentist.fullName} já possui um agendamento para o dia ${date} às ${time}. Você teria disponibilidade em outro horário ou data?`;
                 } else {
                   // 4. Gravação segura
                   let customNotes = `[IA]: ${summary || "Agendamento via WhatsApp"}`;
