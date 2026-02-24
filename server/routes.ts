@@ -1992,6 +1992,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   return sameDentist && sameTime;
                 });
 
+                /* debug para verificar checagem de choque de horario */
+                console.log(`[CHECK DB] Total de agendamentos no dia ${date}: ${appointments.length}`);
+                if (appointments.length > 0) {
+                  console.log(`[CHECK TIMES] Horários ocupados no banco:`, appointments.map(a => a.scheduledTime));
+                  console.log(`[CHECK AI] Horário tentado pela IA: ${time}`);
+                }
+                
                 if (isBusy) {
                   // Se o horário estiver ocupado, a IA avisa o paciente e NÃO executa o storage.createAppointment
                   aiResponse.message = `Poxa, verifiquei aqui e o ${dentist.fullName} já possui um agendamento para o dia ${date} às ${time}. Você teria disponibilidade em outro horário ou data?`;
