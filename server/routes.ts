@@ -2953,21 +2953,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 // 3. Filtro rigoroso:
                 // Comparamos apenas a STRING da hora e o ID do dentista para evitar problemas de fuso horário do objeto Date
+                // 3. Filtro com normalização agressiva e log de comparação
                 const isBusy = appointments.some(app => {
-                  // Verifica se o agendamento pertence ao mesmo dentista
                   const sameDentist = app.dentistId === dentist.id;
 
-                  // Normalização segura: HH:mm (Ignora segundos se houver)
-                  // Adicionamos a proteção com optional chaining (?.) e fallback para string vazia
-                  const dbTime = (app.scheduledTime || "").toString().substring(0, 5);
-                  const aiTime = (time || "").toString().substring(0, 5);
+                  // Normalizamos o tempo do banco: garantimos que seja string e pegamos apenas HH:mm
+                  // Alguns drivers retornam "15:00:00", outros "2026-02-24T15:00:00"
+                  const rawDbTime = app.scheduledTime ? String(app.scheduledTime) : "";
+                  const dbTimeMatch = rawDbTime.match(/(\d{2}:\d{2})/);
+                  const dbTime = dbTimeMatch ? dbTimeMatch[1] : "";
+
+                  // Normalizamos o tempo da IA (HH:mm)
+                  const aiTimeMatch = String(time).match(/(\d{2}:\d{2})/);
+                  const aiTime = aiTimeMatch ? aiTimeMatch[1] : "";
 
                   const sameTime = dbTime === aiTime && aiTime !== "";
 
-                  // Log de auditoria para o console do Replit
-                  if (sameTime && sameDentist) {
-                    console.log(`[CONFLITO] Bloqueando: Dentista ${dentist.id} já ocupado às ${dbTime}`);
-                  }
+                  // LOG DE DEBUG PARA MATAR A CHARADA
+                  console.log(`[COMPARAÇÃO] DB: "${dbTime}" (Original: ${rawDbTime}) | IA: "${aiTime}" | Conflito: ${sameTime && sameDentist}`);
 
                   return sameDentist && sameTime;
                 });
