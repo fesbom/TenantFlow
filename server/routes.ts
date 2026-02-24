@@ -2827,62 +2827,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // --- DENTRO DA ROTA WEBHOOK EVOLUTION ---
 
           /* --- ROTINA DE AGENDAMENTO COM FILTRO DE HORÁRIO CORRIGIDO --- */
+          // --- 2. AGENDAMENTO AUTOMÁTICO (NORMALIZADO) ---
           if (aiResponse.extractedIntent.intent === "agendar") {
-            const { date, time, summary, tempData } =
-              aiResponse.extractedIntent;
-            const dentistNameRaw =
-              aiResponse.extractedIntent.dentistName ||
-              aiResponse.extractedIntent.doctorName;
+            const { date, time, summary, tempData } = aiResponse.extractedIntent;
+            const dentistNameRaw = aiResponse.extractedIntent.dentistName || aiResponse.extractedIntent.doctorName;
 
             if (date && time && dentistNameRaw) {
               const allUsers = await storage.getUsersByClinic(clinicId);
-              const cleanName = dentistNameRaw
-                .replace(/Dr\.|Dra\.|doutor|doutora/gi, "")
-                .trim();
+
+              // Busca exata pelo nome que a IA deve enviar limpo
               const dentist = allUsers.find(
                 (u) =>
                   u.role === "dentist" &&
-                  u.fullName.toLowerCase().includes(cleanName.toLowerCase()),
+                  u.fullName.toLowerCase().includes(dentistNameRaw.toLowerCase()),
               );
 
               if (dentist) {
-                // 1. Criamos a data que o paciente quer (Data + Hora)
+                // 1. Criamos os objetos de data para comparação
                 const requestedDate = new Date(`${date}T${time}:00`);
                 const requestedTimestamp = requestedDate.getTime();
 
-                // 2. Buscamos os agendamentos do dia
+                // 2. Buscamos agendamentos do dia para verificar conflitos
                 const dayStart = new Date(`${date}T00:00:00`);
-                const appointments = await storage.getAppointmentsByDate(
-                  clinicId,
-                  dayStart,
-                );
+                const appointments = await storage.getAppointmentsByDate(clinicId, dayStart);
 
-                // 3. Filtro por tempo real (timestamp)
+                // 3. Filtro de duplicidade por Timestamp (Mais preciso que String)
                 const isBusy = appointments.some((app) => {
                   const sameDentist = app.dentistId === dentist.id;
-
-                  // Se o seu banco grava a hora no campo 'scheduledDate', comparamos ele.
-                  // Caso contrário, tentamos reconstruir a data do banco para comparar.
                   const dbDate = new Date(app.scheduledDate);
-                  const dbTimestamp = dbDate.getTime();
+                  const sameTime = dbDate.getTime() === requestedTimestamp;
 
-                  const sameTime = dbTimestamp === requestedTimestamp;
-
-                  // Log de debug para você ver os números batendo no console
                   console.log(
-                    `[CHECK] DB Time: ${dbDate.toISOString()} | Req Time: ${requestedDate.toISOString()} | Match: ${sameTime}`,
+                    `[CHECK] DB: ${dbDate.toISOString()} | Req: ${requestedDate.toISOString()} | Match: ${sameTime && sameDentist}`,
                   );
 
                   return sameDentist && sameTime;
                 });
 
                 if (isBusy) {
-                  aiResponse.message = `Poxa, o ${dentist.fullName} já está ocupado no dia ${date} às ${time}. Teria outro horário?`;
-                  console.log(
-                    `[BLOQUEIO] Conflito de horário detectado para ${dentist.fullName}`,
-                  );
+                  aiResponse.message = `Poxa, o ${dentist.fullName} já possui um agendamento para o dia ${date} às ${time}. Você teria outro horário de preferência?`;
+                  console.log(`[BLOQUEIO] Horário ocupado para ${dentist.fullName} às ${time}`);
                 } else {
-                  // 4. Gravação segura
+                  // 4. Montagem da nota e gravação
                   let customNotes = `[IA]: ${summary || "Agendamento via WhatsApp"}`;
                   if (!conversation.patientId) {
                     customNotes += `\n[DADOS COLETADOS]: Nome: ${tempData || "Não informado"} | Tel: ${normalizedPhone}`;
@@ -2892,19 +2878,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     clinicId,
                     patientId: conversation.patientId || null,
                     dentistId: dentist.id,
-                    scheduledDate: scheduledDate,
+                    scheduledDate: requestedDate, // Gravando a data com o horário correto
                     scheduledTime: time,
                     status: "pending",
                     notes: customNotes,
                   });
 
-                  console.log(
-                    `[SUCESSO] Agendamento criado para ${dentist.fullName} em ${date} às ${time}`,
-                  );
+                  console.log(`[SUCESSO] Agendamento criado: ${dentist.fullName} | ${date} ${time}`);
                   aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${date} às ${time}.`;
                 }
               } else {
-                console.log(`[ERRO] Dentista não encontrado: ${cleanName}`);
+                console.log(`[ERRO] Dentista não encontrado no banco: ${dentistNameRaw}`);
               }
             }
           }
