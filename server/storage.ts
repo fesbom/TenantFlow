@@ -94,6 +94,7 @@ export interface IStorage {
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
   getAppointmentsByClinic(clinicId: string): Promise<Appointment[]>;
   getAppointmentsByDate(clinicId: string, date: Date): Promise<Appointment[]>;
+  getAvailableSlots(clinicId: string, dentistId: string, date: Date): Promise<string[]>;
   getAppointmentById(id: string, clinicId: string): Promise<Appointment | undefined>;
   updateAppointment(id: string, updates: Partial<InsertAppointment>, clinicId: string): Promise<Appointment | undefined>;
   deleteAppointment(id: string, clinicId: string): Promise<boolean>;
@@ -391,6 +392,36 @@ export class DatabaseStorage implements IStorage {
         lte(appointments.scheduledDate, endOfDay)
       ))
       .orderBy(appointments.scheduledDate);
+  }
+
+  async getAvailableSlots(clinicId: string, dentistId: string, date: Date): Promise<string[]> {
+    const FIXED_SLOTS = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const dayAppointments = await db
+      .select()
+      .from(appointments)
+      .where(and(
+        eq(appointments.clinicId, clinicId),
+        eq(appointments.dentistId, dentistId),
+        gte(appointments.scheduledDate, startOfDay),
+        lte(appointments.scheduledDate, endOfDay)
+      ));
+
+    const bookedTimes = new Set(
+      dayAppointments.map((app) => {
+        const d = new Date(app.scheduledDate);
+        const h = String(d.getHours()).padStart(2, "0");
+        const m = String(d.getMinutes()).padStart(2, "0");
+        return `${h}:${m}`;
+      })
+    );
+
+    return FIXED_SLOTS.filter((slot) => !bookedTimes.has(slot));
   }
 
   async getAppointmentById(id: string, clinicId: string): Promise<Appointment | undefined> {

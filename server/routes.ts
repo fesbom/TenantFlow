@@ -2863,17 +2863,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   dayStart,
                 );
 
+                // Comparação de horário ignorando segundos (substring HH:MM)
+                const requestedTimeStr = time.substring(0, 5);
                 const isBusy = appointments.some((app) => {
-                  const sameDentist = app.dentistId === dentist.id;
+                  if (app.dentistId !== dentist.id) return false;
                   const dbDate = new Date(app.scheduledDate);
-                  return sameDentist && dbDate.getTime() === requestedTimestamp;
+                  const dbH = String(dbDate.getHours()).padStart(2, "0");
+                  const dbM = String(dbDate.getMinutes()).padStart(2, "0");
+                  const dbTimeStr = `${dbH}:${dbM}`;
+                  return dbTimeStr === requestedTimeStr;
                 });
 
                 if (isBusy) {
-                  aiResponse.message = `Salete, o ${dentist.fullName} já possui um agendamento dia ${date} às ${time}. Vou encaminhar sua conversa para um atendente humano verificar o melhor horário para você.`;
-                  await storage.updateWhatsappConversation(conversation.id, {
-                    status: "human",
-                  });
+                  const displayName =
+                    patient?.fullName?.split(" ")[0] ||
+                    (aiResponse.extractedIntent.tempData || "").split(" ")[0] ||
+                    "Paciente";
+
+                  // Verificar se já houve mensagem de conflito anterior nesta conversa
+                  const previousConflict = messages.some(
+                    (m) =>
+                      (m.sender === "ai" || m.sender === "staff") &&
+                      (m.text?.includes("já está ocupado") ||
+                        m.text?.includes("horários livres") ||
+                        m.text?.includes("Algum deles te atende") ||
+                        m.text?.includes("conflito"))
+                  );
+
+                  if (!previousConflict) {
+                    // PRIMEIRO CONFLITO: Sugerir horários alternativos
+                    console.log(`[CONFLITO] Primeiro conflito detectado para ${dentist.fullName} em ${date} às ${time}. Buscando slots livres...`);
+
+                    const requestedDay = new Date(`${date}T00:00:00`);
+                    let availableSlots = await storage.getAvailableSlots(clinicId, dentist.id, requestedDay);
+
+                    // Remover o horário conflitante da lista de sugestões
+                    availableSlots = availableSlots.filter((s) => s !== requestedTimeStr);
+
+                    let suggestionsText = "";
+                    let suggestionsDate = date;
+
+                    if (availableSlots.length < 3) {
+                      // Buscar no dia seguinte também
+                      const nextDay = new Date(requestedDay);
+                      nextDay.setDate(nextDay.getDate() + 1);
+                      const nextDateStr = nextDay.toISOString().split("T")[0];
+                      const nextDaySlots = await storage.getAvailableSlots(clinicId, dentist.id, nextDay);
+                      const combined = availableSlots.map((s) => `${date} às ${s}`).concat(nextDaySlots.map((s) => `${nextDateStr} às ${s}`));
+                      const top3 = combined.slice(0, 3);
+                      console.log(`[SLOTS] Combinando ${date} + ${nextDateStr}: ${top3.join(", ")}`);
+                      suggestionsText = top3.join(", ");
+                    } else {
+                      const top3 = availableSlots.slice(0, 3);
+                      console.log(`[SLOTS] Slots disponíveis em ${date}: ${top3.join(", ")}`);
+                      suggestionsText = top3.map((s) => `${date} às ${s}`).join(", ");
+                    }
+
+                    if (suggestionsText) {
+                      aiResponse.message = `Olá ${displayName}! O ${dentist.fullName} já está ocupado às ${time} no dia ${date}. Mas tenho estes horários livres: ${suggestionsText}. Algum deles te atende?`;
+                    } else {
+                      aiResponse.message = `Olá ${displayName}! Infelizmente o ${dentist.fullName} não possui horários disponíveis nos próximos dias. Vou chamar um atendente para ajudar você a encontrar uma data.`;
+                      await storage.updateWhatsappConversation(conversation.id, { status: "human" });
+                    }
+                    // Manter IA ativa para o paciente escolher novo horário
+                  } else {
+                    // SEGUNDO CONFLITO CONSECUTIVO: Transferir para humano
+                    console.log(`[CONFLITO] Segundo conflito consecutivo detectado. Transferindo para humano.`);
+                    aiResponse.message = `Desculpe ${displayName}, parece que estamos tendo dificuldades para encontrar um horário adequado. Vou chamar um de nossos atendentes agora para resolver isso com você de forma personalizada. Aguarde um momento!`;
+                    await storage.updateWhatsappConversation(conversation.id, { status: "human" });
+                  }
                 } else {
                   let customNotes = `[IA]: ${summary || "Agendamento via WhatsApp"}`;
                   if (!conversation.patientId) {
