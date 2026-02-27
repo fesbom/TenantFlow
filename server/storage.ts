@@ -412,16 +412,22 @@ export class DatabaseStorage implements IStorage {
         lte(appointments.scheduledDate, endOfDay)
       ));
 
-    const bookedTimes = new Set(
-      dayAppointments.map((app) => {
-        const d = new Date(app.scheduledDate);
-        const h = String(d.getHours()).padStart(2, "0");
-        const m = String(d.getMinutes()).padStart(2, "0");
-        return `${h}:${m}`;
-      })
-    );
+    // Blocos ocupados: [startMs, endMs) levando em conta a duração real de cada agendamento
+    const bookedRanges = dayAppointments.map((app) => {
+      const startMs = new Date(app.scheduledDate).getTime();
+      const durationMin = app.duration ?? 60;
+      const endMs = startMs + durationMin * 60 * 1000;
+      return { startMs, endMs };
+    });
 
-    return FIXED_SLOTS.filter((slot) => !bookedTimes.has(slot));
+    return FIXED_SLOTS.filter((slot) => {
+      const [h, m] = slot.split(":").map(Number);
+      const slotDate = new Date(date);
+      slotDate.setHours(h, m, 0, 0);
+      const slotMs = slotDate.getTime();
+      // Slot está livre se não sobrepõe nenhum bloco existente
+      return !bookedRanges.some(({ startMs, endMs }) => slotMs >= startMs && slotMs < endMs);
+    });
   }
 
   async getAppointmentById(id: string, clinicId: string): Promise<Appointment | undefined> {

@@ -2817,10 +2817,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? { isRegistered: true, name: patient!.fullName }
             : { isRegistered: false, name: null };
 
+          // Buscar nome da clínica para identificação do assistente virtual
+          const clinicData = await storage.getClinicById(clinicId);
+          const clinicName = clinicData?.name || "nossa clínica";
+
           const aiResponse = await processPatientMessage(
             messageText,
             history,
             patientContext,
+            clinicName,
           );
 
           // --- 2. AGENDAMENTO AUTOMÁTICO (CORREÇÃO PARA DENTIST NAME UNDEFINED) ---
@@ -2828,6 +2833,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           /* --- ROTINA DE AGENDAMENTO COM FILTRO DE HORÁRIO CORRIGIDO --- */
           // --- 2. AGENDAMENTO AUTOMÁTICO (NORMALIZADO) ---
+          // --- LISTAR DENTISTAS ---
+          if (aiResponse.extractedIntent.intent === "listar_dentistas") {
+            console.log(`[WEBHOOK] Intenção listar_dentistas detectada para clínica ${clinicId}`);
+            const allUsers = await storage.getUsersByClinic(clinicId);
+            const dentists = allUsers.filter((u) => u.role === "dentist");
+            if (dentists.length === 0) {
+              aiResponse.message = `No momento não temos dentistas cadastrados em nosso sistema. Entre em contato para mais informações.`;
+            } else {
+              const list = dentists.map((d) => `• ${d.fullName}`).join("\n");
+              aiResponse.message = `Estes são os profissionais disponíveis na ${clinicName}:\n\n${list}\n\nCom qual deles você gostaria de agendar?`;
+            }
+            aiResponse.extractedIntent.intent = "conversar";
+          }
+
           // --- 2. AGENDAMENTO AUTOMÁTICO COM VALIDAÇÃO REAL ---
           if (aiResponse.extractedIntent.intent === "agendar") {
             const { date, time, summary, tempData } =
@@ -2855,24 +2874,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
 
               if (dentist) {
+                // Duração dinâmica: usa o padrão do dentista ou 60min como fallback
+                const dentistDuration = dentist.defaultAppointmentDuration || 60;
                 const requestedDate = new Date(`${date}T${time}:00`);
-                const requestedTimestamp = requestedDate.getTime();
+                const requestedEndMs = requestedDate.getTime() + dentistDuration * 60 * 1000;
                 const dayStart = new Date(`${date}T00:00:00`);
                 const appointments = await storage.getAppointmentsByDate(
                   clinicId,
                   dayStart,
                 );
 
-                // Comparação de horário ignorando segundos (substring HH:MM)
+                // Verificação de sobreposição com duração (não apenas hora exata)
                 const requestedTimeStr = time.substring(0, 5);
                 const isBusy = appointments.some((app) => {
                   if (app.dentistId !== dentist.id) return false;
-                  const dbDate = new Date(app.scheduledDate);
-                  const dbH = String(dbDate.getHours()).padStart(2, "0");
-                  const dbM = String(dbDate.getMinutes()).padStart(2, "0");
-                  const dbTimeStr = `${dbH}:${dbM}`;
-                  return dbTimeStr === requestedTimeStr;
+                  const appStart = new Date(app.scheduledDate).getTime();
+                  const appDuration = app.duration ?? 60;
+                  const appEnd = appStart + appDuration * 60 * 1000;
+                  // Sobreposição: o novo horário começa antes do fim do existente E termina após o início
+                  return requestedDate.getTime() < appEnd && requestedEndMs > appStart;
                 });
+
+                console.log(`[AGENDA] Dentista: ${dentist.fullName} | Duração: ${dentistDuration}min | Horário: ${date} ${requestedTimeStr} | Ocupado: ${isBusy}`);
 
                 if (isBusy) {
                   const displayName =
@@ -2944,12 +2967,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     dentistId: dentist.id,
                     scheduledDate: requestedDate,
                     scheduledTime: time,
+                    duration: dentistDuration,
                     status: "pending",
                     notes: customNotes,
                   });
 
                   console.log(
-                    `[SUCESSO] Agendamento criado: ${dentist.fullName}`,
+                    `[SUCESSO] Agendamento criado: ${dentist.fullName} | Duração: ${dentistDuration}min`,
                   );
                   aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${date} às ${time}.`;
                 }

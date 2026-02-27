@@ -61,6 +61,35 @@ export default function Support() {
     });
   }, [conversationData?.messages]);
 
+  const groupedMessages = useMemo(() => {
+    const groups: { label: string; messages: typeof dedupedMessages }[] = [];
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    for (const msg of dedupedMessages) {
+      const msgDate = new Date(msg.createdAt!);
+      const dayKey = format(msgDate, "yyyy-MM-dd");
+
+      let label: string;
+      if (format(today, "yyyy-MM-dd") === dayKey) {
+        label = "Hoje";
+      } else if (format(yesterday, "yyyy-MM-dd") === dayKey) {
+        label = "Ontem";
+      } else {
+        label = format(msgDate, "d 'de' MMMM", { locale: ptBR });
+      }
+
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) {
+        last.messages.push(msg);
+      } else {
+        groups.push({ label, messages: [msg] });
+      }
+    }
+    return groups;
+  }, [dedupedMessages]);
+
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
@@ -302,44 +331,57 @@ export default function Support() {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {dedupedMessages.map((message) => (
-                            <div
-                              key={message.id}
-                              className={`flex ${
-                                message.direction === "inbound" || message.sender === "patient" ? "justify-start" : "justify-end"
-                              }`}
-                            >
-                              <div
-                                className={`max-w-[75%] p-3 rounded-2xl shadow-sm ${
-                                  message.direction === "inbound" || message.sender === "patient"
-                                    ? "bg-white text-gray-900 border border-gray-200/80 rounded-bl-md"
-                                    : message.sender === "ai"
-                                    ? "bg-purple-100 text-purple-900 border border-purple-200/60 rounded-br-md"
-                                    : "bg-primary text-white rounded-br-md"
-                                }`}
-                                data-testid={`message-${message.id}`}
-                              >
-                                <div className="flex items-center gap-2 mb-1">
-                                  {message.sender === "patient" ? (
-                                    <User className="h-3 w-3 opacity-60" />
-                                  ) : message.sender === "ai" ? (
-                                    <Bot className="h-3 w-3 opacity-60" />
-                                  ) : (
-                                    <UserCheck className="h-3 w-3 opacity-60" />
-                                  )}
-                                  <span className="text-xs font-medium opacity-70">
-                                    {message.sender === "patient"
-                                      ? "Paciente"
-                                      : message.sender === "ai"
-                                      ? "IA"
-                                      : "Atendente"}
-                                  </span>
-                                </div>
-                                <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
-                                <p className="text-[10px] opacity-40 mt-1.5 text-right">
-                                  {format(new Date(message.createdAt!), "HH:mm", { locale: ptBR })}
-                                </p>
+                          {groupedMessages.map((group) => (
+                            <div key={group.label}>
+                              {/* Separador de Data */}
+                              <div className="flex items-center gap-3 my-4">
+                                <div className="flex-1 h-px bg-slate-200" />
+                                <span className="text-[11px] font-medium text-slate-400 px-2 py-0.5 bg-slate-100 rounded-full select-none">
+                                  {group.label}
+                                </span>
+                                <div className="flex-1 h-px bg-slate-200" />
                               </div>
+
+                              {group.messages.map((message) => (
+                                <div
+                                  key={message.id}
+                                  className={`flex mb-2 ${
+                                    message.direction === "inbound" || message.sender === "patient" ? "justify-start" : "justify-end"
+                                  }`}
+                                >
+                                  <div
+                                    className={`max-w-[75%] p-3 rounded-2xl shadow-sm ${
+                                      message.direction === "inbound" || message.sender === "patient"
+                                        ? "bg-white text-gray-900 border border-gray-200/80 rounded-bl-md"
+                                        : message.sender === "ai"
+                                        ? "bg-purple-100 text-purple-900 border border-purple-200/60 rounded-br-md"
+                                        : "bg-primary text-white rounded-br-md"
+                                    }`}
+                                    data-testid={`message-${message.id}`}
+                                  >
+                                    <div className="flex items-center gap-2 mb-1">
+                                      {message.sender === "patient" ? (
+                                        <User className="h-3 w-3 opacity-60" />
+                                      ) : message.sender === "ai" ? (
+                                        <Bot className="h-3 w-3 opacity-60" />
+                                      ) : (
+                                        <UserCheck className="h-3 w-3 opacity-60" />
+                                      )}
+                                      <span className="text-xs font-medium opacity-70">
+                                        {message.sender === "patient"
+                                          ? "Paciente"
+                                          : message.sender === "ai"
+                                          ? "🤖 IA"
+                                          : "👤 Humano"}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                                    <p className="text-[10px] opacity-40 mt-1.5 text-right">
+                                      {format(new Date(message.createdAt!), "HH:mm", { locale: ptBR })}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           ))}
                           <div ref={messagesEndRef} />
