@@ -179,6 +179,7 @@ export interface IStorage {
   createWhatsappMessage(message: InsertWhatsappMessage): Promise<WhatsappMessage>;
   getWhatsappMessageByExternalId(externalMessageId: string): Promise<WhatsappMessage | undefined>;
   getWhatsappMessagesByConversation(conversationId: string): Promise<WhatsappMessage[]>;
+  getConversationsForAutoClose(cutoffDate: Date): Promise<WhatsappConversation[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -973,9 +974,26 @@ export class DatabaseStorage implements IStorage {
     const [message] = await db.insert(whatsappMessages).values(insertMessage).returning();
     await db
       .update(whatsappConversations)
-      .set({ lastMessageAt: new Date() })
+      .set({
+        lastMessageAt: new Date(),
+        lastMessageSender: insertMessage.sender, // 'patient' | 'ai' | 'staff'
+      })
       .where(eq(whatsappConversations.id, insertMessage.conversationId));
     return message;
+  }
+
+  async getConversationsForAutoClose(cutoffDate: Date): Promise<WhatsappConversation[]> {
+    return await db
+      .select()
+      .from(whatsappConversations)
+      .where(
+        and(
+          sql`${whatsappConversations.status} IN ('ai', 'human')`,
+          sql`${whatsappConversations.lastMessageSender} != 'patient'`,
+          sql`${whatsappConversations.lastMessageSender} IS NOT NULL`,
+          sql`${whatsappConversations.lastMessageAt} < ${cutoffDate}`,
+        )
+      );
   }
 
   async getWhatsappMessageByExternalId(externalMessageId: string): Promise<WhatsappMessage | undefined> {

@@ -3844,6 +3844,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  // =====================================================================
+  // JOB DE AUTO-ENCERRAMENTO: Conversas sem resposta do paciente por 2h
+  // =====================================================================
+  const AUTO_CLOSE_INTERVAL_MS = 5 * 60 * 1000; // verifica a cada 5 minutos
+  const AUTO_CLOSE_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 horas sem resposta
+
+  const runAutoCloseJob = async () => {
+    try {
+      const cutoff = new Date(Date.now() - AUTO_CLOSE_TIMEOUT_MS);
+      const expiredConversations = await storage.getConversationsForAutoClose(cutoff);
+
+      if (expiredConversations.length === 0) return;
+
+      console.log(`[AUTO-CLOSE] ${expiredConversations.length} conversa(s) expirada(s) para encerrar.`);
+
+      for (const conv of expiredConversations) {
+        try {
+          const closingMessage =
+            "Olá! Como não houve resposta, encerramos este atendimento. " +
+            "Qualquer dúvida, é só nos enviar uma nova mensagem. Até logo! 😊";
+
+          // Enviar mensagem de encerramento via Evolution API
+          await sendEvolutionMessage(conv.phone, `[🤖 IA] ${closingMessage}`);
+
+          // Salvar a mensagem no banco
+          await storage.createWhatsappMessage({
+            conversationId: conv.id,
+            sender: "ai",
+            direction: "outbound",
+            text: closingMessage,
+          });
+
+          // Marcar conversa como encerrada
+          await storage.updateWhatsappConversation(conv.id, { status: "closed" });
+
+          console.log(`[AUTO-CLOSE] Conversa ${conv.id} (${conv.phone}) encerrada automaticamente.`);
+        } catch (convErr) {
+          console.error(`[AUTO-CLOSE] Erro ao encerrar conversa ${conv.id}:`, convErr);
+        }
+      }
+    } catch (err) {
+      console.error("[AUTO-CLOSE] Erro no job:", err);
+    }
+  };
+
+  // Inicia o job 1 minuto após o servidor subir, depois a cada 5 minutos
+  setTimeout(() => {
+    runAutoCloseJob();
+    setInterval(runAutoCloseJob, AUTO_CLOSE_INTERVAL_MS);
+  }, 60_000);
+
   const httpServer = createServer(app);
   return httpServer;
 }
