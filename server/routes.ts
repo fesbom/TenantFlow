@@ -2778,12 +2778,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clinic = await storage.getClinicById(clinicId);
         if (!clinic) return;
 
-        // Buscar paciente e conversa
-        const patient = await storage.getPatientByPhone(
+        // Buscar paciente pelo telefone e conversa existente
+        const patientByPhone = await storage.getPatientByPhone(
           clinicId,
           normalizedPhone,
         );
-        const isRegisteredPatient = !!patient;
 
         let conversation = await storage.getWhatsappConversationByPhone(
           clinicId,
@@ -2794,15 +2793,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           conversation = await storage.createWhatsappConversation({
             clinicId,
             phone: normalizedPhone,
-            patientId: patient?.id || null,
+            patientId: patientByPhone?.id || null,
             status: "ai",
           });
-        } else if (patient && !conversation.patientId) {
+        } else if (patientByPhone && !conversation.patientId) {
           conversation = (await storage.updateWhatsappConversation(
             conversation.id,
-            { patientId: patient.id },
+            { patientId: patientByPhone.id },
           ))!;
         }
+
+        // FONTE DE VERDADE: conversation.patientId é autoritativo (inclui vínculos manuais via UI).
+        // Se o lookup por telefone não achou o paciente mas a conversa já está vinculada, buscar por ID.
+        let patient = patientByPhone;
+        if (!patient && conversation.patientId) {
+          const linkedPatient = await storage.getPatientById(conversation.patientId, clinicId);
+          if (linkedPatient) patient = linkedPatient as any;
+        }
+        const isRegisteredPatient = !!patient;
+
+        console.log(`[WEBHOOK] Paciente: ${patient?.fullName || "Não identificado"} | vinculado: ${!!conversation.patientId}`);
 
         // Salvar mensagem do paciente (Inbound) com proteção de erro
         try {

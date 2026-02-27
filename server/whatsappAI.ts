@@ -62,14 +62,37 @@ FORMATO DE RETORNO (JSON):
   "confidence": 0.9
 }`;
 
+const IDENTIFIED_PATIENT_BLOCK = (name: string) => `
+
+=== PACIENTE IDENTIFICADO — INSTRUÇÕES OBRIGATÓRIAS ===
+O paciente desta conversa é: ${name}
+REGRAS ABSOLUTAS que você NUNCA pode violar:
+1. NUNCA peça o nome completo — você já possui essa informação.
+2. NUNCA diga "pode me informar seu nome?" ou qualquer variação.
+3. Chame o paciente pelo primeiro nome (${name.split(' ')[0]}) de forma natural.
+4. Para agendamento, colete APENAS: Data, Horário e Nome do Dentista.
+5. No campo "summary", inclua obrigatoriamente: "${name} | WhatsApp".
+6. NÃO preencha "tempData" — o paciente já está cadastrado.
+=== FIM DAS INSTRUÇÕES ===`;
+
+const UNIDENTIFIED_PATIENT_BLOCK = `
+
+=== PACIENTE NÃO IDENTIFICADO ===
+Este número não está vinculado a nenhum cadastro.
+REGRAS:
+1. Solicite o nome completo educadamente antes de prosseguir.
+2. Após obter o nome, continue normalmente coletando data, horário e dentista.
+3. Inclua o nome informado em "tempData" e no "summary".
+=== FIM DAS INSTRUÇÕES ===`;
+
 function buildSystemPrompt(patientContext?: PatientContext, clinicName?: string): string {
   const resolvedClinicName = clinicName || "nossa clínica";
   let prompt = SYSTEM_PROMPT_BASE.replace(/\[CLINIC_NAME\]/g, resolvedClinicName);
 
   if (patientContext?.isRegistered && patientContext.name) {
-    prompt += `\n\nCONTEXTO: Paciente CADASTRADO: ${patientContext.name}.`;
+    prompt += IDENTIFIED_PATIENT_BLOCK(patientContext.name);
   } else {
-    prompt += `\n\nCONTEXTO: Novo interessado NÃO cadastrado. Solicite o nome completo.`;
+    prompt += UNIDENTIFIED_PATIENT_BLOCK;
   }
   return prompt;
 }
