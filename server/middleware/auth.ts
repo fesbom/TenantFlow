@@ -10,6 +10,7 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     role: string;
     clinicId: string;
+    fullName: string;
   };
 }
 
@@ -38,6 +39,7 @@ export const authenticateToken = async (
       email: user.email,
       role: user.role,
       clinicId: user.clinicId,
+      fullName: user.fullName,
     };
 
     next();

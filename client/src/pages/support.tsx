@@ -61,6 +61,11 @@ export default function Support() {
     });
   }, [conversationData?.messages]);
 
+  // Remove prefixos de identificação ([🤖 IA] ou [👤 Nome]) antes de exibir no chat
+  const stripSenderPrefix = (text: string): string => {
+    return text.replace(/^\[(?:🤖 IA|👤 [^\]]+)\]\s*/u, "");
+  };
+
   const groupedMessages = useMemo(() => {
     const groups: { label: string; messages: typeof dedupedMessages }[] = [];
     const today = new Date();
@@ -375,7 +380,7 @@ export default function Support() {
                                           : "👤 Humano"}
                                       </span>
                                     </div>
-                                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{stripSenderPrefix(message.text || "")}</p>
                                     <p className="text-[10px] opacity-40 mt-1.5 text-right">
                                       {format(new Date(message.createdAt!), "HH:mm", { locale: ptBR })}
                                     </p>

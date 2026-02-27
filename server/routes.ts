@@ -2662,9 +2662,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
+        // Prefixo [🤖 IA] apenas na string enviada ao WhatsApp (Z-API)
         const sendResult = await sendEvolutionMessage(
           normalizedPhone,
-          aiResponse.message,
+          `[🤖 IA] ${aiResponse.message}`,
         );
         if (!sendResult.success) {
           console.error(
@@ -3010,7 +3011,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
 
-          await sendEvolutionMessage(normalizedPhone, aiResponse.message);
+          // Prefixo [🤖 IA] apenas na string enviada ao WhatsApp
+          const aiWhatsappText = `[🤖 IA] ${aiResponse.message}`;
+          await sendEvolutionMessage(normalizedPhone, aiWhatsappText);
         }
       } catch (error: any) {
         console.error(`[WEBHOOK ERROR]: ${error.message}`);
@@ -3652,21 +3655,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Acesso negado. Faça login novamente." });
         }
 
+        const cleanText = messageText.trim();
+
+        // Salvar no banco sem prefixo (texto limpo)
         const savedMessage = await storage.createWhatsappMessage({
           conversationId: id,
           sender: "staff",
           direction: "outbound",
-          text: messageText.trim(),
+          text: cleanText,
         });
 
         console.log(
           `📤 [EVOLUTION] Mensagem do atendente salva: ${savedMessage.id}`,
         );
 
+        // Prefixo [👤 Nome] apenas na string enviada ao WhatsApp
+        const staffFirstName = (req.user!.fullName || "Atendente").split(" ")[0];
+        const whatsappText = `[👤 ${staffFirstName}] ${cleanText}`;
+
         if (isEvolutionConfigured()) {
           const sendResult = await sendEvolutionMessage(
             conversation.phone,
-            messageText.trim(),
+            whatsappText,
           );
           if (!sendResult.success) {
             console.error(`❌ [EVOLUTION] Erro ao enviar: ${sendResult.error}`);
@@ -3717,21 +3727,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Acesso negado. Faça login novamente." });
         }
 
+        const cleanTextAlias = messageText.trim();
+
+        // Salvar no banco sem prefixo (texto limpo)
         const savedMessage = await storage.createWhatsappMessage({
           conversationId: id,
           sender: "staff",
           direction: "outbound",
-          text: messageText.trim(),
+          text: cleanTextAlias,
         });
 
         console.log(
           `📤 [EVOLUTION] Mensagem do atendente salva: ${savedMessage.id}`,
         );
 
+        // Prefixo [👤 Nome] apenas na string enviada ao WhatsApp
+        const staffFirstNameAlias = (req.user!.fullName || "Atendente").split(" ")[0];
+        const whatsappTextAlias = `[👤 ${staffFirstNameAlias}] ${cleanTextAlias}`;
+
         if (isEvolutionConfigured()) {
           const sendResult = await sendEvolutionMessage(
             conversation.phone,
-            messageText.trim(),
+            whatsappTextAlias,
           );
           if (!sendResult.success) {
             console.error(`❌ [EVOLUTION] Erro ao enviar: ${sendResult.error}`);
