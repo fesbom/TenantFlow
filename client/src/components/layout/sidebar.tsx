@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
   BarChart3,
@@ -24,7 +25,7 @@ const navigation = [
   { name: "Agendamentos", href: "/appointments", icon: Calendar, roles: ["admin", "dentist", "secretary"] },
   { name: "Prontuários", href: "/medical-records", icon: FileText, roles: ["admin", "dentist"] },
   { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"] },
-  { name: "Atendimento IA", href: "/support", icon: MessageSquare, roles: ["admin", "secretary"] },
+  { name: "Atendimento", href: "/support", icon: MessageSquare, roles: ["admin", "secretary"], badge: true },
   { name: "Importar Dados", href: "/import-data", icon: Upload, roles: ["admin"] },
   { name: "Upload Fotos", href: "/batch-upload", icon: Images, roles: ["admin", "secretary"] },
   { name: "Configurações", href: "/settings", icon: Settings, roles: ["admin"] },
@@ -43,7 +44,20 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
   const user = authContext?.user;
   const logout = authContext?.logout;
 
-  const filteredNavigation = navigation.filter(item =>
+  // Polling de conversas para o badge de não lidas (10s).
+  // TanStack Query deduplica com a mesma query do support.tsx — sem requisição dupla.
+  const { data: conversations = [] } = useQuery<any[]>({
+    queryKey: ["/api/conversations"],
+    refetchInterval: 10_000,
+    enabled: !!user,
+  });
+
+  // "Não lida" = conversa onde o paciente enviou a última mensagem e ainda não foi encerrada
+  const unreadCount = conversations.filter(
+    (c) => c.lastMessageSender === "patient" && c.status !== "closed"
+  ).length;
+
+  const filteredNavigation = navigation.filter((item) =>
     item.roles.includes(user?.role || "")
   );
 
@@ -61,10 +75,8 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
       <div
         className={cn(
           "sidebar bg-white shadow-lg border-r border-gray-200",
-          // Mobile behavior
           "fixed inset-y-0 left-0 z-50 transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
-          // Desktop behavior - flexbox width
           isExpanded ? "sidebar-expanded" : ""
         )}
       >
@@ -80,8 +92,7 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
               </span>
             )}
           </div>
-          
-          {/* Toggle button - desktop only */}
+
           {onToggleExpanded && (
             <button
               onClick={onToggleExpanded}
@@ -118,6 +129,8 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
         <nav className="mt-4 px-4 space-y-2 flex-1">
           {filteredNavigation.map((item) => {
             const isActive = location === item.href;
+            const showBadge = item.badge && unreadCount > 0;
+
             return (
               <Link
                 key={item.name}
@@ -133,16 +146,32 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
                 data-testid={`nav-${item.name.toLowerCase()}`}
                 title={!isExpanded ? item.name : undefined}
               >
-                <item.icon
-                  className={cn(
-                    "h-5 w-5 flex-shrink-0",
-                    isActive ? "text-white" : "text-gray-400 group-hover:text-primary"
+                {/* Ícone com badge posicionado quando menu recolhido */}
+                <div className="relative flex-shrink-0">
+                  <item.icon
+                    className={cn(
+                      "h-5 w-5",
+                      isActive ? "text-white" : "text-gray-400 group-hover:text-primary"
+                    )}
+                  />
+                  {showBadge && !isExpanded && (
+                    <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
                   )}
-                />
+                </div>
+
                 {isExpanded && (
-                  <span className="transition-opacity duration-300 truncate">
-                    {item.name}
-                  </span>
+                  <>
+                    <span className="transition-opacity duration-300 truncate flex-1">
+                      {item.name}
+                    </span>
+                    {showBadge && (
+                      <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold text-white leading-none">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
+                  </>
                 )}
               </Link>
             );

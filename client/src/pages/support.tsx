@@ -86,10 +86,14 @@ export default function Support() {
   const [linkSearchDebounced, setLinkSearchDebounced] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [, setTick] = useState(0); // força re-render para timers ao vivo
+  const [flashedIds, setFlashedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
+  // Rastreia o lastMessageAt de cada conversa vista no poll anterior
+  const prevConvsRef = useRef<Map<string, string>>(new Map());
+  const flashTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Timer ao vivo — re-renderiza a cada 30s para atualizar contadores
   useEffect(() => {
@@ -101,6 +105,53 @@ export default function Support() {
     queryKey: ["/api/conversations"],
     refetchInterval: CONVERSATIONS_POLL_INTERVAL,
   });
+
+  // ── Detecta novas mensagens de pacientes entre polls ─────────────────
+  useEffect(() => {
+    if (conversations.length === 0) return;
+
+    const newFlash = new Set<string>();
+
+    for (const conv of conversations) {
+      const prevAt = prevConvsRef.current.get(conv.id);
+      const currAt = conv.lastMessageAt ? String(conv.lastMessageAt) : "";
+
+      // Nova mensagem de paciente detectada (lastMessageAt mudou e remetente é 'patient')
+      if (
+        prevAt !== undefined &&          // conversa já conhecida (não a primeira carga)
+        prevAt !== currAt &&             // timestamp mudou
+        conv.lastMessageSender === "patient" &&
+        conv.id !== selectedConversationId  // não pisca a conversa aberta
+      ) {
+        newFlash.add(conv.id);
+      }
+
+      // Atualiza referência
+      prevConvsRef.current.set(conv.id, currAt);
+    }
+
+    if (newFlash.size > 0) {
+      setFlashedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of newFlash) {
+          next.add(id);
+          // Remove o flash após 3s (cancela timer anterior se houver)
+          const existing = flashTimersRef.current.get(id);
+          if (existing) clearTimeout(existing);
+          const timer = setTimeout(() => {
+            setFlashedIds((s) => {
+              const ns = new Set(s);
+              ns.delete(id);
+              return ns;
+            });
+            flashTimersRef.current.delete(id);
+          }, 3000);
+          flashTimersRef.current.set(id, timer);
+        }
+        return next;
+      });
+    }
+  }, [conversations, selectedConversationId]);
 
   const { data: conversationData, isLoading: messagesLoading } = useQuery<{
     conversation: WhatsappConversation;
@@ -228,13 +279,24 @@ export default function Support() {
     if (selectedConversationId) setTimeout(() => scrollToBottom("auto"), 150);
   }, [selectedConversationId, scrollToBottom]);
 
-  // ── Filtered conversations ────────────────────────────────────────────
+  // ── Filtered + sorted conversations ──────────────────────────────────
+  // Ordem: waiting_staff (urgente) > waiting_patient > closed
+  // Dentro de cada grupo: mais recente primeiro (lastMessageAt desc)
   const filteredConversations = useMemo(() => {
-    return conversations.filter((conv) => {
-      const derived = getConvDerivedStatus(conv);
-      if (filterTab === "all") return true;
-      return derived === filterTab;
-    });
+    const urgencyOrder: Record<string, number> = { waiting_staff: 0, waiting_patient: 1, closed: 2 };
+    return conversations
+      .filter((conv) => {
+        const derived = getConvDerivedStatus(conv);
+        if (filterTab === "all") return true;
+        return derived === filterTab;
+      })
+      .sort((a, b) => {
+        const da = getConvDerivedStatus(a);
+        const db = getConvDerivedStatus(b);
+        if (da !== db) return (urgencyOrder[da] ?? 9) - (urgencyOrder[db] ?? 9);
+        // Mesmo grupo: mais recente primeiro
+        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+      });
   }, [conversations, filterTab]);
 
   // Contadores para os tabs
@@ -322,7 +384,7 @@ export default function Support() {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} isExpanded={sidebarExpanded} onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)} />
 
       <div className="main-content">
-        <Header title="Atendimento IA" onMenuClick={() => setSidebarOpen(true)} />
+        <Header title="Atendimento" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 flex-grow overflow-hidden">
           <div className="mb-4">
@@ -373,12 +435,19 @@ export default function Support() {
                     <div className="space-y-1 p-2">
                       {filteredConversations.map((conversation) => {
                         const derived = getConvDerivedStatus(conversation);
+                        const isFlashing = flashedIds.has(conversation.id);
                         return (
                           <button
                             key={conversation.id}
-                            onClick={() => setSelectedConversationId(conversation.id)}
-                            className={`w-full text-left p-3 rounded-lg transition-colors ${
-                              selectedConversationId === conversation.id
+                            onClick={() => {
+                              setSelectedConversationId(conversation.id);
+                              // Remove flash ao abrir a conversa
+                              setFlashedIds((s) => { const ns = new Set(s); ns.delete(conversation.id); return ns; });
+                            }}
+                            className={`w-full text-left p-3 rounded-lg transition-all duration-300 ${
+                              isFlashing
+                                ? "bg-red-50 border-2 border-red-400 ring-2 ring-red-300 ring-offset-1 animate-pulse"
+                                : selectedConversationId === conversation.id
                                 ? "bg-primary/10 border border-primary/20"
                                 : derived === "waiting_staff"
                                 ? "hover:bg-red-50 border border-red-100/60"
