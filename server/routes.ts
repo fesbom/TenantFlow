@@ -3662,17 +3662,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const { id } = req.params;
         const { patientId } = req.body;
+        const clinicId = req.user!.clinicId;
+
         if (!patientId) {
           return res.status(400).json({ message: "patientId é obrigatório" });
         }
+
         const conversation = await storage.getWhatsappConversationById(id);
-        if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+        if (!conversation || conversation.clinicId !== clinicId) {
           return res.status(404).json({ message: "Conversa não encontrada" });
         }
+
+        // 1. Vincular conversa ao paciente
         const updated = await storage.updateWhatsappConversation(id, { patientId });
+
+        // 2. Atualizar o telefone do paciente com o número da conversa (WhatsApp)
+        //    O número já está normalizado (somente dígitos) no campo conversation.phone.
+        const whatsappPhone = conversation.phone?.replace(/\D/g, "") || "";
+        if (whatsappPhone) {
+          const existingPatient = await storage.getPatientById(patientId, clinicId);
+          const currentPhone = existingPatient?.phone?.replace(/\D/g, "") || "";
+
+          if (currentPhone !== whatsappPhone) {
+            await storage.updatePatient(patientId, { phone: whatsappPhone }, clinicId);
+            console.log(
+              `[VÍNCULO] Telefone do paciente ${patientId} atualizado: "${currentPhone || "(vazio)"}" → "${whatsappPhone}"`,
+            );
+          }
+        }
+
         console.log(`[VÍNCULO] Conversa ${id} vinculada ao paciente ${patientId} por ${req.user!.fullName}`);
         res.json(updated);
       } catch (error) {
+        console.error("[VÍNCULO] Erro:", error);
         res.status(500).json({ message: "Internal server error" });
       }
     },
