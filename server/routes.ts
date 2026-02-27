@@ -1062,6 +1062,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        // Buscar paciente antes da atualização para comparar telefone
+        const existingPatient = await storage.getPatientById(req.params.id, req.user!.clinicId);
+
         const patient = await storage.updatePatient(
           req.params.id,
           updateData,
@@ -1070,6 +1073,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!patient) {
           return res.status(404).json({ message: "Patient not found" });
         }
+
+        // OBSERVER RETROATIVO: Se o telefone mudou, vincular conversas não identificadas com este número
+        const newPhone = updateData.phone?.replace(/\D/g, '');
+        const oldPhone = existingPatient?.phone?.replace(/\D/g, '');
+        if (newPhone && newPhone !== oldPhone) {
+          const linked = await storage.linkUnlinkedConversationsByPhone(req.user!.clinicId, newPhone, patient.id);
+          if (linked > 0) {
+            console.log(`[RETROATIVO] ${linked} conversa(s) vinculada(s) ao paciente ${patient.fullName} (tel: ${newPhone})`);
+          }
+        }
+
         res.json(patient);
       } catch (error: any) {
         console.error("Update patient error:", error);
@@ -3623,6 +3637,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status,
           assignedUserId: status === "human" ? req.user!.id : null,
         });
+        res.json(updated);
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // Vincular conversa a um paciente existente
+  app.patch(
+    "/api/conversations/:id/link-patient",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { id } = req.params;
+        const { patientId } = req.body;
+        if (!patientId) {
+          return res.status(400).json({ message: "patientId é obrigatório" });
+        }
+        const conversation = await storage.getWhatsappConversationById(id);
+        if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+          return res.status(404).json({ message: "Conversa não encontrada" });
+        }
+        const updated = await storage.updateWhatsappConversation(id, { patientId });
+        console.log(`[VÍNCULO] Conversa ${id} vinculada ao paciente ${patientId} por ${req.user!.fullName}`);
         res.json(updated);
       } catch (error) {
         res.status(500).json({ message: "Internal server error" });

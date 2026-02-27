@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -32,6 +32,7 @@ export default function Patients() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [prefillData, setPrefillData] = useState<{ phone?: string; fullName?: string } | undefined>();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -96,7 +97,22 @@ export default function Patients() {
     },
   });
 
+  // Auto-abrir modal com dados pré-preenchidos via URL params (ex: /patients?phone=xxx&name=xxx)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const phone = params.get("phone");
+    const name = params.get("name");
+    if (phone || name) {
+      setPrefillData({ phone: phone || undefined, fullName: name || undefined });
+      setSelectedPatient(null);
+      setIsModalOpen(true);
+      // Limpa os params sem recarregar a página
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   const handleAddPatient = () => {
+    setPrefillData(undefined);
     setSelectedPatient(null);
     setIsModalOpen(true);
   };
@@ -285,8 +301,9 @@ export default function Patients() {
       {/* Patient Modal */}
       <PatientModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => { setIsModalOpen(false); setPrefillData(undefined); }}
         patient={selectedPatient}
+        prefillData={!selectedPatient ? prefillData : undefined}
       />
     </div>
   );

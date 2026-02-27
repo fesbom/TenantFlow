@@ -15,6 +15,7 @@ interface PatientModalProps {
   isOpen: boolean;
   onClose: () => void;
   patient?: Patient | null;
+  prefillData?: { phone?: string; fullName?: string };
 }
 
 interface PatientFormData {
@@ -52,7 +53,7 @@ interface PatientFormData {
   photoUrl?: string;
 }
 
-export default function PatientModal({ isOpen, onClose, patient }: PatientModalProps) {
+export default function PatientModal({ isOpen, onClose, patient, prefillData }: PatientModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showOtherField, setShowOtherField] = useState(false);
@@ -139,17 +140,15 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
       setShowOtherField((patient as any).howDidYouKnowUs === 'Outros');
     } else {
       setFormData({
-        fullName: "",
+        fullName: prefillData?.fullName || "",
         cpf: "",
         rg: "",
         email: "",
-        phone: "",
+        phone: prefillData?.phone || "",
         workPhone: "",
         birthDate: "",
         birthCity: "",
         maritalStatus: "",
-        
-        // Endereço completo
         cep: "",
         address: "",
         number: "",
@@ -157,24 +156,19 @@ export default function PatientModal({ isOpen, onClose, patient }: PatientModalP
         neighborhood: "",
         city: "",
         state: "",
-        
-        // Vínculos e responsáveis
         responsibleDentistId: "",
         responsibleName: "",
         responsibleCpf: "",
-        
-        // Marketing e histórico
         howDidYouKnowUs: "",
         howDidYouKnowUsOther: "",
         lastVisitDate: "",
         lastContactDate: "",
-        
         medicalNotes: "",
         photoUrl: "",
       });
       setShowOtherField(false);
     }
-  }, [patient]);
+  }, [patient, prefillData]);
 
   const createPatientMutation = useMutation({
     mutationFn: async (data: PatientFormData) => {

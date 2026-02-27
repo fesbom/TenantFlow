@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { 
   MessageSquare, 
@@ -19,6 +20,9 @@ import {
   Phone,
   Clock,
   AlertTriangle,
+  Search,
+  Link2,
+  UserPlus,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -32,6 +36,9 @@ export default function Support() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkSearch, setLinkSearch] = useState("");
+  const [linkSearchDebounced, setLinkSearchDebounced] = useState("");
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -49,6 +56,45 @@ export default function Support() {
     queryKey: ["/api/conversations", selectedConversationId, "messages"],
     enabled: !!selectedConversationId,
     refetchInterval: MESSAGES_POLL_INTERVAL,
+  });
+
+  // Debounce do campo de busca do modal de vínculo
+  useEffect(() => {
+    const t = setTimeout(() => setLinkSearchDebounced(linkSearch), 400);
+    return () => clearTimeout(t);
+  }, [linkSearch]);
+
+  // Query de pacientes para o modal de vínculo
+  const { data: linkPatientData } = useQuery<{ data: any[] }>({
+    queryKey: ["/api/patients", { search: linkSearchDebounced, page: 1, pageSize: 10 }],
+    queryFn: async ({ queryKey }) => {
+      const [_key, params] = queryKey as [string, { search: string; page: number; pageSize: number }];
+      const sp = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
+      if (params.search) sp.append("search", params.search);
+      const res = await fetch(`${_key}?${sp}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
+      });
+      return res.json();
+    },
+    enabled: showLinkModal,
+  });
+  const linkPatients = linkPatientData?.data || [];
+
+  // Mutation para vincular conversa a paciente
+  const linkPatientMutation = useMutation({
+    mutationFn: async ({ conversationId, patientId }: { conversationId: string; patientId: string }) => {
+      return apiRequest("PATCH", `/api/conversations/${conversationId}/link-patient`, { patientId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] });
+      setShowLinkModal(false);
+      setLinkSearch("");
+      toast({ title: "Paciente vinculado com sucesso" });
+    },
+    onError: () => {
+      toast({ title: "Erro ao vincular paciente", variant: "destructive" });
+    },
   });
 
   const dedupedMessages = useMemo(() => {
@@ -270,10 +316,13 @@ export default function Support() {
                             {(selectedConversation as any)?.patientName || selectedConversation?.phone}
                           </h3>
                           {!selectedConversation?.patientId && (
-                            <p className="text-xs text-amber-600 flex items-center gap-1">
+                            <button
+                              onClick={() => { setShowLinkModal(true); setLinkSearch(""); }}
+                              className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 hover:underline transition-colors"
+                            >
                               <AlertTriangle className="h-3 w-3" />
-                              Contato não vinculado a um paciente cadastrado
-                            </p>
+                              Número não identificado. Clique para vincular a um paciente
+                            </button>
                           )}
                           <p className="text-sm text-gray-500">
                             {selectedConversation?.patientId ? selectedConversation?.phone + " · " : ""}
@@ -429,6 +478,82 @@ export default function Support() {
           </div>
         </main>
       </div>
+
+      {/* Modal de Vínculo de Paciente */}
+      <Dialog open={showLinkModal} onOpenChange={(open) => { setShowLinkModal(open); if (!open) setLinkSearch(""); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5 text-primary" />
+              Vincular número a um paciente
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Botão Novo Paciente */}
+            <Button
+              variant="outline"
+              className="w-full border-dashed border-primary/50 text-primary hover:bg-primary/5"
+              onClick={() => {
+                const phone = selectedConversation?.phone?.replace(/\D/g, "") || "";
+                const name = (conversationData?.messages?.find(m => m.sender === "patient")?.text || "");
+                const params = new URLSearchParams();
+                if (phone) params.set("phone", phone);
+                window.location.href = `/patients?${params.toString()}`;
+              }}
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Novo — Cadastrar paciente com este número
+            </Button>
+
+            {/* Campo de Busca */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                value={linkSearch}
+                onChange={(e) => setLinkSearch(e.target.value)}
+                placeholder="Buscar por nome, CPF ou telefone..."
+                className="pl-9"
+                autoFocus
+              />
+            </div>
+
+            {/* Lista de Pacientes */}
+            <div className="max-h-72 overflow-y-auto space-y-1 pr-1">
+              {linkPatients.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-6">
+                  {linkSearchDebounced ? "Nenhum paciente encontrado" : "Digite para buscar pacientes"}
+                </p>
+              ) : (
+                linkPatients.map((p: any) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{p.fullName}</p>
+                      <p className="text-xs text-gray-500 truncate">{p.phone}{p.email ? " · " + p.email : ""}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (selectedConversationId) {
+                          linkPatientMutation.mutate({ conversationId: selectedConversationId, patientId: p.id });
+                        }
+                      }}
+                      disabled={linkPatientMutation.isPending}
+                      className="shrink-0 ml-2"
+                    >
+                      <Link2 className="h-3 w-3 mr-1" />
+                      Associar
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -47,7 +47,7 @@ import {
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, and, desc, gte, lte, count, sql, isNotNull, or, ilike } from "drizzle-orm";
+import { eq, and, desc, gte, lte, count, sql, isNotNull, isNull, or, ilike } from "drizzle-orm";
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -173,6 +173,7 @@ export interface IStorage {
   getWhatsappConversationByPhone(clinicId: string, phone: string): Promise<WhatsappConversation | undefined>;
   getWhatsappConversationById(id: string): Promise<WhatsappConversation | undefined>;
   updateWhatsappConversation(id: string, updates: Partial<InsertWhatsappConversation>): Promise<WhatsappConversation | undefined>;
+  linkUnlinkedConversationsByPhone(clinicId: string, phone: string, patientId: string): Promise<number>;
 
   // WhatsApp message methods
   createWhatsappMessage(message: InsertWhatsappMessage): Promise<WhatsappMessage>;
@@ -948,6 +949,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(whatsappConversations.id, id))
       .returning();
     return conversation || undefined;
+  }
+
+  async linkUnlinkedConversationsByPhone(clinicId: string, phone: string, patientId: string): Promise<number> {
+    // Normaliza o telefone para dígitos apenas
+    const digitsOnly = phone.replace(/\D/g, '');
+    const result = await db
+      .update(whatsappConversations)
+      .set({ patientId })
+      .where(
+        and(
+          eq(whatsappConversations.clinicId, clinicId),
+          isNull(whatsappConversations.patientId),
+          sql`REGEXP_REPLACE(${whatsappConversations.phone}, '[^0-9]', '', 'g') = ${digitsOnly}`
+        )
+      )
+      .returning();
+    return result.length;
   }
 
   // WhatsApp message methods
