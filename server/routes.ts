@@ -3662,6 +3662,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Encerramento Manual: ignora timeout automático de 2h.
+  // Regra de negócio:
+  //   • Se status = 'ai'    → transição ai → human → closed
+  //   • Se status = 'human' → closed direto
+  //   • Se já 'closed'      → 400
+  // ─────────────────────────────────────────────────────────────────────
+  app.post(
+    "/api/conversations/:id/close",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { id } = req.params;
+        const clinicId = req.user!.clinicId;
+        const operatorName = req.user!.fullName;
+
+        const conversation = await storage.getWhatsappConversationById(id);
+        if (!conversation || conversation.clinicId !== clinicId) {
+          return res.status(404).json({ message: "Conversa não encontrada" });
+        }
+        if (conversation.status === "closed") {
+          return res.status(400).json({ message: "Conversa já está encerrada" });
+        }
+
+        // PASSO 1: Se ainda está com a IA, transitar para 'human' primeiro
+        // (garante que o encerramento seja atribuído ao fluxo humano)
+        if (conversation.status === "ai") {
+          await storage.updateWhatsappConversation(id, {
+            status: "human",
+            assignedUserId: req.user!.id,
+          });
+          console.log(
+            `[ENCERRAMENTO MANUAL] Conversa ${id} transitada de 'ai' → 'human' por ${operatorName}`,
+          );
+        }
+
+        // PASSO 2: Enviar mensagem de encerramento ao paciente via Evolution API
+        const closingText =
+          `Seu atendimento foi encerrado pelo operador ${operatorName}. ` +
+          "Se precisar de mais ajuda, é só nos enviar uma nova mensagem. Até logo! 😊";
+
+        try {
+          await sendEvolutionMessage(conversation.phone, `[👤 ${operatorName}] ${closingText}`);
+        } catch (sendErr) {
+          console.warn(`[ENCERRAMENTO MANUAL] Falha ao enviar mensagem de encerramento para ${conversation.phone}:`, sendErr);
+        }
+
+        // PASSO 3: Registrar a mensagem de encerramento no histórico (sender: 'staff')
+        await storage.createWhatsappMessage({
+          conversationId: id,
+          sender: "staff",
+          direction: "outbound",
+          text: closingText,
+        });
+
+        // PASSO 4: Marcar como encerrada
+        const updated = await storage.updateWhatsappConversation(id, { status: "closed" });
+
+        console.log(
+          `[ENCERRAMENTO MANUAL] Conversa ${id} (${conversation.phone}) encerrada por ${operatorName}`,
+        );
+
+        res.json(updated);
+      } catch (error) {
+        console.error("[ENCERRAMENTO MANUAL] Erro:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
   // Vincular conversa a um paciente existente
   app.patch(
     "/api/conversations/:id/link-patient",

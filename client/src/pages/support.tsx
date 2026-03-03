@@ -8,6 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -27,6 +37,7 @@ import {
   CheckCircle,
   Timer,
   Hourglass,
+  XCircle,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -87,6 +98,7 @@ export default function Support() {
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [, setTick] = useState(0); // força re-render para timers ao vivo
   const [flashedIds, setFlashedIds] = useState<Set<string>>(new Set());
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -216,6 +228,21 @@ export default function Support() {
       toast({ title: "Conversa devolvida à IA" });
     },
     onError: () => toast({ title: "Erro ao devolver conversa", variant: "destructive" }),
+  });
+
+  const closeConversationMutation = useMutation({
+    mutationFn: async (conversationId: string) =>
+      apiRequest("POST", `/api/conversations/${conversationId}/close`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] });
+      setShowCloseConfirm(false);
+      toast({ title: "Conversa encerrada com sucesso" });
+    },
+    onError: () => {
+      setShowCloseConfirm(false);
+      toast({ title: "Erro ao encerrar conversa", variant: "destructive" });
+    },
   });
 
   const sendMessageMutation = useMutation({
@@ -533,6 +560,18 @@ export default function Support() {
                             <Sparkles className="h-4 w-4 mr-2" /> Devolver à IA
                           </Button>
                         )}
+                        {selectedConversation?.status !== "closed" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowCloseConfirm(true)}
+                            disabled={closeConversationMutation.isPending}
+                            className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400"
+                            data-testid="button-close-conversation"
+                          >
+                            <XCircle className="h-4 w-4 mr-2" /> Encerrar
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/conversations"] }); queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] }); }} data-testid="button-refresh">
                           <RefreshCw className="h-4 w-4" />
                         </Button>
@@ -701,6 +740,30 @@ export default function Support() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de confirmação de encerramento */}
+      <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Encerrar atendimento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedConversation?.status === "ai"
+                ? "Esta conversa está sendo tratada pela IA. Ao encerrar, a IA assumirá a responsabilidade do encerramento e o paciente receberá uma mensagem de conclusão."
+                : "O paciente receberá uma mensagem informando que o atendimento foi encerrado. Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={closeConversationMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => closeConversationMutation.mutate(selectedConversationId)}
+              disabled={closeConversationMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {closeConversationMutation.isPending ? "Encerrando..." : "Sim, encerrar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
