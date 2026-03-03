@@ -2942,6 +2942,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     // PRIMEIRO CONFLITO: Sugerir horários alternativos
                     console.log(`[CONFLITO] Primeiro conflito detectado para ${dentist.fullName} em ${date} às ${time}. Buscando slots livres...`);
 
+                    // Helper: converte YYYY-MM-DD → DD/MM/YYYY para exibição ao paciente
+                    const toDateBR = (iso: string): string => {
+                      const [y, m, d] = iso.split("-");
+                      return `${d}/${m}/${y}`;
+                    };
+
                     const requestedDay = new Date(`${date}T00:00:00`);
                     let availableSlots = await storage.getAvailableSlots(clinicId, dentist.id, requestedDay);
 
@@ -2957,18 +2963,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       nextDay.setDate(nextDay.getDate() + 1);
                       const nextDateStr = nextDay.toISOString().split("T")[0];
                       const nextDaySlots = await storage.getAvailableSlots(clinicId, dentist.id, nextDay);
-                      const combined = availableSlots.map((s) => `${date} às ${s}`).concat(nextDaySlots.map((s) => `${nextDateStr} às ${s}`));
+                      const combined = availableSlots.map((s) => `${toDateBR(date)} às ${s}`).concat(nextDaySlots.map((s) => `${toDateBR(nextDateStr)} às ${s}`));
                       const top3 = combined.slice(0, 3);
                       console.log(`[SLOTS] Combinando ${date} + ${nextDateStr}: ${top3.join(", ")}`);
                       suggestionsText = top3.join(", ");
                     } else {
                       const top3 = availableSlots.slice(0, 3);
                       console.log(`[SLOTS] Slots disponíveis em ${date}: ${top3.join(", ")}`);
-                      suggestionsText = top3.map((s) => `${date} às ${s}`).join(", ");
+                      suggestionsText = top3.map((s) => `${toDateBR(date)} às ${s}`).join(", ");
                     }
 
                     if (suggestionsText) {
-                      aiResponse.message = `Olá ${displayName}! O ${dentist.fullName} já está ocupado às ${time} no dia ${date}. Mas tenho estes horários livres: ${suggestionsText}. Algum deles te atende?`;
+                      aiResponse.message = `Olá ${displayName}! O ${dentist.fullName} já está ocupado às ${time} no dia ${toDateBR(date)}. Mas tenho estes horários livres: ${suggestionsText}. Algum deles te atende?`;
                     } else {
                       aiResponse.message = `Olá ${displayName}! Infelizmente o ${dentist.fullName} não possui horários disponíveis nos próximos dias. Vou chamar um atendente para ajudar você a encontrar uma data.`;
                       await storage.updateWhatsappConversation(conversation.id, { status: "human" });
@@ -3000,7 +3006,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   console.log(
                     `[SUCESSO] Agendamento criado: ${dentist.fullName} | Duração: ${dentistDuration}min`,
                   );
-                  aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${date} às ${time}.`;
+                  const [yyyy, mm, dd] = date.split("-");
+                  const dateBR = `${dd}/${mm}/${yyyy}`;
+                  aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${dateBR} às ${time}.`;
                 }
               } else {
                 // SE NÃO ACHOU O DENTISTA: Avisa o erro e passa para o humano
