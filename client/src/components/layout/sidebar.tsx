@@ -17,12 +17,14 @@ import {
   Upload,
   Images,
   MessageSquare,
+  Clock,
 } from "lucide-react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: BarChart3, roles: ["admin", "dentist", "secretary"] },
   { name: "Pacientes", href: "/patients", icon: Users, roles: ["admin", "dentist", "secretary"] },
   { name: "Agendamentos", href: "/appointments", icon: Calendar, roles: ["admin", "dentist", "secretary"] },
+  { name: "Disponibilidade", href: "/availability", icon: Clock, roles: ["admin", "dentist"] },
   { name: "Prontuários", href: "/medical-records", icon: FileText, roles: ["admin", "dentist"] },
   { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"] },
   { name: "Atendimento", href: "/support", icon: MessageSquare, roles: ["admin", "secretary"], badge: true },

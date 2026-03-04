@@ -2702,6 +2702,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========================================
+  // Availability & Schedule Management
+  // ========================================
+
+  // GET /api/availability/schedule/:dentistId — grade do dentista
+  app.get(
+    "/api/availability/schedule/:dentistId",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { dentistId } = req.params;
+        const clinicId = req.user!.clinicId;
+        const schedules = await storage.getDentistSchedules(clinicId, dentistId);
+        res.json(schedules);
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // PUT /api/availability/schedule/:dentistId — salvar grade completa
+  app.put(
+    "/api/availability/schedule/:dentistId",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { dentistId } = req.params;
+        const clinicId = req.user!.clinicId;
+        const { schedules } = req.body as { schedules: Array<{
+          weekday: number;
+          period: string;
+          startTime: string;
+          endTime: string;
+          isActive: boolean;
+        }> };
+
+        if (!Array.isArray(schedules)) {
+          return res.status(400).json({ message: "schedules deve ser um array" });
+        }
+
+        const toInsert = schedules.map((s) => ({
+          dentistId,
+          clinicId,
+          weekday: s.weekday,
+          period: s.period,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          isActive: s.isActive,
+        }));
+
+        const result = await storage.setDentistSchedules(clinicId, dentistId, toInsert);
+        res.json(result);
+      } catch (error) {
+        console.error("[SCHEDULE] Erro ao salvar grade:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // GET /api/availability/holidays — lista feriados da clínica
+  app.get(
+    "/api/availability/holidays",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const clinicId = req.user!.clinicId;
+        const holidays = await storage.getClinicHolidays(clinicId);
+        res.json(holidays);
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // POST /api/availability/holidays — criar feriado/recesso
+  app.post(
+    "/api/availability/holidays",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const clinicId = req.user!.clinicId;
+        const { date, name, type } = req.body;
+        if (!date || !name) {
+          return res.status(400).json({ message: "date e name são obrigatórios" });
+        }
+        const holiday = await storage.createClinicHoliday({
+          clinicId,
+          date,
+          name,
+          type: type || "holiday",
+        });
+        res.status(201).json(holiday);
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // DELETE /api/availability/holidays/:id — remover feriado
+  app.delete(
+    "/api/availability/holidays/:id",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { id } = req.params;
+        const clinicId = req.user!.clinicId;
+        const ok = await storage.deleteClinicHoliday(id, clinicId);
+        if (!ok) return res.status(404).json({ message: "Feriado não encontrado" });
+        res.json({ message: "Feriado removido" });
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // GET /api/availability/all-schedules — todas as grades (para o calendário bloquear slots)
+  app.get(
+    "/api/availability/all-schedules",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const clinicId = req.user!.clinicId;
+        const schedules = await storage.getAllDentistSchedulesByClinic(clinicId);
+        res.json(schedules);
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // ========================================
   // Evolution API Integration Routes
   // ========================================
 
@@ -2904,13 +3034,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const requestedDate = new Date(`${date}T${time}:00`);
                 const requestedEndMs = requestedDate.getTime() + dentistDuration * 60 * 1000;
                 const dayStart = new Date(`${date}T00:00:00`);
-                const appointments = await storage.getAppointmentsByDate(
-                  clinicId,
-                  dayStart,
-                );
+                const requestedTimeStr = time.substring(0, 5);
+
+                // Helper: converte YYYY-MM-DD → DD/MM/YYYY para exibição ao paciente
+                const toDateBR = (iso: string): string => {
+                  const [y, m, d] = iso.split("-");
+                  return `${d}/${m}/${y}`;
+                };
+
+                const displayName =
+                  patient?.fullName?.split(" ")[0] ||
+                  (aiResponse.extractedIntent.tempData || "").split(" ")[0] ||
+                  "Paciente";
+
+                // ── VALIDAÇÃO 1: Verificar se a data é feriado ou recesso ──
+                const isHolidayDate = await storage.isHoliday(clinicId, date);
+                if (isHolidayDate) {
+                  console.log(`[AGENDA] Data ${date} é feriado/recesso — bloqueando agendamento`);
+                  const slotsNextDay: string[] = [];
+                  for (let d = 1; d <= 5; d++) {
+                    const next = new Date(`${date}T00:00:00`);
+                    next.setDate(next.getDate() + d);
+                    const nextStr = next.toISOString().slice(0, 10);
+                    const isNextHoliday = await storage.isHoliday(clinicId, nextStr);
+                    if (!isNextHoliday) {
+                      const nextSlots = await storage.getAvailableSlotsForDate(clinicId, dentist.id, next);
+                      if (nextSlots.length > 0) {
+                        const top2 = nextSlots.slice(0, 2).map((s) => `${toDateBR(nextStr)} às ${s}`).join(", ");
+                        slotsNextDay.push(top2);
+                      }
+                    }
+                    if (slotsNextDay.length >= 2) break;
+                  }
+                  const suggestText = slotsNextDay.length > 0 ? ` Que tal: ${slotsNextDay.join("; ")}?` : "";
+                  aiResponse.message = `Olá ${displayName}! O dia ${toDateBR(date)} é feriado ou recesso e nossa clínica não estará aberta.${suggestText}`;
+                  aiResponse.extractedIntent.intent = "conversar";
+                } else {
+
+                // ── VALIDAÇÃO 2: Verificar se o horário está na grade do dentista ──
+                const scheduleForDay = await storage.getDentistSchedules(clinicId, dentist.id);
+                const weekday = requestedDate.getDay(); // 0=Dom ... 6=Sab
+                const activePeriodsForDay = scheduleForDay.filter((s) => s.weekday === weekday && s.isActive);
+
+                let isOutsideSchedule = false;
+                if (activePeriodsForDay.length > 0) {
+                  const [rh, rm] = requestedTimeStr.split(":").map(Number);
+                  const reqMin = rh * 60 + rm;
+                  const inAnyPeriod = activePeriodsForDay.some((p) => {
+                    const [sh, sm] = p.startTime.split(":").map(Number);
+                    const [eh, em] = p.endTime.split(":").map(Number);
+                    return reqMin >= sh * 60 + sm && reqMin + dentistDuration <= eh * 60 + em;
+                  });
+                  isOutsideSchedule = !inAnyPeriod;
+                }
+
+                if (isOutsideSchedule) {
+                  console.log(`[AGENDA] Horário ${requestedTimeStr} fora da grade do dentista ${dentist.fullName} na ${["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][weekday]}`);
+                  const slotsOnDay = await storage.getAvailableSlotsForDate(clinicId, dentist.id, new Date(`${date}T00:00:00`));
+                  const suggestions = slotsOnDay.slice(0, 3).map((s) => `${toDateBR(date)} às ${s}`).join(", ");
+                  if (suggestions) {
+                    aiResponse.message = `Olá ${displayName}! O ${dentist.fullName} não atende às ${requestedTimeStr} no dia ${toDateBR(date)}. Horários disponíveis: ${suggestions}. Algum deles te atende?`;
+                  } else {
+                    aiResponse.message = `Olá ${displayName}! O ${dentist.fullName} não possui horários disponíveis no dia ${toDateBR(date)}. Vou chamar um atendente para ajudar você.`;
+                    await storage.updateWhatsappConversation(conversation.id, { status: "human" });
+                  }
+                  aiResponse.extractedIntent.intent = "conversar";
+                } else {
+
+                const appointments = await storage.getAppointmentsByDate(clinicId, dayStart);
 
                 // Verificação de sobreposição com duração (não apenas hora exata)
-                const requestedTimeStr = time.substring(0, 5);
                 const isBusy = appointments.some((app) => {
                   if (app.dentistId !== dentist.id) return false;
                   const appStart = new Date(app.scheduledDate).getTime();
@@ -2923,11 +3116,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 console.log(`[AGENDA] Dentista: ${dentist.fullName} | Duração: ${dentistDuration}min | Horário: ${date} ${requestedTimeStr} | Ocupado: ${isBusy}`);
 
                 if (isBusy) {
-                  const displayName =
-                    patient?.fullName?.split(" ")[0] ||
-                    (aiResponse.extractedIntent.tempData || "").split(" ")[0] ||
-                    "Paciente";
-
                   // Verificar se já houve mensagem de conflito anterior nesta conversa
                   const previousConflict = messages.some(
                     (m) =>
@@ -2942,27 +3130,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     // PRIMEIRO CONFLITO: Sugerir horários alternativos
                     console.log(`[CONFLITO] Primeiro conflito detectado para ${dentist.fullName} em ${date} às ${time}. Buscando slots livres...`);
 
-                    // Helper: converte YYYY-MM-DD → DD/MM/YYYY para exibição ao paciente
-                    const toDateBR = (iso: string): string => {
-                      const [y, m, d] = iso.split("-");
-                      return `${d}/${m}/${y}`;
-                    };
-
                     const requestedDay = new Date(`${date}T00:00:00`);
-                    let availableSlots = await storage.getAvailableSlots(clinicId, dentist.id, requestedDay);
+                    let availableSlots = await storage.getAvailableSlotsForDate(clinicId, dentist.id, requestedDay);
 
                     // Remover o horário conflitante da lista de sugestões
                     availableSlots = availableSlots.filter((s) => s !== requestedTimeStr);
 
                     let suggestionsText = "";
-                    let suggestionsDate = date;
 
                     if (availableSlots.length < 3) {
                       // Buscar no dia seguinte também
                       const nextDay = new Date(requestedDay);
                       nextDay.setDate(nextDay.getDate() + 1);
                       const nextDateStr = nextDay.toISOString().split("T")[0];
-                      const nextDaySlots = await storage.getAvailableSlots(clinicId, dentist.id, nextDay);
+                      const nextDaySlots = await storage.getAvailableSlotsForDate(clinicId, dentist.id, nextDay);
                       const combined = availableSlots.map((s) => `${toDateBR(date)} às ${s}`).concat(nextDaySlots.map((s) => `${toDateBR(nextDateStr)} às ${s}`));
                       const top3 = combined.slice(0, 3);
                       console.log(`[SLOTS] Combinando ${date} + ${nextDateStr}: ${top3.join(", ")}`);
@@ -3010,6 +3191,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   const dateBR = `${dd}/${mm}/${yyyy}`;
                   aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${dateBR} às ${time}.`;
                 }
+
+                } // close: else (isOutsideSchedule)
+                } // close: else (isHolidayDate)
+
               } else {
                 // SE NÃO ACHOU O DENTISTA: Avisa o erro e passa para o humano
                 console.log(

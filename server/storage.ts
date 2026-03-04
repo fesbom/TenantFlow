@@ -14,6 +14,8 @@ import {
   treatmentMovements,
   whatsappConversations,
   whatsappMessages,
+  dentistSchedules,
+  clinicHolidays,
   type Clinic,
   type User,
   type Patient,
@@ -44,6 +46,10 @@ import {
   type InsertWhatsappConversation,
   type WhatsappMessage,
   type InsertWhatsappMessage,
+  type DentistSchedule,
+  type InsertDentistSchedule,
+  type ClinicHoliday,
+  type InsertClinicHoliday,
 } from "@shared/schema";
 
 import { db } from "./db";
@@ -180,6 +186,20 @@ export interface IStorage {
   getWhatsappMessageByExternalId(externalMessageId: string): Promise<WhatsappMessage | undefined>;
   getWhatsappMessagesByConversation(conversationId: string): Promise<WhatsappMessage[]>;
   getConversationsForAutoClose(cutoffDate: Date): Promise<WhatsappConversation[]>;
+
+  // Dentist schedule methods
+  getDentistSchedules(clinicId: string, dentistId: string): Promise<DentistSchedule[]>;
+  setDentistSchedules(clinicId: string, dentistId: string, schedules: InsertDentistSchedule[]): Promise<DentistSchedule[]>;
+  getAllDentistSchedulesByClinic(clinicId: string): Promise<DentistSchedule[]>;
+
+  // Holiday methods
+  getClinicHolidays(clinicId: string): Promise<ClinicHoliday[]>;
+  createClinicHoliday(holiday: InsertClinicHoliday): Promise<ClinicHoliday>;
+  deleteClinicHoliday(id: string, clinicId: string): Promise<boolean>;
+  isHoliday(clinicId: string, date: string): Promise<boolean>;
+
+  // Availability check (used by AI)
+  getAvailableSlotsForDate(clinicId: string, dentistId: string, date: Date): Promise<string[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1011,6 +1031,142 @@ export class DatabaseStorage implements IStorage {
       .from(whatsappMessages)
       .where(eq(whatsappMessages.conversationId, conversationId))
       .orderBy(whatsappMessages.createdAt);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // DENTIST SCHEDULE METHODS
+  // ─────────────────────────────────────────────────────────────────────
+
+  async getDentistSchedules(clinicId: string, dentistId: string): Promise<DentistSchedule[]> {
+    return await db
+      .select()
+      .from(dentistSchedules)
+      .where(and(eq(dentistSchedules.clinicId, clinicId), eq(dentistSchedules.dentistId, dentistId)))
+      .orderBy(dentistSchedules.weekday, dentistSchedules.period);
+  }
+
+  async getAllDentistSchedulesByClinic(clinicId: string): Promise<DentistSchedule[]> {
+    return await db
+      .select()
+      .from(dentistSchedules)
+      .where(eq(dentistSchedules.clinicId, clinicId));
+  }
+
+  async setDentistSchedules(clinicId: string, dentistId: string, schedules: InsertDentistSchedule[]): Promise<DentistSchedule[]> {
+    // Delete all existing schedules for this dentist and re-insert
+    await db
+      .delete(dentistSchedules)
+      .where(and(eq(dentistSchedules.clinicId, clinicId), eq(dentistSchedules.dentistId, dentistId)));
+
+    if (schedules.length === 0) return [];
+
+    const inserted = await db
+      .insert(dentistSchedules)
+      .values(schedules)
+      .returning();
+
+    return inserted;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // CLINIC HOLIDAY METHODS
+  // ─────────────────────────────────────────────────────────────────────
+
+  async getClinicHolidays(clinicId: string): Promise<ClinicHoliday[]> {
+    return await db
+      .select()
+      .from(clinicHolidays)
+      .where(eq(clinicHolidays.clinicId, clinicId))
+      .orderBy(clinicHolidays.date);
+  }
+
+  async createClinicHoliday(holiday: InsertClinicHoliday): Promise<ClinicHoliday> {
+    const [created] = await db.insert(clinicHolidays).values(holiday).returning();
+    return created;
+  }
+
+  async deleteClinicHoliday(id: string, clinicId: string): Promise<boolean> {
+    const result = await db
+      .delete(clinicHolidays)
+      .where(and(eq(clinicHolidays.id, id), eq(clinicHolidays.clinicId, clinicId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async isHoliday(clinicId: string, date: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: clinicHolidays.id })
+      .from(clinicHolidays)
+      .where(and(eq(clinicHolidays.clinicId, clinicId), eq(clinicHolidays.date, date)))
+      .limit(1);
+    return !!row;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // AVAILABILITY: generate slots respecting schedule grid + holidays
+  // ─────────────────────────────────────────────────────────────────────
+
+  async getAvailableSlotsForDate(clinicId: string, dentistId: string, date: Date): Promise<string[]> {
+    // Format date as YYYY-MM-DD
+    const dateStr = date.toISOString().slice(0, 10);
+
+    // 1. Check if this date is a holiday/recess
+    if (await this.isHoliday(clinicId, dateStr)) return [];
+
+    // 2. Get dentist schedule for this weekday (0=Sun ... 6=Sat)
+    const weekday = date.getDay();
+    const schedules = await this.getDentistSchedules(clinicId, dentistId);
+    const activePeriods = schedules.filter((s) => s.weekday === weekday && s.isActive);
+
+    // 3. Build candidate slots from active periods (30-min intervals)
+    const candidateSlots: string[] = [];
+    for (const period of activePeriods) {
+      const [sh, sm] = period.startTime.split(":").map(Number);
+      const [eh, em] = period.endTime.split(":").map(Number);
+      let curMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      while (curMin + 30 <= endMin) {
+        const hh = String(Math.floor(curMin / 60)).padStart(2, "0");
+        const mm = String(curMin % 60).padStart(2, "0");
+        candidateSlots.push(`${hh}:${mm}`);
+        curMin += 30;
+      }
+    }
+
+    // If no schedule configured, fall back to FIXED_SLOTS (backwards compat)
+    const FIXED_SLOTS = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+    const slots = candidateSlots.length > 0 ? candidateSlots : FIXED_SLOTS;
+
+    // 4. Filter booked ranges
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const dayAppointments = await db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.clinicId, clinicId),
+          eq(appointments.dentistId, dentistId),
+          gte(appointments.scheduledDate, startOfDay),
+          lte(appointments.scheduledDate, endOfDay),
+        ),
+      );
+
+    const bookedRanges = dayAppointments.map((app) => {
+      const startMs = new Date(app.scheduledDate).getTime();
+      const durationMin = app.duration ?? 60;
+      return { startMs, endMs: startMs + durationMin * 60_000 };
+    });
+
+    return slots.filter((slot) => {
+      const [h, m] = slot.split(":").map(Number);
+      const slotDate = new Date(date);
+      slotDate.setHours(h, m, 0, 0);
+      const slotMs = slotDate.getTime();
+      return !bookedRanges.some(({ startMs, endMs }) => slotMs >= startMs && slotMs < endMs);
+    });
   }
 }
 

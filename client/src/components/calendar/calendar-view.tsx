@@ -85,6 +85,70 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
   const dentists = users.filter(user => user.role === "dentist");
 
+  // Schedules and holidays for slot blocking
+  const { data: allSchedules = [] } = useQuery<any[]>({
+    queryKey: ["/api/availability/all-schedules"],
+    queryFn: ({ queryKey }) => fetchData(queryKey[0] as string),
+  });
+
+  const { data: holidays = [] } = useQuery<any[]>({
+    queryKey: ["/api/availability/holidays"],
+    queryFn: ({ queryKey }) => fetchData(queryKey[0] as string),
+  });
+
+  const holidaySet = useMemo(() => {
+    const s = new Set<string>();
+    for (const h of holidays) s.add(h.date);
+    return s;
+  }, [holidays]);
+
+  // slotPropGetter: color slots outside dentist schedule or on holidays
+  const slotPropGetter = useMemo(() => (date: Date) => {
+    const dateStr = date.toISOString().slice(0, 10);
+
+    // Holiday: always block regardless of dentist
+    if (holidaySet.has(dateStr)) {
+      return {
+        style: {
+          backgroundColor: "#fef2f2",
+          backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, #fecaca 4px, #fecaca 5px)",
+          cursor: "not-allowed",
+        },
+      };
+    }
+
+    // If a specific dentist is selected, check their schedule
+    if (selectedDentist !== "all") {
+      const weekday = date.getDay();
+      const h = date.getHours();
+      const m = date.getMinutes();
+      const slotMin = h * 60 + m;
+
+      const dentistSchedules = allSchedules.filter(
+        (s: any) => s.dentistId === selectedDentist && s.weekday === weekday && s.isActive,
+      );
+
+      if (dentistSchedules.length > 0) {
+        const inAnyPeriod = dentistSchedules.some((s: any) => {
+          const [sh, sm] = s.startTime.split(":").map(Number);
+          const [eh, em] = s.endTime.split(":").map(Number);
+          return slotMin >= sh * 60 + sm && slotMin < eh * 60 + em;
+        });
+
+        if (!inAnyPeriod) {
+          return {
+            style: {
+              backgroundColor: "#f3f4f6",
+              opacity: 0.6,
+            },
+          };
+        }
+      }
+    }
+
+    return {};
+  }, [selectedDentist, allSchedules, holidaySet]);
+
   const deleteAppointmentMutation = useMutation({
     mutationFn: async (appointmentId: string) => {
       const response = await fetch(`/api/appointments/${appointmentId}`, {
@@ -305,6 +369,14 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                 showMultiDayTimes={true}
                 step={30}
                 timeslots={2}
+                slotPropGetter={slotPropGetter}
+                dayPropGetter={(date) => {
+                  const dateStr = date.toISOString().slice(0, 10);
+                  if (holidaySet.has(dateStr)) {
+                    return { style: { backgroundColor: "#fff1f2" } };
+                  }
+                  return {};
+                }}
                 min={new Date(2024, 0, 1, 7, 0)} // 7:00 AM
                 max={new Date(2024, 0, 1, 20, 0)} // 8:00 PM
                 messages={{

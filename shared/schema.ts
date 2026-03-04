@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, date, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, date, decimal, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -220,6 +220,32 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   text: text("text").notNull(),
   extractedIntent: text("extracted_intent"), // JSON with intent data from Gemini
   externalMessageId: text("external_message_id").unique(), // Evolution API message ID (UNIQUE para idempotência)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Dentist Schedules - weekly availability grid per dentist
+export const dentistSchedules = pgTable(
+  "dentist_schedules",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    dentistId: varchar("dentist_id").notNull().references(() => users.id),
+    clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+    weekday: integer("weekday").notNull(), // 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
+    period: text("period").notNull(), // 'morning' | 'afternoon' | 'evening'
+    startTime: text("start_time").notNull(), // "HH:MM"
+    endTime: text("end_time").notNull(), // "HH:MM"
+    isActive: boolean("is_active").default(true).notNull(),
+  },
+  (t) => [unique("uq_dentist_schedule").on(t.dentistId, t.weekday, t.period)],
+);
+
+// Clinic Holidays & Recesses - global blocked days for all dentists
+export const clinicHolidays = pgTable("clinic_holidays", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+  date: text("date").notNull(), // "YYYY-MM-DD"
+  name: text("name").notNull(),
+  type: text("type").default("holiday").notNull(), // 'holiday' | 'recess'
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -471,6 +497,15 @@ export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages).
   createdAt: true,
 });
 
+export const insertDentistScheduleSchema = createInsertSchema(dentistSchedules).omit({
+  id: true,
+});
+
+export const insertClinicHolidaySchema = createInsertSchema(clinicHolidays).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Clinic = typeof clinics.$inferSelect;
 export type InsertClinic = z.infer<typeof insertClinicSchema>;
@@ -521,3 +556,10 @@ export type InsertWhatsappConversation = z.infer<typeof insertWhatsappConversati
 
 export type WhatsappMessage = typeof whatsappMessages.$inferSelect;
 export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
+
+// Availability types
+export type DentistSchedule = typeof dentistSchedules.$inferSelect;
+export type InsertDentistSchedule = z.infer<typeof insertDentistScheduleSchema>;
+
+export type ClinicHoliday = typeof clinicHolidays.$inferSelect;
+export type InsertClinicHoliday = z.infer<typeof insertClinicHolidaySchema>;

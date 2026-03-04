@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project is a multi-tenant dental clinic management system, designed as an MVP for small dental practices. It offers comprehensive features for practice management, including patient records, appointment scheduling, medical records, anamnesis questionnaires, and budget management. Each clinic operates as an isolated tenant, with robust role-based access control for administrators, dentists, and secretaries to ensure data security and proper access levels.
+This project is a multi-tenant dental clinic management system, designed as an MVP for small dental practices. It offers comprehensive features for practice management, including patient records, appointment scheduling, medical records, anamnesis questionnaires, budget management, WhatsApp AI customer service, and dentist availability/schedule management. Each clinic operates as an isolated tenant, with robust role-based access control for administrators, dentists, and secretaries to ensure data security and proper access levels.
 
 ## User Preferences
 
