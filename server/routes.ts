@@ -2926,11 +2926,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             patientId: patientByPhone?.id || null,
             status: "ai",
           });
-        } else if (patientByPhone && !conversation.patientId) {
-          conversation = (await storage.updateWhatsappConversation(
-            conversation.id,
-            { patientId: patientByPhone.id },
-          ))!;
+        } else {
+          const convUpdates: Record<string, any> = {};
+
+          // REATIVAÇÃO PELO PACIENTE: Se conversa estava encerrada, reinicia o fluxo de IA
+          if (conversation.status === "closed") {
+            convUpdates.status = "ai";
+            console.log(
+              `[REATIVAÇÃO] Conversa ${conversation.id} reativada (closed → ai) pelo paciente ${normalizedPhone}`,
+            );
+          }
+
+          // Vincular paciente se encontrado e ainda não vinculado
+          if (patientByPhone && !conversation.patientId) {
+            convUpdates.patientId = patientByPhone.id;
+          }
+
+          if (Object.keys(convUpdates).length > 0) {
+            conversation = (await storage.updateWhatsappConversation(
+              conversation.id,
+              convUpdates,
+            ))!;
+          }
         }
 
         // FONTE DE VERDADE: conversation.patientId é autoritativo (inclui vínculos manuais via UI).
@@ -3988,6 +4005,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Acesso negado. Faça login novamente." });
         }
 
+        // REATIVAÇÃO PELO ATENDENTE: Se conversa estava encerrada, reativa como 'human'
+        if (conversation.status === "closed") {
+          await storage.updateWhatsappConversation(id, {
+            status: "human",
+            assignedUserId: req.user!.id,
+          });
+          console.log(
+            `[REATIVAÇÃO] Conversa ${id} reativada (closed → human) pelo atendente ${req.user!.fullName}`,
+          );
+        }
+
         const cleanText = messageText.trim();
 
         // Salvar no banco sem prefixo (texto limpo)
@@ -4058,6 +4086,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res
             .status(403)
             .json({ message: "Acesso negado. Faça login novamente." });
+        }
+
+        // REATIVAÇÃO PELO ATENDENTE: Se conversa estava encerrada, reativa como 'human'
+        if (conversation.status === "closed") {
+          await storage.updateWhatsappConversation(id, {
+            status: "human",
+            assignedUserId: req.user!.id,
+          });
+          console.log(
+            `[REATIVAÇÃO] Conversa ${id} reativada (closed → human) pelo atendente ${req.user!.fullName}`,
+          );
         }
 
         const cleanTextAlias = messageText.trim();

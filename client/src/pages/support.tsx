@@ -38,6 +38,8 @@ import {
   Timer,
   Hourglass,
   XCircle,
+  RotateCcw,
+  X,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -96,6 +98,8 @@ export default function Support() {
   const [linkSearch, setLinkSearch] = useState("");
   const [linkSearchDebounced, setLinkSearchDebounced] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
+  const [convSearch, setConvSearch] = useState("");
+  const [convSearchDebounced, setConvSearchDebounced] = useState("");
   const [, setTick] = useState(0); // força re-render para timers ao vivo
   const [flashedIds, setFlashedIds] = useState<Set<string>>(new Set());
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
@@ -174,6 +178,12 @@ export default function Support() {
     refetchInterval: MESSAGES_POLL_INTERVAL,
   });
 
+  // Debounce busca de conversas
+  useEffect(() => {
+    const t = setTimeout(() => setConvSearchDebounced(convSearch), 300);
+    return () => clearTimeout(t);
+  }, [convSearch]);
+
   // Debounce busca modal
   useEffect(() => {
     const t = setTimeout(() => setLinkSearchDebounced(linkSearch), 400);
@@ -249,6 +259,7 @@ export default function Support() {
     mutationFn: async ({ conversationId, message }: { conversationId: string; message: string }) =>
       apiRequest("POST", `/api/whatsapp/conversations/${conversationId}/send`, { message }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] });
       setMessageText("");
     },
@@ -311,8 +322,17 @@ export default function Support() {
   // Dentro de cada grupo: mais recente primeiro (lastMessageAt desc)
   const filteredConversations = useMemo(() => {
     const urgencyOrder: Record<string, number> = { waiting_staff: 0, waiting_patient: 1, closed: 2 };
+    const q = convSearchDebounced.trim().toLowerCase();
+
     return conversations
       .filter((conv) => {
+        // Quando busca ativa: pesquisa em TODAS as conversas (ignora tab), incluindo encerradas
+        if (q) {
+          const name = ((conv as any).patientName || "").toLowerCase();
+          const phone = (conv.phone || "").toLowerCase();
+          return name.includes(q) || phone.includes(q);
+        }
+        // Sem busca: aplica filtro de tab normalmente
         const derived = getConvDerivedStatus(conv);
         if (filterTab === "all") return true;
         return derived === filterTab;
@@ -324,7 +344,7 @@ export default function Support() {
         // Mesmo grupo: mais recente primeiro
         return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
       });
-  }, [conversations, filterTab]);
+  }, [conversations, filterTab, convSearchDebounced]);
 
   // Contadores para os tabs
   const counts = useMemo(() => ({
@@ -428,26 +448,54 @@ export default function Support() {
                   Conversas
                 </CardTitle>
 
-                {/* Filtro por status */}
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {TABS.map((tab) => (
+                {/* Campo de busca */}
+                <div className="relative mt-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                  <Input
+                    value={convSearch}
+                    onChange={(e) => setConvSearch(e.target.value)}
+                    placeholder="Buscar por nome ou telefone..."
+                    className="pl-8 pr-8 h-8 text-xs"
+                  />
+                  {convSearch && (
                     <button
-                      key={tab.key}
-                      onClick={() => setFilterTab(tab.key)}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
-                        filterTab === tab.key
-                          ? "bg-primary text-white border-primary"
-                          : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                      }`}
+                      onClick={() => setConvSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
-                      <tab.icon className="h-3 w-3" />
-                      {tab.label}
-                      <span className={`ml-0.5 text-[10px] px-1 rounded-full ${filterTab === tab.key ? "bg-white/20" : "bg-gray-100"}`}>
-                        {counts[tab.key]}
-                      </span>
+                      <X className="h-3.5 w-3.5" />
                     </button>
-                  ))}
+                  )}
                 </div>
+
+                {/* Indicador de busca ativa */}
+                {convSearchDebounced && (
+                  <p className="text-xs text-primary font-medium mt-1">
+                    {filteredConversations.length} resultado{filteredConversations.length !== 1 ? "s" : ""} encontrado{filteredConversations.length !== 1 ? "s" : ""} (incluindo encerradas)
+                  </p>
+                )}
+
+                {/* Filtro por status (oculto durante busca) */}
+                {!convSearchDebounced && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {TABS.map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setFilterTab(tab.key)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
+                          filterTab === tab.key
+                            ? "bg-primary text-white border-primary"
+                            : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <tab.icon className="h-3 w-3" />
+                        {tab.label}
+                        <span className={`ml-0.5 text-[10px] px-1 rounded-full ${filterTab === tab.key ? "bg-white/20" : "bg-gray-100"}`}>
+                          {counts[tab.key]}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </CardHeader>
 
               <CardContent className="p-0 flex-1 overflow-hidden">
@@ -652,8 +700,16 @@ export default function Support() {
                     </div>
                   </div>
 
-                  {selectedConversation?.status === "human" && (
+                  {(selectedConversation?.status === "human" || selectedConversation?.status === "closed") && (
                     <div className="p-3 border-t bg-white shrink-0">
+                      {selectedConversation?.status === "closed" && (
+                        <div className="mb-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+                          <RotateCcw className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                          <span className="text-xs text-amber-700">
+                            Conversa encerrada. Envie uma mensagem para reativar o atendimento como <strong>Humano</strong>.
+                          </span>
+                        </div>
+                      )}
                       <div className="flex gap-2">
                         <Input value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder="Digite sua mensagem..." onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()} className="flex-1" data-testid="input-message" />
                         <Button onClick={handleSendMessage} disabled={sendMessageMutation.isPending || !messageText.trim()} data-testid="button-send">
