@@ -119,17 +119,35 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
     // If a specific dentist is selected, check their schedule
     if (selectedDentist !== "all") {
-      const weekday = date.getDay();
-      const h = date.getHours();
-      const m = date.getMinutes();
-      const slotMin = h * 60 + m;
-
-      const dentistSchedules = allSchedules.filter(
-        (s: any) => s.dentistId === selectedDentist && s.weekday === weekday && s.isActive,
+      // Get ALL active schedules for this dentist across all weekdays
+      const dentistAllSchedules = allSchedules.filter(
+        (s: any) => s.dentistId === selectedDentist && s.isActive,
       );
 
-      if (dentistSchedules.length > 0) {
-        const inAnyPeriod = dentistSchedules.some((s: any) => {
+      // Only apply blocking if the dentist has any schedule configured at all
+      if (dentistAllSchedules.length > 0) {
+        const weekday = date.getDay();
+        const h = date.getHours();
+        const m = date.getMinutes();
+        const slotMin = h * 60 + m;
+
+        const dentistDaySchedules = dentistAllSchedules.filter(
+          (s: any) => s.weekday === weekday,
+        );
+
+        // Day has NO schedule configured → gray out the entire day
+        if (dentistDaySchedules.length === 0) {
+          return {
+            style: {
+              backgroundColor: "#f3f4f6",
+              opacity: 0.6,
+              cursor: "not-allowed",
+            },
+          };
+        }
+
+        // Day has schedule → check if slot falls within any configured period
+        const inAnyPeriod = dentistDaySchedules.some((s: any) => {
           const [sh, sm] = s.startTime.split(":").map(Number);
           const [eh, em] = s.endTime.split(":").map(Number);
           return slotMin >= sh * 60 + sm && slotMin < eh * 60 + em;
@@ -140,6 +158,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
             style: {
               backgroundColor: "#f3f4f6",
               opacity: 0.6,
+              cursor: "not-allowed",
             },
           };
         }
@@ -374,6 +393,20 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                   const dateStr = date.toISOString().slice(0, 10);
                   if (holidaySet.has(dateStr)) {
                     return { style: { backgroundColor: "#fff1f2" } };
+                  }
+                  if (selectedDentist !== "all") {
+                    const dentistAllSchedules = allSchedules.filter(
+                      (s: any) => s.dentistId === selectedDentist && s.isActive,
+                    );
+                    if (dentistAllSchedules.length > 0) {
+                      const weekday = date.getDay();
+                      const hasDaySchedule = dentistAllSchedules.some(
+                        (s: any) => s.weekday === weekday,
+                      );
+                      if (!hasDaySchedule) {
+                        return { style: { backgroundColor: "#f3f4f6" } };
+                      }
+                    }
                   }
                   return {};
                 }}
