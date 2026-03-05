@@ -48,8 +48,14 @@ import { processPatientMessage } from "./whatsappAI";
 import {
   createOrGetInstance,
   sendEvolutionMessage,
+  sendEvolutionMessageForClinic,
   isEvolutionConfigured,
+  isClinicEvolutionConfigured,
   getEvolutionInstanceName,
+  buildClinicConfig,
+  globalConfig,
+  getEvolutionInstanceStatus,
+  generateQRCodeForClinic,
 } from "./evolutionService";
 
 import multer from "multer";
@@ -2676,8 +2682,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        // Prefixo [🤖 IA] apenas na string enviada ao WhatsApp (Z-API)
-        const sendResult = await sendEvolutionMessage(
+        // Prefixo [🤖 IA] apenas na string enviada ao WhatsApp
+        const webhookClinic = await storage.getClinicById(clinicId);
+        const webhookClinicCfg = webhookClinic
+          ? buildClinicConfig(webhookClinic)
+          : globalConfig();
+        const sendResult = await sendEvolutionMessageForClinic(
+          webhookClinicCfg,
           normalizedPhone,
           `[🤖 IA] ${aiResponse.message}`,
         );
@@ -2890,7 +2901,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const normalizedPhone = phone.replace(/\D/g, "");
-        const clinicId = (process.env.WHATSAPP_CLINIC_ID || "1").trim();
+
+        // MULTITENANCY: Resolve a clínica pelo instanceName do payload
+        const webhookInstanceName: string = data.instance || data.sender || "";
+        let clinicId = (process.env.WHATSAPP_CLINIC_ID || "").trim();
+
+        if (webhookInstanceName) {
+          const clinicByInstance =
+            await storage.getClinicByEvolutionInstance(webhookInstanceName);
+          if (clinicByInstance) {
+            clinicId = clinicByInstance.id;
+            console.log(
+              `[WEBHOOK] Instância '${webhookInstanceName}' → clínica '${clinicByInstance.name}' (${clinicId})`,
+            );
+          } else if (!clinicId) {
+            console.warn(
+              `[WEBHOOK] Instância '${webhookInstanceName}' não encontrada em nenhuma clínica — mensagem ignorada`,
+            );
+            return;
+          }
+        }
+
+        if (!clinicId) {
+          console.warn("[WEBHOOK] clinicId não resolvido — mensagem ignorada");
+          return;
+        }
 
         // 1. IDEMPOTÊNCIA (CORREÇÃO PARA O ERRO DE DUPLICATE KEY)
         if (evolutionMessageId) {
@@ -3247,12 +3282,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Prefixo [🤖 IA] apenas na string enviada ao WhatsApp
           const aiWhatsappText = `[🤖 IA] ${aiResponse.message}`;
-          await sendEvolutionMessage(normalizedPhone, aiWhatsappText);
+          const wh2Clinic = await storage.getClinicById(clinicId);
+          const wh2Cfg = wh2Clinic ? buildClinicConfig(wh2Clinic) : globalConfig();
+          await sendEvolutionMessageForClinic(wh2Cfg, normalizedPhone, aiWhatsappText);
         }
       } catch (error: any) {
         console.error(`[WEBHOOK ERROR]: ${error.message}`);
       }
     })();
+  });
+
+  // ─── WhatsApp per-clinic API ────────────────────────────────────────────────
+
+  // GET /api/whatsapp/status — retorna status de conexão da instância da clínica
+  app.get("/api/whatsapp/status", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const clinic = await storage.getClinicById(req.user!.clinicId);
+      if (!clinic) return res.status(404).json({ message: "Clínica não encontrada" });
+      const cfg = buildClinicConfig(clinic);
+      if (!isClinicEvolutionConfigured(cfg)) {
+        return res.json({
+          connected: false,
+          status: "not_configured",
+          instanceName: cfg.instanceName || null,
+          connectedPhone: clinic.evolutionConnectedPhone || null,
+        });
+      }
+      const status = await getEvolutionInstanceStatus(cfg);
+      // If now connected, persist the phone number
+      if (status.connected && status.phone && status.phone !== clinic.evolutionConnectedPhone) {
+        await storage.updateClinic(clinic.id, { evolutionConnectedPhone: status.phone });
+      }
+      return res.json({
+        connected: status.connected,
+        status: status.status,
+        phone: status.phone,
+        profileName: status.profileName,
+        instanceName: cfg.instanceName,
+        connectedPhone: status.connected ? status.phone : clinic.evolutionConnectedPhone || null,
+      });
+    } catch (error: any) {
+      console.error("[WHATSAPP STATUS]", error.message);
+      res.status(500).json({ message: "Erro ao buscar status do WhatsApp" });
+    }
+  });
+
+  // POST /api/whatsapp/connect — gera QR code para conectar instância da clínica
+  app.post("/api/whatsapp/connect", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user!.role !== "admin") {
+        return res.status(403).json({ message: "Apenas administradores podem conectar o WhatsApp" });
+      }
+      const clinic = await storage.getClinicById(req.user!.clinicId);
+      if (!clinic) return res.status(404).json({ message: "Clínica não encontrada" });
+      const cfg = buildClinicConfig(clinic);
+      if (!cfg.evoUrl || !cfg.evoKey) {
+        return res.status(400).json({ message: "URL e chave da API Evolution não configuradas" });
+      }
+      const result = await generateQRCodeForClinic(cfg);
+      return res.json(result);
+    } catch (error: any) {
+      console.error("[WHATSAPP CONNECT]", error.message);
+      res.status(500).json({ message: "Erro ao gerar QR code" });
+    }
+  });
+
+  // PATCH /api/clinic/whatsapp — salva configuração de WhatsApp (nome da instância e chave)
+  app.patch("/api/clinic/whatsapp", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user!.role !== "admin") {
+        return res.status(403).json({ message: "Apenas administradores podem configurar o WhatsApp" });
+      }
+      const { evolutionInstanceName, evolutionApiKey } = req.body;
+      const updates: Partial<{ evolutionInstanceName: string; evolutionApiKey: string; evolutionConnectedPhone: string }> = {};
+      if (evolutionInstanceName !== undefined) updates.evolutionInstanceName = evolutionInstanceName?.trim() || null;
+      if (evolutionApiKey !== undefined) updates.evolutionApiKey = evolutionApiKey?.trim() || null;
+      const clinic = await storage.updateClinic(req.user!.clinicId, updates as any);
+      if (!clinic) return res.status(404).json({ message: "Clínica não encontrada" });
+      return res.json({ success: true, clinic });
+    } catch (error: any) {
+      console.error("[WHATSAPP CONFIG SAVE]", error.message);
+      res.status(500).json({ message: "Erro ao salvar configuração do WhatsApp" });
+    }
   });
 
   // Admin route to setup WhatsApp via Evolution API (QR Code generation)
@@ -3906,7 +4017,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Se precisar de mais ajuda, é só nos enviar uma nova mensagem. Até logo! 😊";
 
         try {
-          await sendEvolutionMessage(conversation.phone, `[👤 ${operatorName}] ${closingText}`);
+          const closeClinic = await storage.getClinicById(clinicId);
+          const closeCfg = closeClinic ? buildClinicConfig(closeClinic) : globalConfig();
+          await sendEvolutionMessageForClinic(closeCfg, conversation.phone, `[👤 ${operatorName}] ${closingText}`);
         } catch (sendErr) {
           console.warn(`[ENCERRAMENTO MANUAL] Falha ao enviar mensagem de encerramento para ${conversation.phone}:`, sendErr);
         }
@@ -4034,25 +4147,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const staffFirstName = (req.user!.fullName || "Atendente").split(" ")[0];
         const whatsappText = `[👤 ${staffFirstName}] ${cleanText}`;
 
-        if (isEvolutionConfigured()) {
-          const sendResult = await sendEvolutionMessage(
-            conversation.phone,
-            whatsappText,
-          );
-          if (!sendResult.success) {
-            console.error(`❌ [EVOLUTION] Erro ao enviar: ${sendResult.error}`);
-            return res.status(500).json({
-              message: "Mensagem salva, mas falha ao enviar via WhatsApp",
-              savedMessage,
-            });
+        {
+          const sendClinic = await storage.getClinicById(req.user!.clinicId);
+          const sendCfg = sendClinic ? buildClinicConfig(sendClinic) : globalConfig();
+          if (isClinicEvolutionConfigured(sendCfg)) {
+            const sendResult = await sendEvolutionMessageForClinic(
+              sendCfg,
+              conversation.phone,
+              whatsappText,
+            );
+            if (!sendResult.success) {
+              console.error(`❌ [EVOLUTION] Erro ao enviar: ${sendResult.error}`);
+              return res.status(500).json({
+                message: "Mensagem salva, mas falha ao enviar via WhatsApp",
+                savedMessage,
+              });
+            }
+            console.log(`✅ [EVOLUTION] Mensagem enviada para ${conversation.phone}`);
+          } else {
+            console.warn("⚠️ [EVOLUTION] API não configurada - mensagem salva mas não enviada");
           }
-          console.log(
-            `✅ [EVOLUTION] Mensagem enviada para ${conversation.phone}`,
-          );
-        } else {
-          console.warn(
-            "⚠️ [EVOLUTION] API não configurada - mensagem salva mas não enviada",
-          );
         }
 
         res.json(savedMessage);
@@ -4117,25 +4231,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const staffFirstNameAlias = (req.user!.fullName || "Atendente").split(" ")[0];
         const whatsappTextAlias = `[👤 ${staffFirstNameAlias}] ${cleanTextAlias}`;
 
-        if (isEvolutionConfigured()) {
-          const sendResult = await sendEvolutionMessage(
-            conversation.phone,
-            whatsappTextAlias,
-          );
-          if (!sendResult.success) {
-            console.error(`❌ [EVOLUTION] Erro ao enviar: ${sendResult.error}`);
-            return res.status(500).json({
-              message: "Mensagem salva, mas falha ao enviar via WhatsApp",
-              savedMessage,
-            });
+        {
+          const sendClinic2 = await storage.getClinicById(req.user!.clinicId);
+          const sendCfg2 = sendClinic2 ? buildClinicConfig(sendClinic2) : globalConfig();
+          if (isClinicEvolutionConfigured(sendCfg2)) {
+            const sendResult = await sendEvolutionMessageForClinic(
+              sendCfg2,
+              conversation.phone,
+              whatsappTextAlias,
+            );
+            if (!sendResult.success) {
+              console.error(`❌ [EVOLUTION] Erro ao enviar: ${sendResult.error}`);
+              return res.status(500).json({
+                message: "Mensagem salva, mas falha ao enviar via WhatsApp",
+                savedMessage,
+              });
+            }
+            console.log(`✅ [EVOLUTION] Mensagem enviada para ${conversation.phone}`);
+          } else {
+            console.warn("⚠️ [EVOLUTION] API não configurada - mensagem salva mas não enviada");
           }
-          console.log(
-            `✅ [EVOLUTION] Mensagem enviada para ${conversation.phone}`,
-          );
-        } else {
-          console.warn(
-            "⚠️ [EVOLUTION] API não configurada - mensagem salva mas não enviada",
-          );
         }
 
         res.json(savedMessage);
@@ -4167,8 +4282,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             "Olá! Como não houve resposta, encerramos este atendimento. " +
             "Qualquer dúvida, é só nos enviar uma nova mensagem. Até logo! 😊";
 
-          // Enviar mensagem de encerramento via Evolution API
-          await sendEvolutionMessage(conv.phone, `[🤖 IA] ${closingMessage}`);
+          // Enviar mensagem de encerramento via Evolution API (per-clinic config)
+          const autoClinic = await storage.getClinicById(conv.clinicId);
+          const autoCfg = autoClinic ? buildClinicConfig(autoClinic) : globalConfig();
+          await sendEvolutionMessageForClinic(autoCfg, conv.phone, `[🤖 IA] ${closingMessage}`);
 
           // Salvar a mensagem no banco
           await storage.createWhatsappMessage({

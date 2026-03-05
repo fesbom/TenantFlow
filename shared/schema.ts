@@ -21,7 +21,11 @@ export const clinics = pgTable("clinics", {
   email: text("email").notNull().unique(),
   phone: text("phone"),
   address: text("address"),
-  logoUrl: text("logo_url"), // URL for clinic logo
+  logoUrl: text("logo_url"),
+  // WhatsApp / Evolution API per-clinic config
+  evolutionInstanceName: text("evolution_instance_name"),
+  evolutionApiKey: text("evolution_api_key"),
+  evolutionConnectedPhone: text("evolution_connected_phone"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

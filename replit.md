@@ -53,8 +53,14 @@ Preferred communication style: Simple, everyday language.
 - Security measures include ID validation and filename sanitization to prevent path traversal.
 
 ### WhatsApp Integration
-- Uses Z-API for WhatsApp messaging, preserving existing AI (Gemini) intent extraction logic.
-- Incoming messages are handled via a dedicated webhook, with AI processing or human handoff based on conversation status and intent.
+- Uses Evolution API (Railway) for multi-tenant WhatsApp messaging with Gemini AI.
+- Per-clinic configuration: `evolutionInstanceName`, `evolutionApiKey`, `evolutionConnectedPhone` stored in the `clinics` table.
+- Global fallback env vars: `EVO_URL`, `EVO_KEY`, `EVO_INSTANCE` used when a clinic has no per-clinic config.
+- Webhook (`/webhook/evolution`) resolves the clinic by `data.instance` field; falls back to `WHATSAPP_CLINIC_ID` env var.
+- `evolutionService.ts` provides `buildClinicConfig()`, `sendEvolutionMessageForClinic()`, `getEvolutionInstanceStatus()`, `generateQRCodeForClinic()` for per-clinic operation.
+- Admin can configure instance name/API key and scan QR code from the Settings → WhatsApp section.
+- Support page shows a WhatsApp connection status pill (connected/disconnected).
+- Storage: `getClinicByEvolutionInstance(instanceName)` resolves clinic from webhook payload instance name.
 
 ## External Dependencies
 

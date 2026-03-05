@@ -40,6 +40,8 @@ import {
   XCircle,
   RotateCcw,
   X,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -120,6 +122,12 @@ export default function Support() {
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<ConversationWithPatient[]>({
     queryKey: ["/api/conversations"],
     refetchInterval: CONVERSATIONS_POLL_INTERVAL,
+  });
+
+  const { data: wppStatus } = useQuery<{ connected: boolean; status: string; connectedPhone?: string }>({
+    queryKey: ["/api/whatsapp/status"],
+    refetchInterval: 20000,
+    retry: false,
   });
 
   // ── Detecta novas mensagens de pacientes entre polls ─────────────────
@@ -434,8 +442,22 @@ export default function Support() {
         <Header title="Atendimento" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="p-4 lg:p-6 flex-grow overflow-hidden">
-          <div className="mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <p className="text-gray-600">Gerencie conversas do WhatsApp com pacientes</p>
+            {wppStatus ? (
+              wppStatus.connected ? (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
+                  <Wifi className="h-3 w-3" />
+                  WhatsApp conectado
+                  {wppStatus.connectedPhone ? ` · +${wppStatus.connectedPhone}` : ""}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1">
+                  <WifiOff className="h-3 w-3" />
+                  WhatsApp desconectado
+                </span>
+              )
+            ) : null}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-180px)]">

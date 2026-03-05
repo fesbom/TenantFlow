@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/api";
 import { formatDateBR } from "@/lib/date-formatter";
 import { User, Clinic } from "@/types";
-import { Settings, Plus, Edit, Trash2, Users, Shield, Building2, Upload } from "lucide-react";
+import { Settings, Plus, Edit, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2 } from "lucide-react";
 
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -45,6 +45,13 @@ export default function SettingsPage() {
     address: "",
     logoUrl: "",
   });
+
+  const [wppFormData, setWppFormData] = useState({
+    evolutionInstanceName: "",
+    evolutionApiKey: "",
+  });
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [qrStatus, setQrStatus] = useState<string | null>(null);
 
   // Fetch users
   const { data: users = [], isLoading } = useQuery<User[]>({
@@ -165,6 +172,67 @@ export default function SettingsPage() {
         description: error.message || "Não foi possível atualizar os dados da clínica",
         variant: "destructive",
       });
+    },
+  });
+
+  // WhatsApp status query
+  const { data: wppStatus, isLoading: wppStatusLoading, refetch: refetchWppStatus } = useQuery<{
+    connected: boolean; status: string; phone?: string; profileName?: string;
+    instanceName?: string; connectedPhone?: string;
+  }>({
+    queryKey: ["/api/whatsapp/status"],
+    enabled: currentUser?.role === "admin",
+    refetchInterval: 15000,
+  });
+
+  // Load wpp form from clinic data
+  useEffect(() => {
+    if (clinic) {
+      setWppFormData({
+        evolutionInstanceName: (clinic as any).evolutionInstanceName || "",
+        evolutionApiKey: (clinic as any).evolutionApiKey || "",
+      });
+    }
+  }, [clinic]);
+
+  // Save WhatsApp config mutation
+  const saveWppConfigMutation = useMutation({
+    mutationFn: async (data: typeof wppFormData) => {
+      const response = await apiRequest("PATCH", "/api/clinic/whatsapp", data);
+      if (!response.ok) throw new Error("Erro ao salvar configuração");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clinic"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
+      toast({ title: "Configuração salva", description: "Configuração do WhatsApp salva com sucesso" });
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Não foi possível salvar a configuração", variant: "destructive" });
+    },
+  });
+
+  // Generate QR code mutation
+  const connectWppMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/whatsapp/connect", {});
+      if (!response.ok) throw new Error("Erro ao gerar QR code");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.qrCode) {
+        setQrCodeData(data.qrCode);
+        setQrStatus("scan");
+      } else if (data.status === "connected") {
+        setQrCodeData(null);
+        setQrStatus("connected");
+        refetchWppStatus();
+      } else {
+        setQrStatus(data.status || "pending");
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro ao conectar", description: error.message, variant: "destructive" });
     },
   });
 
@@ -685,6 +753,168 @@ export default function SettingsPage() {
                         </Button>
                       </div>
                     </form>
+                  )}
+                </CardContent>
+              </Card>
+              {/* WhatsApp Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <QrCode className="h-5 w-5" />
+                    <span>WhatsApp</span>
+                  </CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Configure a instância Evolution API desta clínica e conecte o WhatsApp
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Status banner */}
+                  {wppStatusLoading ? (
+                    <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg text-sm text-gray-500">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Verificando status...
+                    </div>
+                  ) : wppStatus?.connected ? (
+                    <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-green-800">WhatsApp conectado</p>
+                        {wppStatus.connectedPhone && (
+                          <p className="text-xs text-green-700">
+                            Número: +{wppStatus.connectedPhone}
+                            {wppStatus.profileName ? ` · ${wppStatus.profileName}` : ""}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto"
+                        onClick={() => refetchWppStatus()}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <WifiOff className="h-5 w-5 text-yellow-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-yellow-800">WhatsApp desconectado</p>
+                        <p className="text-xs text-yellow-700">
+                          {wppStatus?.status === "not_configured"
+                            ? "Instância não configurada"
+                            : `Status: ${wppStatus?.status || "desconhecido"}`}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto"
+                        onClick={() => refetchWppStatus()}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Config form */}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      saveWppConfigMutation.mutate(wppFormData);
+                    }}
+                    className="space-y-4"
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="wppInstance">Nome da Instância *</Label>
+                      <Input
+                        id="wppInstance"
+                        value={wppFormData.evolutionInstanceName}
+                        onChange={(e) => setWppFormData({ ...wppFormData, evolutionInstanceName: e.target.value })}
+                        placeholder="minha-clinica"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Nome único da instância configurada na Evolution API
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="wppApiKey">API Key da Instância</Label>
+                      <Input
+                        id="wppApiKey"
+                        type="password"
+                        value={wppFormData.evolutionApiKey}
+                        onChange={(e) => setWppFormData({ ...wppFormData, evolutionApiKey: e.target.value })}
+                        placeholder="Deixe em branco para usar a chave global"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Se vazia, usa a chave global configurada no servidor
+                      </p>
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <Button type="submit" disabled={saveWppConfigMutation.isPending}>
+                        {saveWppConfigMutation.isPending ? "Salvando..." : "Salvar Configuração"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={connectWppMutation.isPending || !wppFormData.evolutionInstanceName}
+                        onClick={() => {
+                          setQrCodeData(null);
+                          setQrStatus(null);
+                          connectWppMutation.mutate();
+                        }}
+                      >
+                        {connectWppMutation.isPending ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Gerando QR...
+                          </>
+                        ) : (
+                          <>
+                            <QrCode className="h-4 w-4 mr-2" />
+                            Conectar WhatsApp
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+
+                  {/* QR Code display */}
+                  {qrStatus === "scan" && qrCodeData && (
+                    <div className="flex flex-col items-center gap-3 p-4 bg-gray-50 rounded-lg border">
+                      <p className="text-sm font-medium text-gray-700">
+                        Escaneie o QR code com o WhatsApp
+                      </p>
+                      <img
+                        src={qrCodeData.startsWith("data:") ? qrCodeData : `data:image/png;base64,${qrCodeData}`}
+                        alt="QR Code WhatsApp"
+                        className="w-56 h-56 rounded-lg border"
+                      />
+                      <p className="text-xs text-gray-500 text-center">
+                        Abra o WhatsApp → Dispositivos conectados → Conectar um dispositivo
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setQrCodeData(null);
+                          setQrStatus(null);
+                          refetchWppStatus();
+                        }}
+                      >
+                        <RefreshCw className="h-3 w-3 mr-2" />
+                        Verificar conexão
+                      </Button>
+                    </div>
+                  )}
+                  {qrStatus === "connected" && (
+                    <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm text-green-700 border border-green-200">
+                      <CheckCircle2 className="h-4 w-4" />
+                      WhatsApp conectado com sucesso!
+                    </div>
                   )}
                 </CardContent>
               </Card>

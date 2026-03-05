@@ -69,6 +69,7 @@ export interface IStorage {
   // Clinic methods
   createClinic(clinic: InsertClinic): Promise<Clinic>;
   getClinicById(id: string): Promise<Clinic | undefined>;
+  getClinicByEvolutionInstance(instanceName: string): Promise<Clinic | undefined>;
   updateClinic(id: string, updates: Partial<InsertClinic>): Promise<Clinic | undefined>;
 
   // User methods
@@ -211,6 +212,14 @@ export class DatabaseStorage implements IStorage {
 
   async getClinicById(id: string): Promise<Clinic | undefined> {
     const [clinic] = await db.select().from(clinics).where(eq(clinics.id, id));
+    return clinic || undefined;
+  }
+
+  async getClinicByEvolutionInstance(instanceName: string): Promise<Clinic | undefined> {
+    const [clinic] = await db
+      .select()
+      .from(clinics)
+      .where(eq(clinics.evolutionInstanceName, instanceName));
     return clinic || undefined;
   }
 

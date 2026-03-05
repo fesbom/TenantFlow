@@ -2,33 +2,56 @@ import axios from "axios";
 
 function sanitizeUrl(url: string | undefined): string {
   if (!url) return "";
-  
   let sanitized = url.trim();
-  
-  while (sanitized.endsWith("/")) {
-    sanitized = sanitized.slice(0, -1);
-  }
-  
-  if (sanitized && !sanitized.startsWith("http://") && !sanitized.startsWith("https://")) {
+  while (sanitized.endsWith("/")) sanitized = sanitized.slice(0, -1);
+  if (sanitized && !sanitized.startsWith("http://") && !sanitized.startsWith("https://"))
     sanitized = "https://" + sanitized;
-  }
-  
   return sanitized;
 }
 
-const EVO_URL = sanitizeUrl((process.env.EVO_URL || process.env.EVO_BASE_URL || "").trim());
-const EVO_KEY = (process.env.EVO_KEY || "").trim();
-const EVO_INSTANCE = (process.env.EVO_INSTANCE || "denticare").trim();
-const EVO_TOKEN = (process.env.EVO_TOKEN || "token123").trim();
-const WEBHOOK_GLOBAL_URL = sanitizeUrl((process.env.WEBHOOK_GLOBAL_URL || "").trim());
+// ─── Global env-level defaults (used when clinic has no per-clinic config) ───
+const GLOBAL_EVO_URL = sanitizeUrl(
+  (process.env.EVO_URL || process.env.EVO_BASE_URL || "").trim(),
+);
+const GLOBAL_EVO_KEY = (process.env.EVO_KEY || "").trim();
+const GLOBAL_EVO_INSTANCE = (process.env.EVO_INSTANCE || "denticare").trim();
+const WEBHOOK_GLOBAL_URL = sanitizeUrl(
+  (process.env.WEBHOOK_GLOBAL_URL || "").trim(),
+);
 
-console.log("🔧 [Evolution] Configuração carregada:");
-console.log(`   - EVO_URL: ${EVO_URL || "(não configurada)"}`);
-console.log(`   - EVO_KEY: ${EVO_KEY ? `${EVO_KEY.substring(0, 8)}...` : "(não configurada)"}`);
-console.log(`   - EVO_INSTANCE: ${EVO_INSTANCE}`);
-console.log(`   - EVO_TOKEN: ${EVO_TOKEN}`);
+console.log("🔧 [Evolution] Configuração global:");
+console.log(`   - EVO_URL: ${GLOBAL_EVO_URL || "(não configurada)"}`);
+console.log(`   - EVO_KEY: ${GLOBAL_EVO_KEY ? `${GLOBAL_EVO_KEY.substring(0, 8)}...` : "(não configurada)"}`);
+console.log(`   - EVO_INSTANCE: ${GLOBAL_EVO_INSTANCE}`);
 console.log(`   - WEBHOOK_GLOBAL_URL: ${WEBHOOK_GLOBAL_URL || "(não configurada)"}`);
 
+// ─── Per-clinic config type ────────────────────────────────────────────────
+export interface ClinicEvolutionConfig {
+  evoUrl: string;
+  evoKey: string;
+  instanceName: string;
+}
+
+export function buildClinicConfig(clinic: {
+  evolutionInstanceName?: string | null;
+  evolutionApiKey?: string | null;
+}): ClinicEvolutionConfig {
+  return {
+    evoUrl: GLOBAL_EVO_URL,
+    evoKey: (clinic.evolutionApiKey || GLOBAL_EVO_KEY).trim(),
+    instanceName: (clinic.evolutionInstanceName || GLOBAL_EVO_INSTANCE).trim(),
+  };
+}
+
+export function globalConfig(): ClinicEvolutionConfig {
+  return {
+    evoUrl: GLOBAL_EVO_URL,
+    evoKey: GLOBAL_EVO_KEY,
+    instanceName: GLOBAL_EVO_INSTANCE,
+  };
+}
+
+// ─── Interfaces ───────────────────────────────────────────────────────────
 export interface EvolutionSendResult {
   success: boolean;
   messageId?: string;
@@ -43,319 +66,206 @@ export interface EvolutionInstanceResult {
   rawResponse?: any;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+export interface EvolutionStatusResult {
+  connected: boolean;
+  phone?: string;
+  profileName?: string;
+  status?: string;
 }
 
-async function createInstance(): Promise<EvolutionInstanceResult> {
-  const url = `${EVO_URL}/instance/create`;
-
-  const requestBody = {
-    instanceName: EVO_INSTANCE,
-    token: EVO_TOKEN,
-    qrcode: true,
-    integration: "WHATSAPP-BAILEYS",
-    // --- ADIÇÃO DOS PARÂMETROS DE OTIMIZAÇÃO ---
-    config: {
-      syncFullHistory: false,    // Evita carregar milhares de msgs/contatos antigos
-      readMessages: false,      // Não marca como lido automaticamente
-      groupsIgnore: true,       // Ignora mensagens de grupos (poupando CPU/Logs)
-      readStatus: false,        // Ignora atualizações de status
-      alwaysOnline: false
-    }
-    // -------------------------------------------
-  };
-
-  console.log(`\n🆕 [Evolution] POST ${url} (Otimizado para evitar log flood)`);
-  console.log(`   - Request Body:`, JSON.stringify(requestBody, null, 2));
-
-  const startTime = Date.now();
-
-  try {
-    const response = await axios.post(
-      url,
-      requestBody,
-      {
-        headers: {
-          "apikey": EVO_KEY,
-          "Content-Type": "application/json",
-        },
-        timeout: 90000,
-      }
-    );
-
-    const elapsedTime = Date.now() - startTime;
-
-    console.log(`⏱️ [Evolution] Tempo de resposta: ${elapsedTime}ms`);
-    console.log(`📋 [Evolution] Resposta:`);
-    console.log(JSON.stringify(response.data, null, 2));
-
-    const instanceState = response.data?.instance?.state || 
-                          response.data?.state || 
-                          response.data?.status ||
-                          "unknown";
-    console.log(`📊 [Evolution] Status da instância: ${instanceState}`);
-
-    const qrCode = response.data?.qrcode?.base64 || 
-                   response.data?.base64 ||
-                   response.data?.qrcode;
-
-    if (qrCode && typeof qrCode === 'string' && qrCode.length > 100) {
-      console.log(`✅ [Evolution] QR Code capturado com sucesso (${qrCode.length} caracteres)`);
-      return {
-        success: true,
-        qrCode,
-        status: instanceState,
-        rawResponse: response.data,
-      };
-    }
-
-    console.log(`⚠️ [Evolution] QR Code não encontrado na resposta do create`);
-
-    return {
-      success: true,
-      status: instanceState,
-      rawResponse: response.data,
-    };
-  } catch (error: any) {
-    const elapsedTime = Date.now() - startTime;
-
-    console.error(`❌ [Evolution] Erro no create após ${elapsedTime}ms:`);
-
-    if (error.response) {
-      console.error(`   - Status HTTP: ${error.response.status}`);
-      console.error(`   - Response data:`, JSON.stringify(error.response.data, null, 2));
-    } else {
-      console.error(`   - Erro: ${error.message}`);
-    }
-
-    throw error;
+// ─── Per-clinic: send message ──────────────────────────────────────────────
+export async function sendEvolutionMessageForClinic(
+  config: ClinicEvolutionConfig,
+  phone: string,
+  text: string,
+): Promise<EvolutionSendResult> {
+  if (!config.evoUrl || !config.evoKey || !config.instanceName) {
+    return { success: false, error: "Evolution API não configurada para esta clínica" };
   }
-}
-
-async function tryConnectInstance(): Promise<EvolutionInstanceResult> {
-  const url = `${EVO_URL}/instance/connect/${EVO_INSTANCE}`;
-  console.log(`\n📱 [Evolution] GET ${url}`);
-  
-  const startTime = Date.now();
-  
-  try {
-    const response = await axios.get(url, {
-      headers: {
-        "apikey": EVO_KEY,
-      },
-      timeout: 90000,
-    });
-
-    const elapsedTime = Date.now() - startTime;
-    
-    console.log(`⏱️ [Evolution] Tempo de resposta: ${elapsedTime}ms`);
-    console.log(`📋 [Evolution] Resposta:`);
-    console.log(JSON.stringify(response.data, null, 2));
-
-    const instanceState = response.data?.instance?.state || 
-                          response.data?.state || 
-                          "unknown";
-    console.log(`📊 [Evolution] Status da instância: ${instanceState}`);
-
-    const qrCode = response.data?.base64 || response.data?.qrcode?.base64;
-    
-    if (qrCode && typeof qrCode === 'string' && qrCode.length > 100) {
-      console.log(`✅ [Evolution] QR Code recebido (${qrCode.length} caracteres)`);
-      return {
-        success: true,
-        qrCode,
-        status: instanceState,
-        rawResponse: response.data,
-      };
-    }
-
-    if (instanceState === "open" || instanceState === "connected") {
-      console.log(`✅ [Evolution] Instância já está conectada`);
-      return {
-        success: true,
-        status: "connected",
-        rawResponse: response.data,
-      };
-    }
-
-    console.log(`⚠️ [Evolution] QR Code não encontrado no connect`);
-    
-    return {
-      success: true,
-      status: instanceState,
-      rawResponse: response.data,
-    };
-  } catch (error: any) {
-    const elapsedTime = Date.now() - startTime;
-    
-    console.error(`❌ [Evolution] Erro no connect após ${elapsedTime}ms:`);
-    
-    if (error.response) {
-      console.error(`   - Status HTTP: ${error.response.status}`);
-      console.error(`   - Response data:`, JSON.stringify(error.response.data, null, 2));
-    } else {
-      console.error(`   - Erro: ${error.message}`);
-    }
-    
-    throw error;
-  }
-}
-
-export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
-  if (!EVO_URL) {
-    const errorMsg = "Evolution API não configurada: EVO_URL está vazia ou inválida";
-    console.error(`❌ [Evolution] ${errorMsg}`);
-    return { success: false, error: errorMsg };
-  }
-  
-  if (!EVO_KEY) {
-    const errorMsg = "Evolution API não configurada: EVO_KEY está vazia";
-    console.error(`❌ [Evolution] ${errorMsg}`);
-    return { success: false, error: errorMsg };
-  }
-
-  console.log(`\n🔄 [Evolution] ========== SETUP WHATSAPP ==========`);
-  console.log(`⏰ [Evolution] Timestamp: ${new Date().toISOString()}`);
-  console.log(`🔗 [Evolution] EVO_URL: ${EVO_URL}`);
-  console.log(`📛 [Evolution] Instância: ${EVO_INSTANCE}`);
-  console.log(`⏳ [Evolution] Timeout: 90000ms`);
-  
-  // Ir direto para POST /instance/create
-  console.log(`\n📍 [Evolution] Executando POST /instance/create...`);
-  
-  try {
-    const createResult = await createInstance();
-    
-    if (createResult.status === "connected") {
-      console.log(`✅ [Evolution] Instância conectada!`);
-      return createResult;
-    }
-    
-    if (createResult.qrCode) {
-      console.log(`✅ [Evolution] QR Code gerado com sucesso!`);
-      return createResult;
-    }
-    
-    // Se não veio QR na criação, tentar connect
-    console.log(`\n📍 [Evolution] QR não veio no create. Tentando connect...`);
-    await sleep(2000);
-    
-    const connectResult = await tryConnectInstance();
-    
-    if (connectResult.qrCode) {
-      console.log(`✅ [Evolution] QR Code obtido via connect!`);
-      return connectResult;
-    }
-    
-    if (connectResult.status === "connected" || connectResult.status === "open") {
-      console.log(`✅ [Evolution] Instância conectada!`);
-      return { success: true, status: "connected" };
-    }
-    
-    console.log(`⚠️ [Evolution] Concluído sem QR Code`);
-    return connectResult;
-    
-  } catch (createError: any) {
-    const status = createError.response?.status;
-    const responseData = createError.response?.data;
-    const message = responseData?.response?.message?.[0] || 
-                    responseData?.message || "";
-    
-    console.log(`⚠️ [Evolution] Create falhou. Status: ${status}, Mensagem: ${message}`);
-    
-    // Se instância já existe, tentar conectar
-    if (status === 403 || message.includes("already") || message.includes("in use")) {
-      console.log(`\n📍 [Evolution] Instância já existe. Tentando connect...`);
-      
-      try {
-        const connectResult = await tryConnectInstance();
-        
-        if (connectResult.qrCode) {
-          console.log(`✅ [Evolution] QR Code obtido via connect!`);
-          return connectResult;
-        }
-        
-        if (connectResult.status === "connected" || connectResult.status === "open") {
-          console.log(`✅ [Evolution] Instância conectada!`);
-          return { success: true, status: "connected", rawResponse: connectResult.rawResponse };
-        }
-        
-        console.log(`⚠️ [Evolution] Concluído sem QR Code`);
-        return connectResult;
-        
-      } catch (connectError: any) {
-        console.error(`❌ [Evolution] Erro no connect: ${connectError.message}`);
-        return { success: false, error: connectError.message };
-      }
-    }
-    
-    return { success: false, error: message || createError.message };
-  }
-}
-
-export async function sendEvolutionMessage(phone: string, text: string): Promise<EvolutionSendResult> {
-  if (!EVO_URL || !EVO_KEY) {
-    const errorMsg = "Evolution API não configurada (EVO_URL ou EVO_KEY ausentes)";
-    console.warn(`⚠️ [Evolution] ${errorMsg}`);
-    return { success: false, error: errorMsg };
-  }
-
   try {
     const normalizedPhone = phone.replace(/\D/g, "");
-    const sendUrl = `${EVO_URL}/message/sendText/${EVO_INSTANCE}`;
-    
-    console.log(`📤 [Evolution] POST ${sendUrl}`);
-    console.log(`   - number: ${normalizedPhone}`);
-    console.log(`   - text: ${text.substring(0, 50)}...`);
-    
-    const startTime = Date.now();
-    
+    const sendUrl = `${config.evoUrl}/message/sendText/${config.instanceName}`;
     const response = await axios.post(
       sendUrl,
+      { number: normalizedPhone, text, delay: 1200, linkPreview: true },
       {
-        number: normalizedPhone,
-        text: text,
-        delay: 1200,
-        linkPreview: true,
-      },
-      {
-        headers: {
-          "apikey": EVO_KEY,
-          "Content-Type": "application/json",
-        },
+        headers: { apikey: config.evoKey, "Content-Type": "application/json" },
         timeout: 30000,
-      }
+      },
     );
-
-    const elapsedTime = Date.now() - startTime;
-    console.log(`✅ [Evolution] Mensagem enviada em ${elapsedTime}ms. ID: ${response.data?.key?.id || "N/A"}`);
-    
-    return {
-      success: true,
-      messageId: response.data?.key?.id,
-    };
+    return { success: true, messageId: response.data?.key?.id };
   } catch (error: any) {
-    console.error(`❌ [Evolution] Erro ao enviar mensagem:`);
-    if (error.response?.data) {
-      console.error(`   - Response data:`, JSON.stringify(error.response.data, null, 2));
-    }
+    console.error(`❌ [Evolution] Erro ao enviar para ${config.instanceName}:`, error.message);
     return { success: false, error: error.message };
   }
 }
 
-export function isEvolutionConfigured(): boolean {
-  const configured = !!(EVO_URL && EVO_KEY);
-  if (!configured) {
-    console.log(`ℹ️ [Evolution] API não configurada. EVO_URL: ${EVO_URL ? "OK" : "FALTANDO"}, EVO_KEY: ${EVO_KEY ? "OK" : "FALTANDO"}`);
+// ─── Per-clinic: get instance status ──────────────────────────────────────
+export async function getEvolutionInstanceStatus(
+  config: ClinicEvolutionConfig,
+): Promise<EvolutionStatusResult> {
+  if (!config.evoUrl || !config.evoKey || !config.instanceName) {
+    return { connected: false, status: "not_configured" };
   }
-  return configured;
+  try {
+    const url = `${config.evoUrl}/instance/fetchInstances`;
+    const response = await axios.get(url, {
+      headers: { apikey: config.evoKey },
+      timeout: 10000,
+    });
+
+    const instances: any[] = Array.isArray(response.data) ? response.data : [];
+    const found = instances.find(
+      (i: any) =>
+        (i.name || i.instanceName || i.instance?.instanceName || "").toLowerCase() ===
+        config.instanceName.toLowerCase(),
+    );
+
+    if (!found) return { connected: false, status: "not_found" };
+
+    const state =
+      found.connectionStatus ||
+      found.instance?.state ||
+      found.state ||
+      found.status ||
+      "unknown";
+
+    const isConnected =
+      state === "open" || state === "connected" || state === "CONNECTED";
+
+    const phone =
+      found.ownerJid?.split("@")[0] ||
+      found.instance?.ownerJid?.split("@")[0] ||
+      found.profileJid?.split("@")[0] ||
+      found.number ||
+      undefined;
+
+    return {
+      connected: isConnected,
+      phone: phone?.replace(/\D/g, "") || undefined,
+      profileName: found.profileName || found.instance?.profileName,
+      status: state,
+    };
+  } catch (error: any) {
+    console.warn(`⚠️ [Evolution] Erro ao buscar status de ${config.instanceName}:`, error.message);
+    return { connected: false, status: "error" };
+  }
+}
+
+// ─── Per-clinic: generate QR code ─────────────────────────────────────────
+export async function generateQRCodeForClinic(
+  config: ClinicEvolutionConfig,
+): Promise<EvolutionInstanceResult> {
+  if (!config.evoUrl || !config.evoKey || !config.instanceName) {
+    return { success: false, error: "Evolution API não configurada para esta clínica" };
+  }
+
+  const createBody = {
+    instanceName: config.instanceName,
+    token: config.instanceName,
+    qrcode: true,
+    integration: "WHATSAPP-BAILEYS",
+    config: {
+      syncFullHistory: false,
+      readMessages: false,
+      groupsIgnore: true,
+      readStatus: false,
+      alwaysOnline: false,
+    },
+  };
+
+  try {
+    const createUrl = `${config.evoUrl}/instance/create`;
+    const createResp = await axios.post(createUrl, createBody, {
+      headers: { apikey: config.evoKey, "Content-Type": "application/json" },
+      timeout: 30000,
+    });
+
+    const state =
+      createResp.data?.instance?.state ||
+      createResp.data?.state ||
+      createResp.data?.status ||
+      "unknown";
+
+    const qr =
+      createResp.data?.qrcode?.base64 ||
+      createResp.data?.base64 ||
+      createResp.data?.qrcode;
+
+    if (qr && typeof qr === "string" && qr.length > 100)
+      return { success: true, qrCode: qr, status: state };
+
+    if (state === "open" || state === "connected")
+      return { success: true, status: "connected" };
+
+    // Fallback: hit /instance/connect
+    return await fetchQRFromConnect(config);
+  } catch (err: any) {
+    const status = err.response?.status;
+    const msg =
+      err.response?.data?.response?.message?.[0] ||
+      err.response?.data?.message ||
+      err.message ||
+      "";
+
+    if (status === 403 || msg.toLowerCase().includes("already") || msg.toLowerCase().includes("in use")) {
+      return await fetchQRFromConnect(config);
+    }
+    return { success: false, error: msg };
+  }
+}
+
+async function fetchQRFromConnect(
+  config: ClinicEvolutionConfig,
+): Promise<EvolutionInstanceResult> {
+  try {
+    const connectUrl = `${config.evoUrl}/instance/connect/${config.instanceName}`;
+    const resp = await axios.get(connectUrl, {
+      headers: { apikey: config.evoKey },
+      timeout: 30000,
+    });
+
+    const qr = resp.data?.base64 || resp.data?.qrcode?.base64;
+    const state = resp.data?.instance?.state || resp.data?.state || "unknown";
+
+    if (qr && typeof qr === "string" && qr.length > 100)
+      return { success: true, qrCode: qr, status: state };
+
+    if (state === "open" || state === "connected")
+      return { success: true, status: "connected" };
+
+    return { success: true, status: state, rawResponse: resp.data };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─── Legacy helpers (backward compat — use per-clinic functions instead) ──
+export async function sendEvolutionMessage(
+  phone: string,
+  text: string,
+): Promise<EvolutionSendResult> {
+  return sendEvolutionMessageForClinic(globalConfig(), phone, text);
+}
+
+export async function createOrGetInstance(): Promise<EvolutionInstanceResult> {
+  return generateQRCodeForClinic(globalConfig());
+}
+
+export function isEvolutionConfigured(): boolean {
+  return !!(GLOBAL_EVO_URL && GLOBAL_EVO_KEY);
+}
+
+export function isClinicEvolutionConfigured(config: ClinicEvolutionConfig): boolean {
+  return !!(config.evoUrl && config.evoKey && config.instanceName);
 }
 
 export function getEvolutionInstanceName(): string {
-  return EVO_INSTANCE;
+  return GLOBAL_EVO_INSTANCE;
 }
 
 export function getEvolutionUrl(): string {
-  return EVO_URL;
+  return GLOBAL_EVO_URL;
 }
+
+export { WEBHOOK_GLOBAL_URL };
