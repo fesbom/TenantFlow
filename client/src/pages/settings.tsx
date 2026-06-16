@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/api";
 import { formatDateBR } from "@/lib/date-formatter";
 import { User, Clinic } from "@/types";
-import { Settings, Plus, Edit, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Settings, Plus, Edit, Pencil, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2 } from "lucide-react";
 
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -46,12 +46,13 @@ export default function SettingsPage() {
     logoUrl: "",
   });
 
-  const [wppFormData, setWppFormData] = useState({
-    evolutionInstanceName: "",
-    evolutionApiKey: "",
-  });
-  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
-  const [qrStatus, setQrStatus] = useState<string | null>(null);
+  // WhatsApp multi-instance state
+  type WppInstance = { id: string; label: string; instanceName: string; apiKey: string | null; connectedPhone: string | null; dentistIds: string[]; createdAt: string };
+  const [showInstanceDialog, setShowInstanceDialog] = useState(false);
+  const [editingInstance, setEditingInstance] = useState<WppInstance | null>(null);
+  const [instanceForm, setInstanceForm] = useState({ label: "", instanceName: "", apiKey: "", dentistIds: [] as string[] });
+  const [qrState, setQrState] = useState<{ instanceId: string; qrCode: string | null; status: string } | null>(null);
+  const [instanceToDelete, setInstanceToDelete] = useState<WppInstance | null>(null);
 
   // Fetch users
   const { data: users = [], isLoading } = useQuery<User[]>({
@@ -175,66 +176,108 @@ export default function SettingsPage() {
     },
   });
 
-  // WhatsApp status query
-  const { data: wppStatus, isLoading: wppStatusLoading, refetch: refetchWppStatus } = useQuery<{
-    connected: boolean; status: string; phone?: string; profileName?: string;
-    instanceName?: string; connectedPhone?: string;
-  }>({
-    queryKey: ["/api/whatsapp/status"],
+  // WhatsApp instances query
+  const { data: wppInstances = [], isLoading: instancesLoading, refetch: refetchInstances } = useQuery<(any & { dentistIds: string[] })[]>({
+    queryKey: ["/api/whatsapp/instances"],
     enabled: currentUser?.role === "admin",
-    refetchInterval: 15000,
+    refetchInterval: 20000,
   });
 
-  // Load wpp form from clinic data
-  useEffect(() => {
-    if (clinic) {
-      setWppFormData({
-        evolutionInstanceName: (clinic as any).evolutionInstanceName || "",
-        evolutionApiKey: (clinic as any).evolutionApiKey || "",
-      });
-    }
-  }, [clinic]);
-
-  // Save WhatsApp config mutation
-  const saveWppConfigMutation = useMutation({
-    mutationFn: async (data: typeof wppFormData) => {
-      const response = await apiRequest("PATCH", "/api/clinic/whatsapp", data);
-      if (!response.ok) throw new Error("Erro ao salvar configuração");
-      return response.json();
+  // Create instance mutation
+  const createInstanceMutation = useMutation({
+    mutationFn: async (data: typeof instanceForm) => {
+      const res = await apiRequest("POST", "/api/whatsapp/instances", data);
+      if (!res.ok) throw new Error("Erro ao criar instância");
+      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clinic"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/status"] });
-      toast({ title: "Configuração salva", description: "Configuração do WhatsApp salva com sucesso" });
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/instances"] });
+      toast({ title: "Instância criada", description: "Número de WhatsApp cadastrado com sucesso" });
+      setShowInstanceDialog(false);
     },
-    onError: () => {
-      toast({ title: "Erro", description: "Não foi possível salvar a configuração", variant: "destructive" });
-    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
-  // Generate QR code mutation
-  const connectWppMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/whatsapp/connect", {});
-      if (!response.ok) throw new Error("Erro ao gerar QR code");
-      return response.json();
+  // Update instance mutation
+  const updateInstanceMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof instanceForm }) => {
+      const res = await apiRequest("PATCH", `/api/whatsapp/instances/${id}`, data);
+      if (!res.ok) throw new Error("Erro ao atualizar instância");
+      return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/instances"] });
+      toast({ title: "Instância atualizada" });
+      setShowInstanceDialog(false);
+      setEditingInstance(null);
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  // Delete instance mutation
+  const deleteInstanceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/whatsapp/instances/${id}`);
+      if (!res.ok) throw new Error("Erro ao excluir instância");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/instances"] });
+      toast({ title: "Instância excluída" });
+      setInstanceToDelete(null);
+    },
+    onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+
+  // Connect (QR code) mutation
+  const connectInstanceMutation = useMutation({
+    mutationFn: async (instanceId: string) => {
+      const res = await apiRequest("POST", `/api/whatsapp/instances/${instanceId}/connect`, {});
+      if (!res.ok) throw new Error("Erro ao gerar QR code");
+      return res.json();
+    },
+    onSuccess: (data, instanceId) => {
       if (data.qrCode) {
-        setQrCodeData(data.qrCode);
-        setQrStatus("scan");
+        setQrState({ instanceId, qrCode: data.qrCode, status: "scan" });
       } else if (data.status === "connected") {
-        setQrCodeData(null);
-        setQrStatus("connected");
-        refetchWppStatus();
+        setQrState({ instanceId, qrCode: null, status: "connected" });
+        refetchInstances();
       } else {
-        setQrStatus(data.status || "pending");
+        setQrState({ instanceId, qrCode: null, status: data.status || "pending" });
       }
     },
-    onError: (error: any) => {
-      toast({ title: "Erro ao conectar", description: error.message, variant: "destructive" });
-    },
+    onError: (e: any) => toast({ title: "Erro ao conectar", description: e.message, variant: "destructive" }),
   });
+
+  const openNewInstance = () => {
+    setEditingInstance(null);
+    setInstanceForm({ label: "", instanceName: "", apiKey: "", dentistIds: [] });
+    setQrState(null);
+    setShowInstanceDialog(true);
+  };
+
+  const openEditInstance = (inst: any) => {
+    setEditingInstance(inst);
+    setInstanceForm({ label: inst.label, instanceName: inst.instanceName, apiKey: "", dentistIds: inst.dentistIds });
+    setQrState(null);
+    setShowInstanceDialog(true);
+  };
+
+  const submitInstanceForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingInstance) {
+      updateInstanceMutation.mutate({ id: editingInstance.id, data: instanceForm });
+    } else {
+      createInstanceMutation.mutate(instanceForm);
+    }
+  };
+
+  const toggleDentist = (id: string) => {
+    setInstanceForm((f) => ({
+      ...f,
+      dentistIds: f.dentistIds.includes(id) ? f.dentistIds.filter((d) => d !== id) : [...f.dentistIds, id],
+    }));
+  };
 
   // Upload logo mutation
   const uploadLogoMutation = useMutation({
@@ -756,168 +799,237 @@ export default function SettingsPage() {
                   )}
                 </CardContent>
               </Card>
-              {/* WhatsApp Settings */}
+              {/* ── WhatsApp Multi-Instance ── */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <QrCode className="h-5 w-5" />
-                    <span>WhatsApp</span>
-                  </CardTitle>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Configure a instância Evolution API desta clínica e conecte o WhatsApp
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Status banner */}
-                  {wppStatusLoading ? (
-                    <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg text-sm text-gray-500">
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Verificando status...
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center space-x-2">
+                        <QrCode className="h-5 w-5" />
+                        <span>WhatsApp — Números</span>
+                      </CardTitle>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Gerencie múltiplos números de WhatsApp e vincule-os a dentistas
+                      </p>
                     </div>
-                  ) : wppStatus?.connected ? (
-                    <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-green-800">WhatsApp conectado</p>
-                        {wppStatus.connectedPhone && (
-                          <p className="text-xs text-green-700">
-                            Número: +{wppStatus.connectedPhone}
-                            {wppStatus.profileName ? ` · ${wppStatus.profileName}` : ""}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto"
-                        onClick={() => refetchWppStatus()}
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                      </Button>
+                    <Button onClick={openNewInstance}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Novo Número
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {instancesLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 py-4">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Carregando instâncias...
+                    </div>
+                  ) : wppInstances.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">
+                      <QrCode className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                      <p className="text-sm">Nenhum número configurado</p>
+                      <p className="text-xs mt-1">Clique em "Novo Número" para adicionar o primeiro</p>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <WifiOff className="h-5 w-5 text-yellow-600 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-yellow-800">WhatsApp desconectado</p>
-                        <p className="text-xs text-yellow-700">
-                          {wppStatus?.status === "not_configured"
-                            ? "Instância não configurada"
-                            : `Status: ${wppStatus?.status || "desconhecido"}`}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto"
-                        onClick={() => refetchWppStatus()}
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
+                    <div className="space-y-3">
+                      {wppInstances.map((inst: any) => {
+                        const linkedDentists = (users as User[]).filter(
+                          (u) => u.role === "dentist" && inst.dentistIds?.includes(u.id),
+                        );
+                        const isConnected = !!inst.connectedPhone;
+                        return (
+                          <div key={inst.id} className="border rounded-lg p-4 space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-sm">{inst.label}</span>
+                                  <Badge variant={isConnected ? "default" : "secondary"} className="text-xs">
+                                    {isConnected ? `✓ ${inst.connectedPhone}` : "Desconectado"}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1 font-mono">{inst.instanceName}</p>
+                                {linkedDentists.length > 0 && (
+                                  <p className="text-xs text-gray-600 mt-1">
+                                    Dentista{linkedDentists.length > 1 ? "s" : ""}: {linkedDentists.map((d) => d.fullName).join(", ")}
+                                  </p>
+                                )}
+                                {linkedDentists.length === 0 && (
+                                  <p className="text-xs text-gray-400 mt-1">Nenhum dentista vinculado (atendimento geral)</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openEditInstance(inst)}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => setInstanceToDelete(inst)}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
 
-                  {/* Config form */}
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      saveWppConfigMutation.mutate(wppFormData);
-                    }}
-                    className="space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <Label htmlFor="wppInstance">Nome da Instância *</Label>
-                      <Input
-                        id="wppInstance"
-                        value={wppFormData.evolutionInstanceName}
-                        onChange={(e) => setWppFormData({ ...wppFormData, evolutionInstanceName: e.target.value })}
-                        placeholder="minha-clinica"
-                      />
-                      <p className="text-xs text-gray-500">
-                        Nome único da instância configurada na Evolution API
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="wppApiKey">API Key da Instância</Label>
-                      <Input
-                        id="wppApiKey"
-                        type="password"
-                        value={wppFormData.evolutionApiKey}
-                        onChange={(e) => setWppFormData({ ...wppFormData, evolutionApiKey: e.target.value })}
-                        placeholder="Deixe em branco para usar a chave global"
-                      />
-                      <p className="text-xs text-gray-500">
-                        Se vazia, usa a chave global configurada no servidor
-                      </p>
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                      <Button type="submit" disabled={saveWppConfigMutation.isPending}>
-                        {saveWppConfigMutation.isPending ? "Salvando..." : "Salvar Configuração"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={connectWppMutation.isPending || !wppFormData.evolutionInstanceName}
-                        onClick={() => {
-                          setQrCodeData(null);
-                          setQrStatus(null);
-                          connectWppMutation.mutate();
-                        }}
-                      >
-                        {connectWppMutation.isPending ? (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                            Gerando QR...
-                          </>
-                        ) : (
-                          <>
-                            <QrCode className="h-4 w-4 mr-2" />
-                            Conectar WhatsApp
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </form>
-
-                  {/* QR Code display */}
-                  {qrStatus === "scan" && qrCodeData && (
-                    <div className="flex flex-col items-center gap-3 p-4 bg-gray-50 rounded-lg border">
-                      <p className="text-sm font-medium text-gray-700">
-                        Escaneie o QR code com o WhatsApp
-                      </p>
-                      <img
-                        src={qrCodeData.startsWith("data:") ? qrCodeData : `data:image/png;base64,${qrCodeData}`}
-                        alt="QR Code WhatsApp"
-                        className="w-56 h-56 rounded-lg border"
-                      />
-                      <p className="text-xs text-gray-500 text-center">
-                        Abra o WhatsApp → Dispositivos conectados → Conectar um dispositivo
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setQrCodeData(null);
-                          setQrStatus(null);
-                          refetchWppStatus();
-                        }}
-                      >
-                        <RefreshCw className="h-3 w-3 mr-2" />
-                        Verificar conexão
-                      </Button>
-                    </div>
-                  )}
-                  {qrStatus === "connected" && (
-                    <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm text-green-700 border border-green-200">
-                      <CheckCircle2 className="h-4 w-4" />
-                      WhatsApp conectado com sucesso!
+                            {/* QR / Connect area for this instance */}
+                            {qrState?.instanceId === inst.id ? (
+                              qrState.status === "scan" && qrState.qrCode ? (
+                                <div className="flex flex-col items-center gap-2 p-3 bg-gray-50 rounded-lg border">
+                                  <p className="text-sm font-medium text-gray-700">Escaneie o QR code</p>
+                                  <img
+                                    src={qrState.qrCode.startsWith("data:") ? qrState.qrCode : `data:image/png;base64,${qrState.qrCode}`}
+                                    alt="QR Code"
+                                    className="w-48 h-48 rounded-lg border"
+                                  />
+                                  <p className="text-xs text-gray-500 text-center">
+                                    WhatsApp → Dispositivos conectados → Conectar um dispositivo
+                                  </p>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => { setQrState(null); refetchInstances(); }}
+                                  >
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    Verificar conexão
+                                  </Button>
+                                </div>
+                              ) : qrState.status === "connected" ? (
+                                <div className="flex items-center gap-2 p-2 bg-green-50 rounded text-xs text-green-700 border border-green-200">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  Conectado com sucesso!
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded">
+                                  Status: {qrState.status}
+                                </div>
+                              )
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={connectInstanceMutation.isPending}
+                                onClick={() => connectInstanceMutation.mutate(inst.id)}
+                              >
+                                {connectInstanceMutation.isPending && connectInstanceMutation.variables === inst.id ? (
+                                  <><RefreshCw className="h-3 w-3 mr-1 animate-spin" />Gerando QR...</>
+                                ) : (
+                                  <><QrCode className="h-3 w-3 mr-1" />{isConnected ? "Reconectar" : "Conectar WhatsApp"}</>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
               </Card>
+
+              {/* Dialog: Add / Edit Instance */}
+              <Dialog open={showInstanceDialog} onOpenChange={(open) => { if (!open) { setShowInstanceDialog(false); setEditingInstance(null); } }}>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>{editingInstance ? "Editar Número de WhatsApp" : "Novo Número de WhatsApp"}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={submitInstanceForm} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Identificação *</Label>
+                      <Input
+                        value={instanceForm.label}
+                        onChange={(e) => setInstanceForm({ ...instanceForm, label: e.target.value })}
+                        placeholder="Ex.: Consultório Principal, Dr. João"
+                        required
+                      />
+                      <p className="text-xs text-gray-500">Nome amigável para identificar este número</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Nome da Instância (Evolution API) *</Label>
+                      <Input
+                        value={instanceForm.instanceName}
+                        onChange={(e) => setInstanceForm({ ...instanceForm, instanceName: e.target.value })}
+                        placeholder="minha-clinica-01"
+                        required
+                      />
+                      <p className="text-xs text-gray-500">Nome exato da instância configurada na Evolution API</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>API Key (opcional)</Label>
+                      <Input
+                        type="password"
+                        value={instanceForm.apiKey}
+                        onChange={(e) => setInstanceForm({ ...instanceForm, apiKey: e.target.value })}
+                        placeholder="Deixe em branco para usar a chave global"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Dentistas vinculados</Label>
+                      <p className="text-xs text-gray-500">
+                        Sem seleção = atendimento geral. 1 dentista = atendimento exclusivo. 2+ = atendimento compartilhado.
+                      </p>
+                      <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+                        {(users as User[]).filter((u) => u.role === "dentist").length === 0 ? (
+                          <p className="text-xs text-gray-400">Nenhum dentista cadastrado</p>
+                        ) : (
+                          (users as User[])
+                            .filter((u) => u.role === "dentist")
+                            .map((d) => (
+                              <label key={d.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={instanceForm.dentistIds.includes(d.id)}
+                                  onChange={() => toggleDentist(d.id)}
+                                  className="accent-primary"
+                                />
+                                {d.fullName}
+                              </label>
+                            ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button type="button" variant="outline" onClick={() => setShowInstanceDialog(false)}>
+                        Cancelar
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={createInstanceMutation.isPending || updateInstanceMutation.isPending}
+                      >
+                        {(createInstanceMutation.isPending || updateInstanceMutation.isPending)
+                          ? "Salvando..."
+                          : editingInstance
+                          ? "Salvar Alterações"
+                          : "Criar Número"}
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Confirm delete instance */}
+              <AlertDialog open={!!instanceToDelete} onOpenChange={(open) => { if (!open) setInstanceToDelete(null); }}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir número de WhatsApp?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      A instância <strong>{instanceToDelete?.label}</strong> ({instanceToDelete?.instanceName}) será removida permanentemente.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-red-600 hover:bg-red-700"
+                      onClick={() => instanceToDelete && deleteInstanceMutation.mutate(instanceToDelete.id)}
+                    >
+                      Excluir
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           )}
         </main>

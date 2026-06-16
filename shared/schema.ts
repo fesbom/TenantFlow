@@ -227,6 +227,24 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// WhatsApp Instances - multiple phone numbers per clinic
+export const whatsappInstances = pgTable("whatsapp_instances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+  instanceName: text("instance_name").notNull(), // Evolution API instance name
+  apiKey: text("api_key"),                        // Optional, falls back to global EVO_KEY
+  connectedPhone: text("connected_phone"),        // Phone number when connected
+  label: text("label").notNull(),                 // Friendly name e.g. "Geral", "Dr. João"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Junction: which dentists are linked to each WhatsApp instance
+export const whatsappInstanceDentists = pgTable("whatsapp_instance_dentists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instanceId: varchar("instance_id").notNull().references(() => whatsappInstances.id, { onDelete: "cascade" }),
+  dentistId: varchar("dentist_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+});
+
 // Dentist Schedules - weekly availability grid per dentist
 export const dentistSchedules = pgTable(
   "dentist_schedules",
@@ -400,6 +418,25 @@ export const budgetsRelations = relations(budgets, ({ one }) => ({
   }),
 }));
 
+export const whatsappInstancesRelations = relations(whatsappInstances, ({ one, many }) => ({
+  clinic: one(clinics, {
+    fields: [whatsappInstances.clinicId],
+    references: [clinics.id],
+  }),
+  instanceDentists: many(whatsappInstanceDentists),
+}));
+
+export const whatsappInstanceDentistsRelations = relations(whatsappInstanceDentists, ({ one }) => ({
+  instance: one(whatsappInstances, {
+    fields: [whatsappInstanceDentists.instanceId],
+    references: [whatsappInstances.id],
+  }),
+  dentist: one(users, {
+    fields: [whatsappInstanceDentists.dentistId],
+    references: [users.id],
+  }),
+}));
+
 export const whatsappConversationsRelations = relations(whatsappConversations, ({ one, many }) => ({
   clinic: one(clinics, {
     fields: [whatsappConversations.clinicId],
@@ -490,6 +527,15 @@ export const insertTreatmentMovementSchema = createInsertSchema(treatmentMovemen
   createdAt: true,
 });
 
+export const insertWhatsappInstanceSchema = createInsertSchema(whatsappInstances).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWhatsappInstanceDentistSchema = createInsertSchema(whatsappInstanceDentists).omit({
+  id: true,
+});
+
 export const insertWhatsappConversationSchema = createInsertSchema(whatsappConversations).omit({
   id: true,
   createdAt: true,
@@ -555,6 +601,12 @@ export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
 export * from "./models/chat";
 
 // WhatsApp types
+export type WhatsappInstance = typeof whatsappInstances.$inferSelect;
+export type InsertWhatsappInstance = z.infer<typeof insertWhatsappInstanceSchema>;
+
+export type WhatsappInstanceDentist = typeof whatsappInstanceDentists.$inferSelect;
+export type InsertWhatsappInstanceDentist = z.infer<typeof insertWhatsappInstanceDentistSchema>;
+
 export type WhatsappConversation = typeof whatsappConversations.$inferSelect;
 export type InsertWhatsappConversation = z.infer<typeof insertWhatsappConversationSchema>;
 

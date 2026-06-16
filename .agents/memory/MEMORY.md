@@ -1,0 +1,1 @@
+- [WhatsApp Multi-Instance](whatsapp-multi-instance.md) — múltiplos números por clínica via tabela `whatsapp_instances`; webhook resolve instância por nome e constrói InstanceContext para a IA.

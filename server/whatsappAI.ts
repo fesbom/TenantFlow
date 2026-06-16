@@ -33,6 +33,13 @@ export interface PatientContext {
   name: string | null;
 }
 
+// ─── Instance context: shapes which dentists the AI can suggest ──────────────
+export type InstanceContext =
+  | { type: "exclusive"; dentistName: string; dentistId: string }
+  | { type: "shared"; dentists: { name: string; id: string }[] }
+  | { type: "general" };
+
+// ─── System prompt base ───────────────────────────────────────────────────────
 const SYSTEM_PROMPT_BASE = `Você é um Assistente Virtual de uma clínica odontológica chamada [CLINIC_NAME]. Sempre se identifique como "Assistente Virtual da [CLINIC_NAME]" na primeira mensagem ou quando perguntado quem você é. Seu objetivo é ajudar pacientes a agendar consultas.
 
 REGRAS OBRIGATÓRIAS PARA AGENDAMENTO:
@@ -85,7 +92,45 @@ REGRAS:
 3. Inclua o nome informado em "tempData" e no "summary".
 === FIM DAS INSTRUÇÕES ===`;
 
-function buildSystemPrompt(patientContext?: PatientContext, clinicName?: string): string {
+// ─── Instance-context blocks injected into the prompt ────────────────────────
+function buildInstanceBlock(ctx: InstanceContext): string {
+  if (ctx.type === "exclusive") {
+    return `
+
+=== NÚMERO EXCLUSIVO DE DENTISTA ===
+O paciente entrou em contato pelo número exclusivo de ${ctx.dentistName}.
+REGRAS:
+1. Ao surgir qualquer intenção de agendamento, PROATIVAMENTE sugira ${ctx.dentistName}: "Identifiquei que você está entrando em contato pelo número do(a) ${ctx.dentistName}. Podemos registrar o agendamento no nome dele(a)?"
+2. Se o paciente confirmar, use "${ctx.dentistName}" como valor de dentistName.
+3. Se o paciente preferir outro dentista, respeite a escolha normalmente.
+=== FIM DAS INSTRUÇÕES ===`;
+  }
+
+  if (ctx.type === "shared") {
+    const names = ctx.dentists.map((d) => d.name).join(" e ");
+    const bullets = ctx.dentists.map((d) => `• ${d.name}`).join("\n");
+    return `
+
+=== NÚMERO COMPARTILHADO ===
+Este número é compartilhado por ${names}.
+REGRAS:
+1. Na primeira mensagem de agendamento, RESTRINJA as opções iniciais a estes profissionais:
+${bullets}
+   Pergunte: "Este número é compartilhado por ${names}. Você gostaria de agendar com algum deles ou com outro profissional da clínica?"
+2. Se o paciente escolher um deles, use o nome exato como dentistName.
+3. Se o paciente quiser outro profissional, trate normalmente (intent listar_dentistas se necessário).
+=== FIM DAS INSTRUÇÕES ===`;
+  }
+
+  // general — no special block
+  return "";
+}
+
+function buildSystemPrompt(
+  patientContext?: PatientContext,
+  clinicName?: string,
+  instanceContext?: InstanceContext,
+): string {
   const resolvedClinicName = clinicName || "nossa clínica";
   let prompt = SYSTEM_PROMPT_BASE.replace(/\[CLINIC_NAME\]/g, resolvedClinicName);
 
@@ -94,6 +139,11 @@ function buildSystemPrompt(patientContext?: PatientContext, clinicName?: string)
   } else {
     prompt += UNIDENTIFIED_PATIENT_BLOCK;
   }
+
+  if (instanceContext) {
+    prompt += buildInstanceBlock(instanceContext);
+  }
+
   return prompt;
 }
 
@@ -101,10 +151,11 @@ export async function processPatientMessage(
   patientMessage: string,
   conversationHistory: Array<{ role: string; text: string }>,
   patientContext?: PatientContext,
-  clinicName?: string
+  clinicName?: string,
+  instanceContext?: InstanceContext,
 ): Promise<AIResponse> {
   try {
-    const systemPrompt = buildSystemPrompt(patientContext, clinicName);
+    const systemPrompt = buildSystemPrompt(patientContext, clinicName, instanceContext);
 
     const now = new Date();
     const currentDateInfo = `DATA ATUAL DO SISTEMA: ${now.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Hora: ${now.getHours()}:${now.getMinutes()}`;

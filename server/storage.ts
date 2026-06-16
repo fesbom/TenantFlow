@@ -14,6 +14,8 @@ import {
   treatmentMovements,
   whatsappConversations,
   whatsappMessages,
+  whatsappInstances,
+  whatsappInstanceDentists,
   dentistSchedules,
   clinicHolidays,
   type Clinic,
@@ -42,6 +44,8 @@ import {
   type InsertBudgetSummary,
   type TreatmentMovement,
   type InsertTreatmentMovement,
+  type WhatsappInstance,
+  type InsertWhatsappInstance,
   type WhatsappConversation,
   type InsertWhatsappConversation,
   type WhatsappMessage,
@@ -173,6 +177,17 @@ export interface IStorage {
 
   // Patient lookup by phone
   getPatientByPhone(clinicId: string, phone: string): Promise<Patient | undefined>;
+
+  // WhatsApp instance methods
+  createWhatsappInstance(data: InsertWhatsappInstance): Promise<WhatsappInstance>;
+  getWhatsappInstancesByClinic(clinicId: string): Promise<WhatsappInstance[]>;
+  getWhatsappInstanceById(id: string): Promise<WhatsappInstance | undefined>;
+  getWhatsappInstanceByName(instanceName: string): Promise<WhatsappInstance | undefined>;
+  updateWhatsappInstance(id: string, updates: Partial<InsertWhatsappInstance>): Promise<WhatsappInstance | undefined>;
+  deleteWhatsappInstance(id: string): Promise<boolean>;
+  setWhatsappInstanceDentists(instanceId: string, dentistIds: string[]): Promise<void>;
+  getWhatsappInstanceDentistIds(instanceId: string): Promise<string[]>;
+  getWhatsappInstancesWithDentists(clinicId: string): Promise<(WhatsappInstance & { dentistIds: string[] })[]>;
 
   // WhatsApp conversation methods
   createWhatsappConversation(conversation: InsertWhatsappConversation): Promise<WhatsappConversation>;
@@ -935,6 +950,76 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(passwordResetTokens)
       .where(lte(passwordResetTokens.expiresAt, new Date()));
+  }
+
+  // ─── WhatsApp instance methods ──────────────────────────────────────────────
+
+  async createWhatsappInstance(data: InsertWhatsappInstance): Promise<WhatsappInstance> {
+    const [row] = await db.insert(whatsappInstances).values(data).returning();
+    return row;
+  }
+
+  async getWhatsappInstancesByClinic(clinicId: string): Promise<WhatsappInstance[]> {
+    return db
+      .select()
+      .from(whatsappInstances)
+      .where(eq(whatsappInstances.clinicId, clinicId))
+      .orderBy(whatsappInstances.createdAt);
+  }
+
+  async getWhatsappInstanceById(id: string): Promise<WhatsappInstance | undefined> {
+    const [row] = await db.select().from(whatsappInstances).where(eq(whatsappInstances.id, id));
+    return row || undefined;
+  }
+
+  async getWhatsappInstanceByName(instanceName: string): Promise<WhatsappInstance | undefined> {
+    const [row] = await db
+      .select()
+      .from(whatsappInstances)
+      .where(eq(whatsappInstances.instanceName, instanceName));
+    return row || undefined;
+  }
+
+  async updateWhatsappInstance(id: string, updates: Partial<InsertWhatsappInstance>): Promise<WhatsappInstance | undefined> {
+    const [row] = await db
+      .update(whatsappInstances)
+      .set(updates)
+      .where(eq(whatsappInstances.id, id))
+      .returning();
+    return row || undefined;
+  }
+
+  async deleteWhatsappInstance(id: string): Promise<boolean> {
+    const result = await db.delete(whatsappInstances).where(eq(whatsappInstances.id, id));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async setWhatsappInstanceDentists(instanceId: string, dentistIds: string[]): Promise<void> {
+    // Delete all existing links then re-insert
+    await db.delete(whatsappInstanceDentists).where(eq(whatsappInstanceDentists.instanceId, instanceId));
+    if (dentistIds.length > 0) {
+      await db.insert(whatsappInstanceDentists).values(
+        dentistIds.map((dentistId) => ({ instanceId, dentistId }))
+      );
+    }
+  }
+
+  async getWhatsappInstanceDentistIds(instanceId: string): Promise<string[]> {
+    const rows = await db
+      .select({ dentistId: whatsappInstanceDentists.dentistId })
+      .from(whatsappInstanceDentists)
+      .where(eq(whatsappInstanceDentists.instanceId, instanceId));
+    return rows.map((r) => r.dentistId);
+  }
+
+  async getWhatsappInstancesWithDentists(clinicId: string): Promise<(WhatsappInstance & { dentistIds: string[] })[]> {
+    const instances = await this.getWhatsappInstancesByClinic(clinicId);
+    const result: (WhatsappInstance & { dentistIds: string[] })[] = [];
+    for (const inst of instances) {
+      const dentistIds = await this.getWhatsappInstanceDentistIds(inst.id);
+      result.push({ ...inst, dentistIds });
+    }
+    return result;
   }
 
   // WhatsApp conversation methods

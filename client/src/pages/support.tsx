@@ -124,8 +124,8 @@ export default function Support() {
     refetchInterval: CONVERSATIONS_POLL_INTERVAL,
   });
 
-  const { data: wppStatus } = useQuery<{ connected: boolean; status: string; connectedPhone?: string }>({
-    queryKey: ["/api/whatsapp/status"],
+  const { data: wppInstances = [] } = useQuery<{ id: string; label: string; connectedPhone: string | null }[]>({
+    queryKey: ["/api/whatsapp/instances"],
     refetchInterval: 20000,
     retry: false,
   });
@@ -444,20 +444,26 @@ export default function Support() {
         <main className="p-4 lg:p-6 flex-grow overflow-hidden">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-gray-600">Gerencie conversas do WhatsApp com pacientes</p>
-            {wppStatus ? (
-              wppStatus.connected ? (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
-                  <Wifi className="h-3 w-3" />
-                  WhatsApp conectado
-                  {wppStatus.connectedPhone ? ` · +${wppStatus.connectedPhone}` : ""}
-                </span>
-              ) : (
+            {(() => {
+              const connected = wppInstances.filter((i) => !!i.connectedPhone);
+              if (wppInstances.length === 0) return null;
+              if (connected.length > 0) {
+                return (
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
+                    <Wifi className="h-3 w-3" />
+                    {connected.length === 1
+                      ? `WhatsApp conectado · +${connected[0].connectedPhone}`
+                      : `${connected.length} números conectados`}
+                  </span>
+                );
+              }
+              return (
                 <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1">
                   <WifiOff className="h-3 w-3" />
                   WhatsApp desconectado
                 </span>
-              )
-            ) : null}
+              );
+            })()}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-180px)]">

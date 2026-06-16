@@ -56,7 +56,9 @@ import {
   globalConfig,
   getEvolutionInstanceStatus,
   generateQRCodeForClinic,
+  type ClinicEvolutionConfig,
 } from "./evolutionService";
+import type { InstanceContext } from "./whatsappAI";
 
 import multer from "multer";
 
@@ -2905,20 +2907,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // MULTITENANCY: Resolve a clínica pelo instanceName do payload
         const webhookInstanceName: string = data.instance || data.sender || "";
         let clinicId = (process.env.WHATSAPP_CLINIC_ID || "").trim();
+        let webhookInstanceContext: InstanceContext = { type: "general" };
 
         if (webhookInstanceName) {
-          const clinicByInstance =
-            await storage.getClinicByEvolutionInstance(webhookInstanceName);
-          if (clinicByInstance) {
-            clinicId = clinicByInstance.id;
+          // 1. Busca na nova tabela whatsapp_instances
+          const instanceRow = await storage.getWhatsappInstanceByName(webhookInstanceName);
+          if (instanceRow) {
+            clinicId = instanceRow.clinicId;
             console.log(
-              `[WEBHOOK] Instância '${webhookInstanceName}' → clínica '${clinicByInstance.name}' (${clinicId})`,
+              `[WEBHOOK] Instância '${webhookInstanceName}' → clínica ${clinicId} (via whatsapp_instances)`,
             );
-          } else if (!clinicId) {
-            console.warn(
-              `[WEBHOOK] Instância '${webhookInstanceName}' não encontrada em nenhuma clínica — mensagem ignorada`,
-            );
-            return;
+            // Construir contexto de dentistas vinculados
+            const dentistIds = await storage.getWhatsappInstanceDentistIds(instanceRow.id);
+            if (dentistIds.length > 0) {
+              const allUsers = await storage.getUsersByClinic(clinicId);
+              const linkedDentists = allUsers.filter(
+                (u) => u.role === "dentist" && dentistIds.includes(u.id),
+              );
+              if (linkedDentists.length === 1) {
+                webhookInstanceContext = {
+                  type: "exclusive",
+                  dentistName: linkedDentists[0].fullName,
+                  dentistId: linkedDentists[0].id,
+                };
+              } else if (linkedDentists.length > 1) {
+                webhookInstanceContext = {
+                  type: "shared",
+                  dentists: linkedDentists.map((d) => ({ name: d.fullName, id: d.id })),
+                };
+              }
+            }
+          } else {
+            // 2. Fallback: busca nos campos legados da tabela clinics
+            const clinicByInstance = await storage.getClinicByEvolutionInstance(webhookInstanceName);
+            if (clinicByInstance) {
+              clinicId = clinicByInstance.id;
+              console.log(
+                `[WEBHOOK] Instância '${webhookInstanceName}' → clínica '${clinicByInstance.name}' (legado)`,
+              );
+            } else if (!clinicId) {
+              console.warn(
+                `[WEBHOOK] Instância '${webhookInstanceName}' não encontrada — mensagem ignorada`,
+              );
+              return;
+            }
           }
         }
 
@@ -3033,22 +3065,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             history,
             patientContext,
             clinicName,
+            webhookInstanceContext,
           );
 
-          // --- 2. AGENDAMENTO AUTOMÁTICO (CORREÇÃO PARA DENTIST NAME UNDEFINED) ---
-          // --- DENTRO DA ROTA WEBHOOK EVOLUTION ---
-
           /* --- ROTINA DE AGENDAMENTO COM FILTRO DE HORÁRIO CORRIGIDO --- */
-          // --- 2. AGENDAMENTO AUTOMÁTICO (NORMALIZADO) ---
           // --- LISTAR DENTISTAS ---
           if (aiResponse.extractedIntent.intent === "listar_dentistas") {
             console.log(`[WEBHOOK] Intenção listar_dentistas detectada para clínica ${clinicId}`);
             const allUsers = await storage.getUsersByClinic(clinicId);
-            const dentists = allUsers.filter((u) => u.role === "dentist");
-            if (dentists.length === 0) {
-              aiResponse.message = `No momento não temos dentistas cadastrados em nosso sistema. Entre em contato para mais informações.`;
+            const allDentists = allUsers.filter((u) => u.role === "dentist");
+
+            // Se instância compartilhada/exclusiva, filtra apenas dentistas vinculados
+            let displayDentists = allDentists;
+            if (webhookInstanceContext.type === "exclusive") {
+              displayDentists = allDentists.filter(
+                (d) => d.id === (webhookInstanceContext as any).dentistId,
+              );
+            } else if (webhookInstanceContext.type === "shared") {
+              const linkedIds = (webhookInstanceContext as any).dentists.map((d: any) => d.id);
+              displayDentists = allDentists.filter((d) => linkedIds.includes(d.id));
+            }
+
+            if (displayDentists.length === 0) {
+              aiResponse.message = `No momento não temos dentistas disponíveis neste número. Entre em contato para mais informações.`;
             } else {
-              const list = dentists.map((d) => `• ${d.fullName}`).join("\n");
+              const list = displayDentists.map((d) => `• ${d.fullName}`).join("\n");
               aiResponse.message = `Estes são os profissionais disponíveis na ${clinicName}:\n\n${list}\n\nCom qual deles você gostaria de agendar?`;
             }
             aiResponse.extractedIntent.intent = "conversar";
@@ -3363,6 +3404,151 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[WHATSAPP CONFIG SAVE]", error.message);
       res.status(500).json({ message: "Erro ao salvar configuração do WhatsApp" });
+    }
+  });
+
+  // ─── WhatsApp Instances CRUD ─────────────────────────────────────────────────
+
+  // GET /api/whatsapp/instances — lista instâncias com dentistas vinculados
+  app.get("/api/whatsapp/instances", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const instances = await storage.getWhatsappInstancesWithDentists(req.user!.clinicId);
+      return res.json(instances);
+    } catch (err: any) {
+      res.status(500).json({ message: "Erro ao listar instâncias" });
+    }
+  });
+
+  // POST /api/whatsapp/instances — cria nova instância
+  app.post("/api/whatsapp/instances", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user!.role !== "admin") return res.status(403).json({ message: "Apenas administradores" });
+      const { label, instanceName, apiKey, dentistIds } = req.body;
+      if (!label?.trim() || !instanceName?.trim()) {
+        return res.status(400).json({ message: "Label e instanceName são obrigatórios" });
+      }
+      const instance = await storage.createWhatsappInstance({
+        clinicId: req.user!.clinicId,
+        label: label.trim(),
+        instanceName: instanceName.trim(),
+        apiKey: apiKey?.trim() || null,
+        connectedPhone: null,
+      });
+      if (Array.isArray(dentistIds) && dentistIds.length > 0) {
+        await storage.setWhatsappInstanceDentists(instance.id, dentistIds);
+      }
+      const ids = await storage.getWhatsappInstanceDentistIds(instance.id);
+      return res.status(201).json({ ...instance, dentistIds: ids });
+    } catch (err: any) {
+      res.status(500).json({ message: "Erro ao criar instância" });
+    }
+  });
+
+  // PATCH /api/whatsapp/instances/:id — edita instância
+  app.patch("/api/whatsapp/instances/:id", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user!.role !== "admin") return res.status(403).json({ message: "Apenas administradores" });
+      const { id } = req.params;
+      const existing = await storage.getWhatsappInstanceById(id);
+      if (!existing || existing.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Instância não encontrada" });
+      }
+      const { label, instanceName, apiKey, dentistIds } = req.body;
+      const updates: any = {};
+      if (label !== undefined) updates.label = label.trim();
+      if (instanceName !== undefined) updates.instanceName = instanceName.trim();
+      if (apiKey !== undefined) updates.apiKey = apiKey?.trim() || null;
+      const updated = await storage.updateWhatsappInstance(id, updates);
+      if (Array.isArray(dentistIds)) {
+        await storage.setWhatsappInstanceDentists(id, dentistIds);
+      }
+      const ids = await storage.getWhatsappInstanceDentistIds(id);
+      return res.json({ ...updated, dentistIds: ids });
+    } catch (err: any) {
+      res.status(500).json({ message: "Erro ao atualizar instância" });
+    }
+  });
+
+  // DELETE /api/whatsapp/instances/:id — remove instância
+  app.delete("/api/whatsapp/instances/:id", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user!.role !== "admin") return res.status(403).json({ message: "Apenas administradores" });
+      const { id } = req.params;
+      const existing = await storage.getWhatsappInstanceById(id);
+      if (!existing || existing.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Instância não encontrada" });
+      }
+      await storage.deleteWhatsappInstance(id);
+      return res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Erro ao excluir instância" });
+    }
+  });
+
+  // PUT /api/whatsapp/instances/:id/dentists — redefine dentistas vinculados
+  app.put("/api/whatsapp/instances/:id/dentists", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user!.role !== "admin") return res.status(403).json({ message: "Apenas administradores" });
+      const { id } = req.params;
+      const existing = await storage.getWhatsappInstanceById(id);
+      if (!existing || existing.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Instância não encontrada" });
+      }
+      const { dentistIds } = req.body;
+      await storage.setWhatsappInstanceDentists(id, Array.isArray(dentistIds) ? dentistIds : []);
+      return res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: "Erro ao atualizar dentistas da instância" });
+    }
+  });
+
+  // GET /api/whatsapp/instances/:id/status — status de conexão de uma instância
+  app.get("/api/whatsapp/instances/:id/status", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { id } = req.params;
+      const instance = await storage.getWhatsappInstanceById(id);
+      if (!instance || instance.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Instância não encontrada" });
+      }
+      const cfg: ClinicEvolutionConfig = {
+        evoUrl: (process.env.EVO_URL || "").trim(),
+        evoKey: (instance.apiKey || process.env.EVO_KEY || "").trim(),
+        instanceName: instance.instanceName,
+      };
+      if (!cfg.evoUrl || !cfg.evoKey) {
+        return res.json({ connected: false, status: "not_configured" });
+      }
+      const status = await getEvolutionInstanceStatus(cfg);
+      if (status.connected && status.phone && status.phone !== instance.connectedPhone) {
+        await storage.updateWhatsappInstance(id, { connectedPhone: status.phone });
+      }
+      return res.json({ ...status, instanceId: id });
+    } catch (err: any) {
+      res.status(500).json({ message: "Erro ao buscar status" });
+    }
+  });
+
+  // POST /api/whatsapp/instances/:id/connect — gera QR code de uma instância
+  app.post("/api/whatsapp/instances/:id/connect", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (req.user!.role !== "admin") return res.status(403).json({ message: "Apenas administradores" });
+      const { id } = req.params;
+      const instance = await storage.getWhatsappInstanceById(id);
+      if (!instance || instance.clinicId !== req.user!.clinicId) {
+        return res.status(404).json({ message: "Instância não encontrada" });
+      }
+      const cfg: ClinicEvolutionConfig = {
+        evoUrl: (process.env.EVO_URL || "").trim(),
+        evoKey: (instance.apiKey || process.env.EVO_KEY || "").trim(),
+        instanceName: instance.instanceName,
+      };
+      if (!cfg.evoUrl || !cfg.evoKey) {
+        return res.status(400).json({ message: "Evolution API não configurada no servidor" });
+      }
+      const result = await generateQRCodeForClinic(cfg);
+      return res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: "Erro ao gerar QR code" });
     }
   });
 
