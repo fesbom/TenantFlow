@@ -6,9 +6,10 @@ import { useBranding } from "@/contexts/branding-context";
 interface HeaderProps {
   title: string;
   onMenuClick: () => void;
+  actions?: React.ReactNode;
 }
 
-export default function Header({ title, onMenuClick }: HeaderProps) {
+export default function Header({ title, onMenuClick, actions }: HeaderProps) {
   const { branding } = useBranding();
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 lg:px-6 sticky top-0 z-30">
@@ -29,6 +30,7 @@ export default function Header({ title, onMenuClick }: HeaderProps) {
         </div>
         
         <div className="flex items-center space-x-4">
+          {actions && <div className="flex items-center">{actions}</div>}
           {/* Temporarily hidden - notifications feature not implemented
           <Button
             variant="ghost"

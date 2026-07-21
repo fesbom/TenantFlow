@@ -19,6 +19,7 @@ import ImportData from "@/pages/import-data";
 import BatchUpload from "@/pages/batch-upload";
 import Support from "@/pages/support";
 import Availability from "@/pages/availability";
+import PrintSchedule from "@/pages/print-schedule";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const authContext = useAuth();
@@ -57,6 +58,7 @@ function Router() {
           <Route path="/batch-upload" component={() => <ProtectedRoute component={BatchUpload} />} />
           <Route path="/support" component={() => <ProtectedRoute component={Support} />} />
           <Route path="/availability" component={() => <ProtectedRoute component={Availability} />} />
+          <Route path="/print-schedule" component={() => <ProtectedRoute component={PrintSchedule} />} />
           <Route component={NotFound} />
         </>
       )}
