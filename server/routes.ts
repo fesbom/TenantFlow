@@ -3427,6 +3427,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!label?.trim() || !instanceName?.trim()) {
         return res.status(400).json({ message: "Label e instanceName são obrigatórios" });
       }
+
+      // Regra 1: instanceName único globalmente (qualquer clínica)
+      const existing = await storage.getWhatsappInstanceByName(instanceName.trim());
+      if (existing) {
+        return res.status(409).json({ message: `O nome de instância "${instanceName.trim()}" já está em uso. Escolha outro nome.` });
+      }
+
+      // Regra 2: dentista único por clínica (mesmo dentista em dois números da mesma clínica)
+      if (Array.isArray(dentistIds) && dentistIds.length > 0) {
+        const clinicInstances = await storage.getWhatsappInstancesWithDentists(req.user!.clinicId);
+        const occupiedMap: Record<string, string> = {};
+        for (const inst of clinicInstances) {
+          for (const did of (inst as any).dentistIds || []) {
+            occupiedMap[did] = (inst as any).label;
+          }
+        }
+        for (const did of dentistIds) {
+          if (occupiedMap[did]) {
+            const dentist = (await storage.getUsersByClinic(req.user!.clinicId)).find((u) => u.id === did);
+            return res.status(409).json({
+              message: `${dentist?.fullName || "Dentista"} já está vinculado ao número "${occupiedMap[did]}". Um dentista só pode estar em um número por vez.`,
+            });
+          }
+        }
+      }
+
       const instance = await storage.createWhatsappInstance({
         clinicId: req.user!.clinicId,
         label: label.trim(),
@@ -3454,6 +3480,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Instância não encontrada" });
       }
       const { label, instanceName, apiKey, dentistIds } = req.body;
+
+      // Regra 1: instanceName único globalmente (excluindo a instância atual)
+      if (instanceName !== undefined && instanceName.trim() !== existing.instanceName) {
+        const conflict = await storage.getWhatsappInstanceByName(instanceName.trim());
+        if (conflict && conflict.id !== id) {
+          return res.status(409).json({ message: `O nome de instância "${instanceName.trim()}" já está em uso. Escolha outro nome.` });
+        }
+      }
+
+      // Regra 2: dentista único por clínica (excluindo a instância atual)
+      if (Array.isArray(dentistIds) && dentistIds.length > 0) {
+        const clinicInstances = await storage.getWhatsappInstancesWithDentists(req.user!.clinicId);
+        const occupiedMap: Record<string, string> = {};
+        for (const inst of clinicInstances) {
+          if ((inst as any).id === id) continue; // ignora a instância sendo editada
+          for (const did of (inst as any).dentistIds || []) {
+            occupiedMap[did] = (inst as any).label;
+          }
+        }
+        for (const did of dentistIds) {
+          if (occupiedMap[did]) {
+            const dentist = (await storage.getUsersByClinic(req.user!.clinicId)).find((u) => u.id === did);
+            return res.status(409).json({
+              message: `${dentist?.fullName || "Dentista"} já está vinculado ao número "${occupiedMap[did]}". Um dentista só pode estar em um número por vez.`,
+            });
+          }
+        }
+      }
+
       const updates: any = {};
       if (label !== undefined) updates.label = label.trim();
       if (instanceName !== undefined) updates.instanceName = instanceName.trim();
