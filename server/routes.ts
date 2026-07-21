@@ -540,6 +540,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  const DEFAULT_INVOICE_FIELDS = ["fullName", "cpf", "birthDate", "phone", "email", "cep", "fullAddress"];
+
+  // GET /api/clinic/invoice-fields — retorna campos configurados
+  app.get("/api/clinic/invoice-fields", authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const clinic = await storage.getClinicById(req.user!.clinicId);
+      const fields = clinic?.invoiceFields ? JSON.parse(clinic.invoiceFields) : DEFAULT_INVOICE_FIELDS;
+      return res.json({ fields });
+    } catch {
+      res.status(500).json({ message: "Erro ao obter campos de nota fiscal" });
+    }
+  });
+
+  // PUT /api/clinic/invoice-fields — salva campos configurados
+  app.put("/api/clinic/invoice-fields", authenticateToken, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      const { fields } = req.body;
+      if (!Array.isArray(fields)) return res.status(400).json({ message: "fields deve ser um array" });
+      await storage.updateClinic(req.user!.clinicId, { invoiceFields: JSON.stringify(fields) });
+      return res.json({ fields });
+    } catch {
+      res.status(500).json({ message: "Erro ao salvar campos de nota fiscal" });
+    }
+  });
+
   const uploadLogo = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },

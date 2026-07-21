@@ -17,7 +17,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/api";
 import { formatDateBR } from "@/lib/date-formatter";
 import { User, Clinic } from "@/types";
-import { Settings, Plus, Edit, Pencil, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Settings, Plus, Edit, Pencil, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2, FileText } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ALL_INVOICE_FIELDS, DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
 
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -45,6 +47,9 @@ export default function SettingsPage() {
     address: "",
     logoUrl: "",
   });
+
+  // Invoice fields state
+  const [invoiceFields, setInvoiceFields] = useState<string[]>(DEFAULT_INVOICE_FIELDS);
 
   // WhatsApp multi-instance state
   type WppInstance = { id: string; label: string; instanceName: string; apiKey: string | null; connectedPhone: string | null; dentistIds: string[]; createdAt: string };
@@ -277,6 +282,44 @@ export default function SettingsPage() {
       ...f,
       dentistIds: f.dentistIds.includes(id) ? f.dentistIds.filter((d) => d !== id) : [...f.dentistIds, id],
     }));
+  };
+
+  // Invoice fields query
+  const { data: invoiceFieldsData } = useQuery<{ fields: string[] }>({
+    queryKey: ["/api/clinic/invoice-fields"],
+    enabled: currentUser?.role === "admin",
+    queryFn: async () => {
+      const res = await fetch("/api/clinic/invoice-fields", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
+      });
+      if (!res.ok) return { fields: DEFAULT_INVOICE_FIELDS };
+      return res.json();
+    },
+  });
+
+  // Sync invoice fields from server
+  useEffect(() => {
+    if (invoiceFieldsData?.fields) setInvoiceFields(invoiceFieldsData.fields);
+  }, [invoiceFieldsData]);
+
+  // Save invoice fields mutation
+  const saveInvoiceFieldsMutation = useMutation({
+    mutationFn: async (fields: string[]) => {
+      const res = await apiRequest("PUT", "/api/clinic/invoice-fields", { fields });
+      if (!res.ok) throw new Error("Erro ao salvar campos");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clinic/invoice-fields"] });
+      toast({ title: "Configuração salva", description: "Campos de nota fiscal atualizados com sucesso" });
+    },
+    onError: () => toast({ title: "Erro", description: "Não foi possível salvar os campos", variant: "destructive" }),
+  });
+
+  const toggleInvoiceField = (key: string) => {
+    setInvoiceFields((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
   };
 
   // Upload logo mutation
@@ -1030,6 +1073,61 @@ export default function SettingsPage() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+
+              {/* ── Nota Fiscal — Campos para Cópia Rápida ── */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <FileText className="h-5 w-5" />
+                    <span>Nota Fiscal — Campos para Cópia Rápida</span>
+                  </CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Selecione quais campos do paciente aparecerão na tela de cópia ágil (ícone <FileText className="inline h-3.5 w-3.5" /> na lista de pacientes)
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-5">
+                    {["Identificação", "Contato", "Endereço", "Responsável"].map((group) => {
+                      const groupFields = ALL_INVOICE_FIELDS.filter((f) => f.group === group);
+                      return (
+                        <div key={group}>
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{group}</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {groupFields.map((field) => (
+                              <label
+                                key={field.key}
+                                className="flex items-center gap-2.5 cursor-pointer group rounded-lg border px-3 py-2 hover:bg-gray-50 transition-colors"
+                              >
+                                <Checkbox
+                                  checked={invoiceFields.includes(field.key)}
+                                  onCheckedChange={() => toggleInvoiceField(field.key)}
+                                  id={`inv-${field.key}`}
+                                />
+                                <span className="text-sm text-gray-700 select-none">{field.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="pt-4 mt-4 border-t flex items-center gap-3">
+                    <Button
+                      onClick={() => saveInvoiceFieldsMutation.mutate(invoiceFields)}
+                      disabled={saveInvoiceFieldsMutation.isPending}
+                    >
+                      {saveInvoiceFieldsMutation.isPending ? "Salvando..." : "Salvar Configuração"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setInvoiceFields(DEFAULT_INVOICE_FIELDS)}
+                      className="text-gray-500"
+                    >
+                      Restaurar padrão
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </main>

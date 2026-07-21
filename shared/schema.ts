@@ -26,6 +26,8 @@ export const clinics = pgTable("clinics", {
   evolutionInstanceName: text("evolution_instance_name"),
   evolutionApiKey: text("evolution_api_key"),
   evolutionConnectedPhone: text("evolution_connected_phone"),
+  // Nota Fiscal — campos habilitados para cópia rápida (JSON array of field keys)
+  invoiceFields: text("invoice_fields"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

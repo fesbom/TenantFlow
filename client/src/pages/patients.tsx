@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
 import PatientModal from "@/components/modals/patient-modal";
+import InvoiceCopyModal, { DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
 import { Patient } from "@/types";
-import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User, FileText } from "lucide-react";
 import { formatDateBR } from "@/lib/date-formatter";
 
 interface PaginatedResponse {
@@ -33,6 +34,7 @@ export default function Patients() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [prefillData, setPrefillData] = useState<{ phone?: string; fullName?: string } | undefined>();
+  const [invoicePatient, setInvoicePatient] = useState<Patient | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -75,6 +77,19 @@ export default function Patients() {
 
   const patients = data?.data || [];
   const pagination = data?.pagination;
+
+  // Fetch invoice fields config
+  const { data: invoiceFieldsData } = useQuery<{ fields: string[] }>({
+    queryKey: ["/api/clinic/invoice-fields"],
+    queryFn: async () => {
+      const res = await fetch("/api/clinic/invoice-fields", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
+      });
+      if (!res.ok) return { fields: DEFAULT_INVOICE_FIELDS };
+      return res.json();
+    },
+  });
+  const activeInvoiceFields = invoiceFieldsData?.fields ?? DEFAULT_INVOICE_FIELDS;
 
   // Delete patient mutation
   const deletePatientMutation = useMutation({
@@ -236,6 +251,16 @@ export default function Patients() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  onClick={() => setInvoicePatient(patient)}
+                                  title="Cópia rápida para Nota Fiscal"
+                                  className="text-teal-600 hover:text-teal-700"
+                                  data-testid={`button-invoice-${patient.id}`}
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   onClick={() => handleEditPatient(patient)}
                                   data-testid={`button-edit-${patient.id}`}
                                 >
@@ -305,6 +330,16 @@ export default function Patients() {
         patient={selectedPatient}
         prefillData={!selectedPatient ? prefillData : undefined}
       />
+
+      {/* Invoice Copy Modal */}
+      {invoicePatient && (
+        <InvoiceCopyModal
+          isOpen={!!invoicePatient}
+          onClose={() => setInvoicePatient(null)}
+          patient={invoicePatient}
+          activeFields={activeInvoiceFields}
+        />
+      )}
     </div>
   );
 }
