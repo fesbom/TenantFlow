@@ -270,6 +270,7 @@ export const clinicHolidays = pgTable("clinic_holidays", {
   date: text("date").notNull(), // "YYYY-MM-DD"
   name: text("name").notNull(),
   type: text("type").default("holiday").notNull(), // 'holiday' | 'recess'
+  message: text("message"), // Custom WhatsApp blocking message (optional)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Clock, CalendarOff, Plus, Trash2, Save, Sun, Cloud, Moon } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { MessageSquare, Clock, CalendarOff, Plus, Trash2, Save, Sun, Cloud, Moon } from "lucide-react";
 import type { User } from "@/types";
 import type { DentistSchedule, ClinicHoliday } from "@shared/schema";
 
@@ -127,6 +128,7 @@ export default function Availability() {
   const [holidayDate, setHolidayDate] = useState("");
   const [holidayName, setHolidayName] = useState("");
   const [holidayType, setHolidayType] = useState<"holiday" | "recess">("holiday");
+  const [holidayMessage, setHolidayMessage] = useState("");
   const [deleteHolidayId, setDeleteHolidayId] = useState<string | null>(null);
 
   // ── Fetch dentists ──
@@ -189,12 +191,14 @@ export default function Availability() {
         date: holidayDate,
         name: holidayName,
         type: holidayType,
+        message: holidayMessage.trim() || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/availability/holidays"] });
       setHolidayDate("");
       setHolidayName("");
       setHolidayType("holiday");
+      setHolidayMessage("");
       toast({ title: "Feriado/Recesso cadastrado" });
     },
     onError: () => toast({ title: "Erro ao cadastrar feriado", variant: "destructive" }),
@@ -402,30 +406,30 @@ export default function Availability() {
             <CardContent className="space-y-4">
 
               {/* Add holiday form */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                <div className="sm:col-span-1">
-                  <Label className="text-xs mb-1 block text-gray-500">Data</Label>
-                  <Input
-                    type="date"
-                    value={holidayDate}
-                    onChange={(e) => setHolidayDate(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <Label className="text-xs mb-1 block text-gray-500">Nome</Label>
-                  <Input
-                    placeholder="Ex: Natal, Recesso de Julho..."
-                    value={holidayName}
-                    onChange={(e) => setHolidayName(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                </div>
-                <div className="sm:col-span-1">
-                  <Label className="text-xs mb-1 block text-gray-500">Tipo</Label>
-                  <div className="flex gap-2">
+              <div className="flex flex-col gap-3 p-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="sm:col-span-1">
+                    <Label className="text-xs mb-1 block text-gray-500">Data</Label>
+                    <Input
+                      type="date"
+                      value={holidayDate}
+                      onChange={(e) => setHolidayDate(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs mb-1 block text-gray-500">Nome</Label>
+                    <Input
+                      placeholder="Ex: Natal, Recesso de Julho..."
+                      value={holidayName}
+                      onChange={(e) => setHolidayName(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <Label className="text-xs mb-1 block text-gray-500">Tipo</Label>
                     <Select value={holidayType} onValueChange={(v) => setHolidayType(v as "holiday" | "recess")}>
-                      <SelectTrigger className="h-9 text-sm flex-1">
+                      <SelectTrigger className="h-9 text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -433,15 +437,33 @@ export default function Availability() {
                         <SelectItem value="recess">Recesso</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button
-                      size="sm"
-                      onClick={() => addHolidayMutation.mutate()}
-                      disabled={!holidayDate || !holidayName || addHolidayMutation.isPending}
-                      className="h-9 px-3"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
                   </div>
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block text-gray-500 flex items-center gap-1">
+                    <MessageSquare className="h-3 w-3" />
+                    Mensagem personalizada para o WhatsApp
+                    <span className="text-gray-400">(opcional)</span>
+                  </Label>
+                  <Textarea
+                    placeholder="Ex: Olá! No dia X a clínica estará fechada devido ao feriado Y. Ficamos à disposição nos próximos dias úteis!"
+                    value={holidayMessage}
+                    onChange={(e) => setHolidayMessage(e.target.value)}
+                    className="text-sm resize-none"
+                    rows={2}
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">Se preenchida, a IA usará exatamente esta mensagem ao bloquear agendamentos nesta data. Sugestões de horários disponíveis serão adicionadas automaticamente ao final.</p>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={() => addHolidayMutation.mutate()}
+                    disabled={!holidayDate || !holidayName || addHolidayMutation.isPending}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar
+                  </Button>
                 </div>
               </div>
 
@@ -456,26 +478,39 @@ export default function Availability() {
                     return (
                       <div
                         key={h.id}
-                        className="flex items-center justify-between px-4 py-3 rounded-lg border bg-white hover:bg-gray-50 transition-colors"
+                        className="flex items-start justify-between px-4 py-3 rounded-lg border bg-white hover:bg-gray-50 transition-colors gap-3"
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-gray-800">{dateFormatted}</span>
-                          <span className="text-sm text-gray-600">{h.name}</span>
-                          <Badge
-                            variant="secondary"
-                            className={
-                              h.type === "holiday"
-                                ? "bg-red-50 text-red-700 border-red-200"
-                                : "bg-amber-50 text-amber-700 border-amber-200"
-                            }
-                          >
-                            {h.type === "holiday" ? "Feriado" : "Recesso"}
-                          </Badge>
+                        <div className="flex flex-col gap-1 flex-1 min-w-0">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-sm font-medium text-gray-800">{dateFormatted}</span>
+                            <span className="text-sm text-gray-600">{h.name}</span>
+                            <Badge
+                              variant="secondary"
+                              className={
+                                h.type === "holiday"
+                                  ? "bg-red-50 text-red-700 border-red-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }
+                            >
+                              {h.type === "holiday" ? "Feriado" : "Recesso"}
+                            </Badge>
+                            {(h as any).message && (
+                              <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 gap-1">
+                                <MessageSquare className="h-3 w-3" />
+                                Mensagem configurada
+                              </Badge>
+                            )}
+                          </div>
+                          {(h as any).message && (
+                            <p className="text-xs text-gray-500 italic truncate max-w-xl">
+                              "{(h as any).message}"
+                            </p>
+                          )}
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
                           onClick={() => setDeleteHolidayId(h.id)}
                         >
                           <Trash2 className="h-4 w-4" />

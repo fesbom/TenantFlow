@@ -2820,7 +2820,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: AuthenticatedRequest, res) => {
       try {
         const clinicId = req.user!.clinicId;
-        const { date, name, type } = req.body;
+        const { date, name, type, message } = req.body;
         if (!date || !name) {
           return res.status(400).json({ message: "date e name são obrigatórios" });
         }
@@ -2829,6 +2829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           date,
           name,
           type: type || "holiday",
+          message: message || null,
         });
         res.status(201).json(holiday);
       } catch (error) {
@@ -3166,9 +3167,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   "Paciente";
 
                 // ── VALIDAÇÃO 1: Verificar se a data é feriado ou recesso ──
-                const isHolidayDate = await storage.isHoliday(clinicId, date);
-                if (isHolidayDate) {
-                  console.log(`[AGENDA] Data ${date} é feriado/recesso — bloqueando agendamento`);
+                const holidayRecord = await storage.getHolidayForDate(clinicId, date);
+                if (holidayRecord) {
+                  console.log(`[AGENDA] Data ${date} é feriado/recesso (${holidayRecord.name}) — bloqueando agendamento`);
                   const slotsNextDay: string[] = [];
                   for (let d = 1; d <= 5; d++) {
                     const next = new Date(`${date}T00:00:00`);
@@ -3185,7 +3186,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     if (slotsNextDay.length >= 2) break;
                   }
                   const suggestText = slotsNextDay.length > 0 ? ` Que tal: ${slotsNextDay.join("; ")}?` : "";
-                  aiResponse.message = `Olá ${displayName}! O dia ${toDateBR(date)} é feriado ou recesso e nossa clínica não estará aberta.${suggestText}`;
+                  // Use custom message if configured, otherwise use the default
+                  if (holidayRecord.message) {
+                    aiResponse.message = `${holidayRecord.message}${suggestText}`;
+                  } else {
+                    aiResponse.message = `Olá ${displayName}! O dia ${toDateBR(date)} é feriado ou recesso (${holidayRecord.name}) e nossa clínica não estará aberta.${suggestText}`;
+                  }
                   aiResponse.extractedIntent.intent = "conversar";
                 } else {
 

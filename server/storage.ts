@@ -1195,6 +1195,15 @@ export class DatabaseStorage implements IStorage {
     return !!row;
   }
 
+  async getHolidayForDate(clinicId: string, date: string): Promise<ClinicHoliday | null> {
+    const [row] = await db
+      .select()
+      .from(clinicHolidays)
+      .where(and(eq(clinicHolidays.clinicId, clinicId), eq(clinicHolidays.date, date)))
+      .limit(1);
+    return row ?? null;
+  }
+
   // ─────────────────────────────────────────────────────────────────────
   // AVAILABILITY: generate slots respecting schedule grid + holidays
   // ─────────────────────────────────────────────────────────────────────
