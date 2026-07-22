@@ -1,15 +1,16 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
-  startOfWeek, endOfWeek, addDays, format, isSameDay,
-  addWeeks, subWeeks, addDays as add, parseISO
+  startOfWeek, addDays, format, isSameDay,
+  addWeeks, subWeeks, addDays as add,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Printer, ChevronLeft, ChevronRight } from "lucide-react";
+import { Printer, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { Appointment, Patient, User } from "@/types";
 
 const fetchWithAuth = (url: string) =>
@@ -22,9 +23,15 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelado",
 };
 
-function fmtTime(date: Date | string) {
+// Mesma lógica da visão normal: trata o UTC do banco como horário local (sem conversão)
+function toLocalDate(date: Date | string): Date {
   const d = typeof date === "string" ? new Date(date) : date;
-  return format(d, "HH:mm");
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes());
+}
+
+function fmtTime(date: Date | string) {
+  const local = toLocalDate(date);
+  return format(local, "HH:mm");
 }
 
 function fmtDate(date: Date) {
@@ -36,6 +43,7 @@ function capitalizeFirst(s: string) {
 }
 
 export default function PrintSchedule() {
+  const [, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [view, setView] = useState<"daily" | "weekly">("daily");
@@ -99,8 +107,9 @@ export default function PrintSchedule() {
       );
   }, [appointments, selectedDentist, hideCancel]);
 
+  // Usa UTC como local (mesma regra da visão normal)
   const dailyAppts = useMemo(
-    () => filtered.filter((a) => isSameDay(new Date(a.scheduledDate), selectedDate)),
+    () => filtered.filter((a) => isSameDay(toLocalDate(a.scheduledDate), selectedDate)),
     [filtered, selectedDate],
   );
 
@@ -108,7 +117,7 @@ export default function PrintSchedule() {
     const map = new Map<string, Appointment[]>();
     weekDays.forEach((d) => map.set(format(d, "yyyy-MM-dd"), []));
     filtered.forEach((a) => {
-      const key = format(new Date(a.scheduledDate), "yyyy-MM-dd");
+      const key = format(toLocalDate(a.scheduledDate), "yyyy-MM-dd");
       if (map.has(key)) map.get(key)!.push(a);
     });
     return map;
@@ -173,6 +182,12 @@ export default function PrintSchedule() {
           <main className="p-4 lg:p-6 flex-grow">
             {/* ── Toolbar ── */}
             <div className="no-print flex flex-wrap items-center gap-3 mb-6 p-4 bg-white rounded-lg border">
+              {/* Back button */}
+              <Button variant="ghost" size="sm" onClick={() => navigate("/appointments")} className="gap-2 text-gray-600">
+                <ArrowLeft className="h-4 w-4" />
+                Voltar à Agenda
+              </Button>
+              <div className="w-px h-6 bg-gray-200" />
               {/* View */}
               <Select value={view} onValueChange={(v) => setView(v as "daily" | "weekly")}>
                 <SelectTrigger className="w-36">
