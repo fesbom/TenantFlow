@@ -20,10 +20,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, Clock, CalendarOff, Plus, Trash2, Save, Sun, Cloud, Moon } from "lucide-react";
+import { MessageSquare, Clock, CalendarOff, Plus, Trash2, Save, Sun, Cloud, Moon, Pencil } from "lucide-react";
 import type { User } from "@/types";
 import type { DentistSchedule, ClinicHoliday } from "@shared/schema";
 
@@ -126,10 +133,18 @@ export default function Availability() {
   const [grid, setGrid] = useState<ScheduleGrid>(buildEmptyGrid());
   const [gridDirty, setGridDirty] = useState(false);
   const [holidayDate, setHolidayDate] = useState("");
+  const [holidayEndDate, setHolidayEndDate] = useState("");
   const [holidayName, setHolidayName] = useState("");
   const [holidayType, setHolidayType] = useState<"holiday" | "recess">("holiday");
   const [holidayMessage, setHolidayMessage] = useState("");
   const [deleteHolidayId, setDeleteHolidayId] = useState<string | null>(null);
+  // Edit modal state
+  const [editingHoliday, setEditingHoliday] = useState<ClinicHoliday | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState<"holiday" | "recess">("holiday");
+  const [editMessage, setEditMessage] = useState("");
 
   // ── Fetch dentists ──
   const { data: users = [] } = useQuery<User[]>({ queryKey: ["/api/users"] });
@@ -189,6 +204,7 @@ export default function Availability() {
     mutationFn: async () =>
       apiRequest("POST", "/api/availability/holidays", {
         date: holidayDate,
+        endDate: holidayType === "recess" && holidayEndDate ? holidayEndDate : null,
         name: holidayName,
         type: holidayType,
         message: holidayMessage.trim() || null,
@@ -196,6 +212,7 @@ export default function Availability() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/availability/holidays"] });
       setHolidayDate("");
+      setHolidayEndDate("");
       setHolidayName("");
       setHolidayType("holiday");
       setHolidayMessage("");
@@ -203,6 +220,32 @@ export default function Availability() {
     },
     onError: () => toast({ title: "Erro ao cadastrar feriado", variant: "destructive" }),
   });
+
+  const updateHolidayMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest("PATCH", `/api/availability/holidays/${editingHoliday!.id}`, {
+        date: editDate,
+        endDate: editType === "recess" && editEndDate ? editEndDate : null,
+        name: editName,
+        type: editType,
+        message: editMessage.trim() || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/availability/holidays"] });
+      setEditingHoliday(null);
+      toast({ title: "Feriado/Recesso atualizado" });
+    },
+    onError: () => toast({ title: "Erro ao atualizar feriado", variant: "destructive" }),
+  });
+
+  function openEdit(h: ClinicHoliday) {
+    setEditingHoliday(h);
+    setEditDate(h.date);
+    setEditEndDate((h as any).endDate ?? "");
+    setEditName(h.name);
+    setEditType(h.type as "holiday" | "recess");
+    setEditMessage((h as any).message ?? "");
+  }
 
   const deleteHolidayMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/availability/holidays/${id}`, {}),
@@ -408,8 +451,8 @@ export default function Availability() {
               {/* Add holiday form */}
               <div className="flex flex-col gap-3 p-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div className="sm:col-span-1">
-                    <Label className="text-xs mb-1 block text-gray-500">Data</Label>
+                  <div>
+                    <Label className="text-xs mb-1 block text-gray-500">Data{holidayType === "recess" ? " início" : ""}</Label>
                     <Input
                       type="date"
                       value={holidayDate}
@@ -417,7 +460,19 @@ export default function Availability() {
                       className="h-9 text-sm"
                     />
                   </div>
-                  <div className="sm:col-span-2">
+                  {holidayType === "recess" && (
+                    <div>
+                      <Label className="text-xs mb-1 block text-gray-500">Data fim</Label>
+                      <Input
+                        type="date"
+                        value={holidayEndDate}
+                        min={holidayDate}
+                        onChange={(e) => setHolidayEndDate(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  )}
+                  <div className={holidayType === "recess" ? "sm:col-span-1" : "sm:col-span-2"}>
                     <Label className="text-xs mb-1 block text-gray-500">Nome</Label>
                     <Input
                       placeholder="Ex: Natal, Recesso de Julho..."
@@ -426,9 +481,9 @@ export default function Availability() {
                       className="h-9 text-sm"
                     />
                   </div>
-                  <div className="sm:col-span-1">
+                  <div>
                     <Label className="text-xs mb-1 block text-gray-500">Tipo</Label>
-                    <Select value={holidayType} onValueChange={(v) => setHolidayType(v as "holiday" | "recess")}>
+                    <Select value={holidayType} onValueChange={(v) => { setHolidayType(v as "holiday" | "recess"); if (v === "holiday") setHolidayEndDate(""); }}>
                       <SelectTrigger className="h-9 text-sm">
                         <SelectValue />
                       </SelectTrigger>
@@ -440,7 +495,7 @@ export default function Availability() {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block text-gray-500 flex items-center gap-1">
+                  <Label className="text-xs mb-1 flex items-center gap-1 text-gray-500">
                     <MessageSquare className="h-3 w-3" />
                     Mensagem personalizada para o WhatsApp
                     <span className="text-gray-400">(opcional)</span>
@@ -452,7 +507,7 @@ export default function Availability() {
                     className="text-sm resize-none"
                     rows={2}
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">Se preenchida, a IA usará exatamente esta mensagem ao bloquear agendamentos nesta data. Sugestões de horários disponíveis serão adicionadas automaticamente ao final.</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Se preenchida, a IA usará exatamente esta mensagem. Sugestões de horários disponíveis são adicionadas automaticamente ao final.</p>
                 </div>
                 <div className="flex justify-end">
                   <Button
@@ -475,6 +530,9 @@ export default function Availability() {
                   {holidays.map((h) => {
                     const [y, m, d] = h.date.split("-");
                     const dateFormatted = `${d}/${m}/${y}`;
+                    const endDateFormatted = (h as any).endDate
+                      ? (() => { const [ey, em, ed] = (h as any).endDate.split("-"); return `${ed}/${em}/${ey}`; })()
+                      : null;
                     return (
                       <div
                         key={h.id}
@@ -482,7 +540,9 @@ export default function Availability() {
                       >
                         <div className="flex flex-col gap-1 flex-1 min-w-0">
                           <div className="flex items-center gap-3 flex-wrap">
-                            <span className="text-sm font-medium text-gray-800">{dateFormatted}</span>
+                            <span className="text-sm font-medium text-gray-800">
+                              {endDateFormatted ? `${dateFormatted} → ${endDateFormatted}` : dateFormatted}
+                            </span>
                             <span className="text-sm text-gray-600">{h.name}</span>
                             <Badge
                               variant="secondary"
@@ -507,14 +567,24 @@ export default function Availability() {
                             </p>
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
-                          onClick={() => setDeleteHolidayId(h.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => openEdit(h)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => setDeleteHolidayId(h.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
@@ -524,6 +594,73 @@ export default function Availability() {
           </Card>
         </main>
       </div>
+
+      {/* Edit holiday dialog */}
+      <Dialog open={!!editingHoliday} onOpenChange={(open) => !open && setEditingHoliday(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4" />
+              Editar Feriado / Recesso
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs mb-1 block text-gray-500">Data{editType === "recess" ? " início" : ""}</Label>
+                <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-9 text-sm" />
+              </div>
+              {editType === "recess" && (
+                <div>
+                  <Label className="text-xs mb-1 block text-gray-500">Data fim</Label>
+                  <Input type="date" value={editEndDate} min={editDate} onChange={(e) => setEditEndDate(e.target.value)} className="h-9 text-sm" />
+                </div>
+              )}
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block text-gray-500">Nome</Label>
+              <Input placeholder="Ex: Natal, Recesso de Julho..." value={editName} onChange={(e) => setEditName(e.target.value)} className="h-9 text-sm" />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block text-gray-500">Tipo</Label>
+              <Select value={editType} onValueChange={(v) => { setEditType(v as "holiday" | "recess"); if (v === "holiday") setEditEndDate(""); }}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="holiday">Feriado</SelectItem>
+                  <SelectItem value="recess">Recesso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs mb-1 flex items-center gap-1 text-gray-500">
+                <MessageSquare className="h-3 w-3" />
+                Mensagem personalizada para o WhatsApp
+                <span className="text-gray-400">(opcional)</span>
+              </Label>
+              <Textarea
+                placeholder="Ex: Olá! No dia X a clínica estará fechada devido ao feriado Y..."
+                value={editMessage}
+                onChange={(e) => setEditMessage(e.target.value)}
+                className="text-sm resize-none"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingHoliday(null)}>Cancelar</Button>
+            <Button
+              onClick={() => updateHolidayMutation.mutate()}
+              disabled={!editDate || !editName || updateHolidayMutation.isPending}
+              className="gap-2"
+            >
+              <Save className="h-4 w-4" />
+              Salvar alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirm delete dialog */}
       <AlertDialog open={!!deleteHolidayId} onOpenChange={(open) => !open && setDeleteHolidayId(null)}>

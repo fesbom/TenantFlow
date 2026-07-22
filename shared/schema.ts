@@ -267,7 +267,8 @@ export const dentistSchedules = pgTable(
 export const clinicHolidays = pgTable("clinic_holidays", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
-  date: text("date").notNull(), // "YYYY-MM-DD"
+  date: text("date").notNull(), // "YYYY-MM-DD" — start date
+  endDate: text("end_date"), // "YYYY-MM-DD" — end date for multi-day recessos (optional)
   name: text("name").notNull(),
   type: text("type").default("holiday").notNull(), // 'holiday' | 'recess'
   message: text("message"), // Custom WhatsApp blocking message (optional)

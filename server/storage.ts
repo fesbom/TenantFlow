@@ -1187,21 +1187,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async isHoliday(clinicId: string, date: string): Promise<boolean> {
-    const [row] = await db
-      .select({ id: clinicHolidays.id })
-      .from(clinicHolidays)
-      .where(and(eq(clinicHolidays.clinicId, clinicId), eq(clinicHolidays.date, date)))
-      .limit(1);
+    const row = await this.getHolidayForDate(clinicId, date);
     return !!row;
   }
 
   async getHolidayForDate(clinicId: string, date: string): Promise<ClinicHoliday | null> {
-    const [row] = await db
+    // Fetch all holidays for the clinic and check if date falls within range
+    const rows = await db
       .select()
       .from(clinicHolidays)
-      .where(and(eq(clinicHolidays.clinicId, clinicId), eq(clinicHolidays.date, date)))
-      .limit(1);
-    return row ?? null;
+      .where(eq(clinicHolidays.clinicId, clinicId));
+    const found = rows.find((h) => {
+      if (h.endDate) {
+        return date >= h.date && date <= h.endDate;
+      }
+      return h.date === date;
+    });
+    return found ?? null;
+  }
+
+  async updateClinicHoliday(id: string, clinicId: string, data: Partial<{ name: string; date: string; endDate: string | null; type: string; message: string | null }>): Promise<ClinicHoliday | null> {
+    const [updated] = await db
+      .update(clinicHolidays)
+      .set(data)
+      .where(and(eq(clinicHolidays.id, id), eq(clinicHolidays.clinicId, clinicId)))
+      .returning();
+    return updated ?? null;
   }
 
   // ─────────────────────────────────────────────────────────────────────

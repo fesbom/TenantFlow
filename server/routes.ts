@@ -2820,18 +2820,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: AuthenticatedRequest, res) => {
       try {
         const clinicId = req.user!.clinicId;
-        const { date, name, type, message } = req.body;
+        const { date, endDate, name, type, message } = req.body;
         if (!date || !name) {
           return res.status(400).json({ message: "date e name são obrigatórios" });
         }
         const holiday = await storage.createClinicHoliday({
           clinicId,
           date,
+          endDate: endDate || null,
           name,
           type: type || "holiday",
           message: message || null,
         });
         res.status(201).json(holiday);
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // PATCH /api/availability/holidays/:id — editar feriado/recesso
+  app.patch(
+    "/api/availability/holidays/:id",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { id } = req.params;
+        const clinicId = req.user!.clinicId;
+        const { date, endDate, name, type, message } = req.body;
+        if (!date || !name) {
+          return res.status(400).json({ message: "date e name são obrigatórios" });
+        }
+        const updated = await storage.updateClinicHoliday(id, clinicId, {
+          date,
+          endDate: endDate || null,
+          name,
+          type: type || "holiday",
+          message: message || null,
+        });
+        if (!updated) return res.status(404).json({ message: "Feriado não encontrado" });
+        res.json(updated);
       } catch (error) {
         res.status(500).json({ message: "Internal server error" });
       }
