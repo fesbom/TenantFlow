@@ -176,10 +176,13 @@ export async function generateQRCodeForClinic(
 
   try {
     const createUrl = `${config.evoUrl}/instance/create`;
+    console.log(`[Evolution] POST ${createUrl} — instance: ${config.instanceName}`);
     const createResp = await axios.post(createUrl, createBody, {
       headers: { apikey: config.evoKey, "Content-Type": "application/json" },
       timeout: 30000,
     });
+
+    console.log(`[Evolution] /instance/create response:`, JSON.stringify(createResp.data).substring(0, 500));
 
     const state =
       createResp.data?.instance?.state ||
@@ -190,14 +193,20 @@ export async function generateQRCodeForClinic(
     const qr =
       createResp.data?.qrcode?.base64 ||
       createResp.data?.base64 ||
-      createResp.data?.qrcode;
+      createResp.data?.qrcode ||
+      createResp.data?.instance?.qrcode?.base64;
 
-    if (qr && typeof qr === "string" && qr.length > 100)
+    if (qr && typeof qr === "string" && qr.length > 100) {
+      console.log(`[Evolution] QR code obtido via /instance/create (tamanho: ${qr.length})`);
       return { success: true, qrCode: qr, status: state };
+    }
 
-    if (state === "open" || state === "connected")
+    if (state === "open" || state === "connected") {
+      console.log(`[Evolution] Instância já conectada (state: ${state})`);
       return { success: true, status: "connected" };
+    }
 
+    console.log(`[Evolution] QR não encontrado no create (state: ${state}), tentando /instance/connect`);
     // Fallback: hit /instance/connect
     return await fetchQRFromConnect(config);
   } catch (err: any) {
@@ -208,10 +217,14 @@ export async function generateQRCodeForClinic(
       err.message ||
       "";
 
+    console.log(`[Evolution] Erro no /instance/create — HTTP ${status}: ${msg}`);
+    console.log(`[Evolution] Raw error data:`, JSON.stringify(err.response?.data || {}).substring(0, 300));
+
     if (status === 403 || msg.toLowerCase().includes("already") || msg.toLowerCase().includes("in use")) {
+      console.log(`[Evolution] Instância já existe, tentando /instance/connect`);
       return await fetchQRFromConnect(config);
     }
-    return { success: false, error: msg };
+    return { success: false, error: msg || "Erro ao comunicar com a Evolution API" };
   }
 }
 
@@ -220,22 +233,35 @@ async function fetchQRFromConnect(
 ): Promise<EvolutionInstanceResult> {
   try {
     const connectUrl = `${config.evoUrl}/instance/connect/${config.instanceName}`;
+    console.log(`[Evolution] GET ${connectUrl}`);
     const resp = await axios.get(connectUrl, {
       headers: { apikey: config.evoKey },
       timeout: 30000,
     });
 
-    const qr = resp.data?.base64 || resp.data?.qrcode?.base64;
+    console.log(`[Evolution] /instance/connect response:`, JSON.stringify(resp.data).substring(0, 500));
+
+    const qr =
+      resp.data?.base64 ||
+      resp.data?.qrcode?.base64 ||
+      resp.data?.code ||
+      resp.data?.pairingCode;
     const state = resp.data?.instance?.state || resp.data?.state || "unknown";
 
-    if (qr && typeof qr === "string" && qr.length > 100)
+    if (qr && typeof qr === "string" && qr.length > 100) {
+      console.log(`[Evolution] QR code obtido via /instance/connect (tamanho: ${qr.length})`);
       return { success: true, qrCode: qr, status: state };
+    }
 
-    if (state === "open" || state === "connected")
+    if (state === "open" || state === "connected") {
+      console.log(`[Evolution] Instância já conectada via /instance/connect`);
       return { success: true, status: "connected" };
+    }
 
-    return { success: true, status: state, rawResponse: resp.data };
+    console.log(`[Evolution] QR não encontrado em /instance/connect. State: ${state}. Dados:`, JSON.stringify(resp.data).substring(0, 200));
+    return { success: false, error: `Não foi possível obter o QR code (state: ${state}). Verifique se a instância existe na Evolution API.`, status: state, rawResponse: resp.data };
   } catch (err: any) {
+    console.log(`[Evolution] Erro em /instance/connect:`, err.message);
     return { success: false, error: err.message };
   }
 }

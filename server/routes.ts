@@ -3660,8 +3660,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Evolution API não configurada no servidor" });
       }
       const result = await generateQRCodeForClinic(cfg);
+      if (!result.success && !result.qrCode && result.status !== "connected") {
+        return res.status(502).json({ message: result.error || "Não foi possível obter o QR code da Evolution API" });
+      }
       return res.json(result);
     } catch (err: any) {
+      console.error("[connect] Erro inesperado:", err);
       res.status(500).json({ message: "Erro ao gerar QR code" });
     }
   });
