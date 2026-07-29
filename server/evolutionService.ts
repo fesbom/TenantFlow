@@ -1,6 +1,6 @@
 import axios from "axios";
 
-function sanitizeUrl(url: string | undefined): string {
+export function sanitizeUrl(url: string | undefined): string {
   if (!url) return "";
   let sanitized = url.trim();
   while (sanitized.endsWith("/")) sanitized = sanitized.slice(0, -1);

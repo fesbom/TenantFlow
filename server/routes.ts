@@ -57,6 +57,7 @@ import {
   getEvolutionInstanceStatus,
   generateQRCodeForClinic,
   type ClinicEvolutionConfig,
+  sanitizeUrl,
 } from "./evolutionService";
 import type { InstanceContext } from "./whatsappAI";
 
@@ -3625,7 +3626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Instância não encontrada" });
       }
       const cfg: ClinicEvolutionConfig = {
-        evoUrl: (process.env.EVO_URL || "").trim(),
+        evoUrl: sanitizeUrl(process.env.EVO_URL || ""),
         evoKey: (instance.apiKey || process.env.EVO_KEY || "").trim(),
         instanceName: instance.instanceName,
       };
@@ -3652,7 +3653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Instância não encontrada" });
       }
       const cfg: ClinicEvolutionConfig = {
-        evoUrl: (process.env.EVO_URL || "").trim(),
+        evoUrl: sanitizeUrl(process.env.EVO_URL || ""),
         evoKey: (instance.apiKey || process.env.EVO_KEY || "").trim(),
         instanceName: instance.instanceName,
       };
