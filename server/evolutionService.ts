@@ -107,48 +107,92 @@ export async function getEvolutionInstanceStatus(
   if (!config.evoUrl || !config.evoKey || !config.instanceName) {
     return { connected: false, status: "not_configured" };
   }
+
+  // Try direct connectionState endpoint first (faster and more reliable)
   try {
-    const url = `${config.evoUrl}/instance/fetchInstances`;
-    const response = await axios.get(url, {
+    const stateUrl = `${config.evoUrl}/instance/connectionState/${config.instanceName}`;
+    const stateResp = await axios.get(stateUrl, {
       headers: { apikey: config.evoKey },
       timeout: 10000,
     });
 
-    const instances: any[] = Array.isArray(response.data) ? response.data : [];
-    const found = instances.find(
-      (i: any) =>
-        (i.name || i.instanceName || i.instance?.instanceName || "").toLowerCase() ===
-        config.instanceName.toLowerCase(),
-    );
-
-    if (!found) return { connected: false, status: "not_found" };
-
+    const d = stateResp.data;
     const state =
-      found.connectionStatus ||
-      found.instance?.state ||
-      found.state ||
-      found.status ||
+      d?.instance?.state ||
+      d?.state ||
+      d?.connectionStatus ||
+      d?.status ||
       "unknown";
 
-    const isConnected =
-      state === "open" || state === "connected" || state === "CONNECTED";
+    const isConnected = state === "open" || state === "connected" || state === "CONNECTED";
 
-    const phone =
-      found.ownerJid?.split("@")[0] ||
-      found.instance?.ownerJid?.split("@")[0] ||
-      found.profileJid?.split("@")[0] ||
-      found.number ||
-      undefined;
+    if (isConnected) {
+      // Fetch phone from fetchInstances when connected
+      try {
+        const listUrl = `${config.evoUrl}/instance/fetchInstances`;
+        const listResp = await axios.get(listUrl, {
+          headers: { apikey: config.evoKey },
+          timeout: 10000,
+        });
+        const instances: any[] = Array.isArray(listResp.data) ? listResp.data : [];
+        const found = instances.find(
+          (i: any) =>
+            (i.name || i.instanceName || i.instance?.instanceName || "").toLowerCase() ===
+            config.instanceName.toLowerCase(),
+        );
+        const phone =
+          found?.ownerJid?.split("@")[0] ||
+          found?.instance?.ownerJid?.split("@")[0] ||
+          found?.profileJid?.split("@")[0] ||
+          found?.number ||
+          undefined;
+        return {
+          connected: true,
+          phone: phone?.replace(/\D/g, "") || undefined,
+          profileName: found?.profileName || found?.instance?.profileName,
+          status: state,
+        };
+      } catch (_) {
+        return { connected: true, status: state };
+      }
+    }
 
-    return {
-      connected: isConnected,
-      phone: phone?.replace(/\D/g, "") || undefined,
-      profileName: found.profileName || found.instance?.profileName,
-      status: state,
-    };
+    return { connected: false, status: state };
   } catch (error: any) {
-    console.warn(`⚠️ [Evolution] Erro ao buscar status de ${config.instanceName}:`, error.message);
-    return { connected: false, status: "error" };
+    console.warn(`⚠️ [Evolution] Erro ao buscar connectionState de ${config.instanceName}:`, error.message);
+    // Fallback to fetchInstances
+    try {
+      const url = `${config.evoUrl}/instance/fetchInstances`;
+      const response = await axios.get(url, {
+        headers: { apikey: config.evoKey },
+        timeout: 10000,
+      });
+      const instances: any[] = Array.isArray(response.data) ? response.data : [];
+      const found = instances.find(
+        (i: any) =>
+          (i.name || i.instanceName || i.instance?.instanceName || "").toLowerCase() ===
+          config.instanceName.toLowerCase(),
+      );
+      if (!found) return { connected: false, status: "not_found" };
+      const state =
+        found.connectionStatus || found.instance?.state || found.state || found.status || "unknown";
+      const isConnected = state === "open" || state === "connected" || state === "CONNECTED";
+      const phone =
+        found.ownerJid?.split("@")[0] ||
+        found.instance?.ownerJid?.split("@")[0] ||
+        found.profileJid?.split("@")[0] ||
+        found.number ||
+        undefined;
+      return {
+        connected: isConnected,
+        phone: phone?.replace(/\D/g, "") || undefined,
+        profileName: found.profileName || found.instance?.profileName,
+        status: state,
+      };
+    } catch (e: any) {
+      console.warn(`⚠️ [Evolution] Fallback fetchInstances também falhou:`, e.message);
+      return { connected: false, status: "error" };
+    }
   }
 }
 
@@ -160,7 +204,13 @@ export async function generateQRCodeForClinic(
     return { success: false, error: "Evolution API não configurada para esta clínica" };
   }
 
-  const createBody = {
+  const webhookUrl = WEBHOOK_GLOBAL_URL
+    ? (WEBHOOK_GLOBAL_URL.endsWith("/webhook/evolution")
+        ? WEBHOOK_GLOBAL_URL
+        : `${WEBHOOK_GLOBAL_URL}/webhook/evolution`)
+    : "";
+
+  const createBody: Record<string, any> = {
     instanceName: config.instanceName,
     token: config.instanceName,
     qrcode: true,
@@ -173,6 +223,16 @@ export async function generateQRCodeForClinic(
       alwaysOnline: false,
     },
   };
+
+  if (webhookUrl) {
+    createBody.webhook = {
+      url: webhookUrl,
+      byEvents: false,
+      base64: true,
+      events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+    };
+    console.log(`[Evolution] Webhook configurado: ${webhookUrl}`);
+  }
 
   try {
     const createUrl = `${config.evoUrl}/instance/create`;
@@ -228,9 +288,39 @@ export async function generateQRCodeForClinic(
   }
 }
 
+async function configureWebhookForInstance(config: ClinicEvolutionConfig): Promise<void> {
+  const webhookUrl = WEBHOOK_GLOBAL_URL
+    ? (WEBHOOK_GLOBAL_URL.endsWith("/webhook/evolution")
+        ? WEBHOOK_GLOBAL_URL
+        : `${WEBHOOK_GLOBAL_URL}/webhook/evolution`)
+    : "";
+  if (!webhookUrl) return;
+  try {
+    await axios.post(
+      `${config.evoUrl}/webhook/set/${config.instanceName}`,
+      {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          byEvents: false,
+          base64: true,
+          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+        },
+      },
+      { headers: { apikey: config.evoKey, "Content-Type": "application/json" }, timeout: 10000 },
+    );
+    console.log(`[Evolution] Webhook configurado em instância existente: ${config.instanceName}`);
+  } catch (e: any) {
+    console.warn(`[Evolution] Aviso: falha ao configurar webhook — ${e.message}`);
+  }
+}
+
 async function fetchQRFromConnect(
   config: ClinicEvolutionConfig,
 ): Promise<EvolutionInstanceResult> {
+  // Ensure webhook is set for existing instances
+  await configureWebhookForInstance(config);
+
   try {
     const connectUrl = `${config.evoUrl}/instance/connect/${config.instanceName}`;
     console.log(`[Evolution] GET ${connectUrl}`);

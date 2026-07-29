@@ -254,28 +254,37 @@ export default function SettingsPage() {
     onError: (e: any) => toast({ title: "Erro ao conectar", description: e.message, variant: "destructive" }),
   });
 
-  // Poll connection status while QR is shown (every 3s, up to 90s)
+  // Poll connection status while QR is shown (every 4s, up to 120s)
   useEffect(() => {
     if (!qrState || qrState.status !== "scan") return;
+    const instanceId = qrState.instanceId;
     let attempts = 0;
-    const maxAttempts = 30; // 30 × 3s = 90s
+    const maxAttempts = 30;
+    const token = localStorage.getItem("dental_token");
+
     const interval = setInterval(async () => {
       attempts++;
       try {
-        const res = await apiRequest("GET", `/api/whatsapp/instances/${qrState.instanceId}/status`, undefined);
+        const res = await fetch(`/api/whatsapp/instances/${instanceId}/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
         if (res.ok) {
           const data = await res.json();
+          console.log("[QR Poll] status:", data);
           if (data.connected) {
+            clearInterval(interval);
             setQrState(null);
             refetchInstances();
-            toast({ title: "WhatsApp conectado!", description: `Número: ${data.phone || "conectado"}` });
-            clearInterval(interval);
+            toast({ title: "WhatsApp conectado!", description: data.phone ? `Número: ${data.phone}` : "Conectado com sucesso" });
             return;
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        console.warn("[QR Poll] erro:", e);
+      }
       if (attempts >= maxAttempts) clearInterval(interval);
-    }, 3000);
+    }, 4000);
     return () => clearInterval(interval);
   }, [qrState?.instanceId, qrState?.status]);
 
