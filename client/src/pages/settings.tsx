@@ -254,6 +254,31 @@ export default function SettingsPage() {
     onError: (e: any) => toast({ title: "Erro ao conectar", description: e.message, variant: "destructive" }),
   });
 
+  // Poll connection status while QR is shown (every 3s, up to 90s)
+  useEffect(() => {
+    if (!qrState || qrState.status !== "scan") return;
+    let attempts = 0;
+    const maxAttempts = 30; // 30 × 3s = 90s
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await apiRequest("GET", `/api/whatsapp/instances/${qrState.instanceId}/status`, undefined);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            setQrState(null);
+            refetchInstances();
+            toast({ title: "WhatsApp conectado!", description: `Número: ${data.phone || "conectado"}` });
+            clearInterval(interval);
+            return;
+          }
+        }
+      } catch (_) {}
+      if (attempts >= maxAttempts) clearInterval(interval);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [qrState?.instanceId, qrState?.status]);
+
   const openNewInstance = () => {
     setEditingInstance(null);
     setInstanceForm({ label: "", instanceName: "", apiKey: "", dentistIds: [] });

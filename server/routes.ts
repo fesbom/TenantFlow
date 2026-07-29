@@ -2915,8 +2915,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const data = req.body;
 
+        if (!data) return;
+
+        // ── CONNECTION_UPDATE: atualiza connectedPhone no banco ──
+        if (data.event === "connection.update") {
+          const instanceName: string = data.instance || data.sender || "";
+          const state: string = data.data?.state || data.data?.status || "";
+          console.log(`[WEBHOOK] connection.update — instance: ${instanceName}, state: ${state}`);
+
+          if (instanceName && (state === "open" || state === "connected")) {
+            // Busca instância e consulta telefone na Evolution API
+            const instanceRow = await storage.getWhatsappInstanceByName(instanceName);
+            if (instanceRow) {
+              const cfg: ClinicEvolutionConfig = {
+                evoUrl: sanitizeUrl(process.env.EVO_URL || ""),
+                evoKey: (instanceRow.apiKey || process.env.EVO_KEY || "").trim(),
+                instanceName: instanceRow.instanceName,
+              };
+              try {
+                const status = await getEvolutionInstanceStatus(cfg);
+                const phone = status.phone || data.data?.wuid?.replace("@s.whatsapp.net", "") || null;
+                if (phone) {
+                  await storage.updateWhatsappInstance(instanceRow.id, { connectedPhone: phone });
+                  console.log(`[WEBHOOK] Instância '${instanceName}' marcada como conectada — phone: ${phone}`);
+                } else {
+                  // Marca conectado mesmo sem telefone
+                  await storage.updateWhatsappInstance(instanceRow.id, { connectedPhone: instanceName + "_connected" });
+                  console.log(`[WEBHOOK] Instância '${instanceName}' marcada como conectada (sem telefone)`);
+                }
+              } catch (e) {
+                console.log(`[WEBHOOK] Erro ao buscar status após connection.update:`, e);
+              }
+            }
+          } else if (instanceName && (state === "close" || state === "refused")) {
+            const instanceRow = await storage.getWhatsappInstanceByName(instanceName);
+            if (instanceRow) {
+              await storage.updateWhatsappInstance(instanceRow.id, { connectedPhone: null });
+              console.log(`[WEBHOOK] Instância '${instanceName}' marcada como desconectada`);
+            }
+          }
+          return;
+        }
+
         // FILTRO DE EVENTOS: Só processa messages.upsert
-        if (!data || data.event !== "messages.upsert") {
+        if (data.event !== "messages.upsert") {
           return;
         }
 
