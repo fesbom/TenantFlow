@@ -1,0 +1,56 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+🔧 [Evolution] Configuração global:
+   - EVO_URL: https://whatsapp-production-f4bc.up.railway.app
+   - EVO_KEY: Pkh4^XLw...
+   - EVO_INSTANCE: denticare5
+   - WEBHOOK_GLOBAL_URL: https://deticare.replit.app/webhook/evolution
+12:20:21 AM [express] Servidor rodando na porta 5000
+12:20:23 AM [express] GET /api/conversations 403 in 5ms :: {"message":"Invalid token"}
+12:20:23 AM [express] GET /api/dashboard/stats 403 in 1ms :: {"message":"Invalid token"}
+12:20:23 AM [express] GET /api/dashboard/today-appointments 403 in 1ms :: {"message":"Invalid token"}
+12:20:23 AM [express] GET /api/clinic 403 in 1ms :: {"message":"Invalid token"}
+12:20:23 AM [express] GET /api/dashboard/birthday-patients 403 in 1ms :: {"message":"Invalid token"}
+12:20:33 AM [express] GET /api/conversations 403 in 2ms :: {"message":"Invalid token"}
+12:20:43 AM [express] GET /api/conversations 403 in 2ms :: {"message":"Invalid token"}
+12:20:54 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:21:04 AM [express] GET /api/conversations 403 in 2ms :: {"message":"Invalid token"}
+12:21:14 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:21:22 AM [express] GET /api/conversations 304 in 13ms :: []
+12:21:22 AM [express] GET /api/dashboard/today-appointments 304 in 29ms :: []
+12:21:22 AM [express] GET /api/dashboard/stats 304 in 38ms :: {"activePatients":7502,"todayAppointmen…
+12:21:23 AM [express] GET /api/dashboard/birthday-patients 304 in 19ms :: {"data":[{"id":"0d148bb1-53…
+12:21:23 AM [express] GET /api/clinic 304 in 6ms :: {"id":"e30b1802-1d65-4f70-a13d-b35b30171419","nam…
+12:21:27 AM [express] GET /api/users 304 in 9ms :: [{"id":"6e943edc-aeae-462a-8b29-e4959a591711","use…
+12:21:27 AM [express] GET /api/clinic/invoice-fields 304 in 8ms :: {"fields":["fullName","cpf","birth…
+12:21:27 AM [express] GET /api/whatsapp/instances 304 in 14ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+
+[REDE] ========================================
+[REDE] Recebido POST em: /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/connect
+[REDE] Content-Type: application/json
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+[REDE] ========================================
+
+[Evolution] Webhook configurado: https://deticare.replit.app/webhook/evolution
+[Evolution] POST https://whatsapp-production-f4bc.up.railway.app/instance/create — instance: cto-05
+[Evolution] Erro no /instance/create — HTTP 403: This name "cto-05" is already in use.
+[Evolution] Raw error data: {"status":403,"error":"Forbidden","response":{"message":["This name \"cto-05\" is already in use."]}}
+[Evolution] Instância já existe, tentando /instance/connect
+[Evolution] Webhook configurado em instância existente: cto-05
+[Evolution] GET https://whatsapp-production-f4bc.up.railway.app/instance/connect/cto-05
+[Evolution] /instance/connect response: {"pairingCode":null,"code":"2@aE72zfOtgDNAUh5HDh/rQClqCgXopusj6azEU3o61gg0ZHwOuzpIVFNtf4ADQ9amJzJt7hT1Qye7vzNyQJO2qlTSbTkgwkTVmek=,rhl9mnLwzRqz9+oj36TGbvRAxaxixyLnf5wPHxkzRls=,u41hob6to9Yqjb3WqiyXjV+bne5X2L/LHiUjK2T7rTs=,xAfoWvNGMq8pjhaE5RBZP7NbjmGPQlCeAU4uAHXPAO4=","base64":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAVwAAAFcCAYAAACEFgYsAAAjDElEQVR4AezB0Y0gya5EydOJFoJyUQqKRClcLtdidj75swEEsirnvl2a/fnnX6y11vp1D2uttT7xsNZa6xMPa621PvGw1lrrEw9rrbU+8bDWWusTD2uttT7xsNZa6xMPa621PvGw1lrrEw9rrbU+8ZdLk
+[Evolution] QR code obtido via /instance/connect (tamanho: 13310)
+12:21:37 AM [express] POST /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/connect 200 i…
+12:21:37 AM [express] GET /api/conversations 304 in 8ms :: []
+12:21:47 AM [express] GET /api/conversations 304 in 19ms :: []
+12:21:47 AM [express] GET /api/whatsapp/instances 304 in 9ms :: [{"id":"40a46eba-ad86-4725-9de3-9a621…
+12:21:58 AM [express] GET /api/conversations 304 in 29ms :: []
+12:22:02 AM [express] GET /api/conversations 304 in 6ms :: []
+12:22:02 AM [express] GET /api/users 304 in 11ms :: [{"id":"6e943edc-aeae-462a-8b29-e4959a591711","us…
+12:22:02 AM [express] GET /api/clinic/invoice-fields 304 in 8ms :: {"fields":["fullName","cpf","birth…
+12:22:02 AM [express] GET /api/clinic 304 in 31ms :: {"id":"e30b1802-1d65-4f70-a13d-b35b30171419","na…
+12:22:02 AM [express] GET /api/whatsapp/instances 304 in 38ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:22:06 AM [express] GET /api/dashboard/birthday-patients 403 in 1ms :: {"message":"Invalid token"}
+12:22:14 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
