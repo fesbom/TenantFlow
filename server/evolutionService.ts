@@ -19,6 +19,20 @@ const WEBHOOK_GLOBAL_URL = sanitizeUrl(
   (process.env.WEBHOOK_GLOBAL_URL || "").trim(),
 );
 
+// In development, webhooks must reach the dev server, not the deployed app.
+// REPLIT_DEV_DOMAIN is the public URL of this workspace.
+export function getWebhookUrl(): string {
+  const isDev = process.env.NODE_ENV !== "production";
+  const devDomain = (process.env.REPLIT_DEV_DOMAIN || "").trim();
+  if (isDev && devDomain) {
+    return `https://${devDomain}/webhook/evolution`;
+  }
+  if (!WEBHOOK_GLOBAL_URL) return "";
+  return WEBHOOK_GLOBAL_URL.endsWith("/webhook/evolution")
+    ? WEBHOOK_GLOBAL_URL
+    : `${WEBHOOK_GLOBAL_URL}/webhook/evolution`;
+}
+
 console.log("🔧 [Evolution] Configuração global:");
 console.log(`   - EVO_URL: ${GLOBAL_EVO_URL || "(não configurada)"}`);
 console.log(`   - EVO_KEY: ${GLOBAL_EVO_KEY ? `${GLOBAL_EVO_KEY.substring(0, 8)}...` : "(não configurada)"}`);
@@ -204,11 +218,7 @@ export async function generateQRCodeForClinic(
     return { success: false, error: "Evolution API não configurada para esta clínica" };
   }
 
-  const webhookUrl = WEBHOOK_GLOBAL_URL
-    ? (WEBHOOK_GLOBAL_URL.endsWith("/webhook/evolution")
-        ? WEBHOOK_GLOBAL_URL
-        : `${WEBHOOK_GLOBAL_URL}/webhook/evolution`)
-    : "";
+  const webhookUrl = getWebhookUrl();
 
   const createBody: Record<string, any> = {
     instanceName: config.instanceName,
@@ -289,11 +299,7 @@ export async function generateQRCodeForClinic(
 }
 
 async function configureWebhookForInstance(config: ClinicEvolutionConfig): Promise<void> {
-  const webhookUrl = WEBHOOK_GLOBAL_URL
-    ? (WEBHOOK_GLOBAL_URL.endsWith("/webhook/evolution")
-        ? WEBHOOK_GLOBAL_URL
-        : `${WEBHOOK_GLOBAL_URL}/webhook/evolution`)
-    : "";
+  const webhookUrl = getWebhookUrl();
   if (!webhookUrl) return;
   try {
     await axios.post(

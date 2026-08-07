@@ -1,0 +1,121 @@
+> rest-express@1.0.0 build
+> vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
+
+                                                                                vite v5.4.21 building for production...
+transforming (3) src/main.tsxBrowserslist: browsers data (caniuse-lite) is 8 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 3166 modules transformed.
+../dist/public/index.html                   2.30 kB │ gzip:   0.91 kB
+../dist/public/assets/index-yeazMdRx.css   86.25 kB │ gzip:  15.39 kB
+../dist/public/assets/index-CosC4JI0.js   987.03 kB │ gzip: 298.36 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.72s
+
+  dist/index.js  231.6kb
+
+⚡ Done in 20ms
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+🔧 [Evolution] Configuração global:
+   - EVO_URL: https://whatsapp-production-f4bc.up.railway.app
+   - EVO_KEY: Pkh4^XLw...
+   - EVO_INSTANCE: denticare5
+   - WEBHOOK_GLOBAL_URL: https://deticare.replit.app/webhook/evolution
+12:32:30 AM [express] Servidor rodando na porta 5000
+12:32:33 AM [express] GET /api/conversations 403 in 11ms :: {"message":"Invalid token"}
+12:32:33 AM [express] GET /api/dashboard/today-appointments 403 in 0ms :: {"message":"Invalid token"}
+12:32:33 AM [express] GET /api/dashboard/stats 403 in 1ms :: {"message":"Invalid token"}
+12:32:33 AM [express] GET /api/dashboard/birthday-patients 403 in 0ms :: {"message":"Invalid token"}
+12:32:33 AM [express] GET /api/clinic 403 in 1ms :: {"message":"Invalid token"}
+12:32:43 AM [express] GET /api/conversations 403 in 2ms :: {"message":"Invalid token"}
+12:32:53 AM [express] GET /api/conversations 403 in 2ms :: {"message":"Invalid token"}
+12:33:01 AM [express] GET /api/conversations 200 in 70ms :: []
+12:33:01 AM [express] GET /api/users 200 in 31ms :: [{"id":"6e943edc-aeae-462a-8b29-e4959a591711","us…
+12:33:01 AM [express] GET /api/clinic 200 in 7ms :: {"id":"e30b1802-1d65-4f70-a13d-b35b30171419","nam…
+12:33:01 AM [express] GET /api/whatsapp/instances 200 in 13ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:33:01 AM [express] GET /api/clinic/invoice-fields 200 in 6ms :: {"fields":["fullName","cpf","birth…
+12:33:11 AM [express] GET /api/conversations 304 in 6ms :: []
+
+[REDE] ========================================
+[REDE] Recebido POST em: /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/connect
+[REDE] Content-Type: application/json
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+[REDE] ========================================
+
+[Evolution] Webhook configurado: https://deticare.replit.app/webhook/evolution
+[Evolution] POST https://whatsapp-production-f4bc.up.railway.app/instance/create — instance: cto-05
+[Evolution] Erro no /instance/create — HTTP 403: This name "cto-05" is already in use.
+[Evolution] Raw error data: {"status":403,"error":"Forbidden","response":{"message":["This name \"cto-05\" is already in use."]}}
+[Evolution] Instância já existe, tentando /instance/connect
+[Evolution] Webhook configurado em instância existente: cto-05
+[Evolution] GET https://whatsapp-production-f4bc.up.railway.app/instance/connect/cto-05
+[Evolution] /instance/connect response: {"pairingCode":null,"code":"2@pAn+aTeJHBld7TNRSc2qiB083jUh1oPb2XGzKw/cxYRzDRtklnJUkqS/h3Rz/iKOyNAzDkacKr9QaVrNzHU7FfaY9Wzbbc0tHl4=,BmUkz3vi/vmp9oP498J5wN6sFH8Ayn+Fd3+ZtmKa5Sk=,Yl9x3MvovkJQ86pxoJdC0FOuFJZp+3zzVZ0UOsCGUSw=,L+1clWw+yr1BEhvWrIGE5T5AMB4ga1frqAbOw2i2pc8=","base64":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAVwAAAFcCAYAAACEFgYsAAAi90lEQVR4AezBwbEYy65sycUyCgG5IAVEghQhV2jB5hCjNEurzTr3/Yb7rz9/sdZa6597WGut9YmHtdZan3hYa631iYe11lqfeFhrrfWJh7XWWp94WGut9YmHtdZan3hYa631iYe11lqfeFhrrfWJ31yKb
+[Evolution] QR code obtido via /instance/connect (tamanho: 13498)
+12:33:18 AM [express] POST /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/connect 200 i…
+12:33:21 AM [express] GET /api/conversations 304 in 5ms :: []
+12:33:21 AM [express] GET /api/whatsapp/instances 304 in 8ms :: [{"id":"40a46eba-ad86-4725-9de3-9a621…
+12:33:22 AM [express] GET /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/status 200 in …
+12:33:26 AM [express] GET /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/status 200 in …
+12:33:30 AM [express] GET /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/status 200 in …
+12:33:31 AM [express] GET /api/whatsapp/instances 200 in 9ms :: [{"id":"40a46eba-ad86-4725-9de3-9a621…
+12:33:31 AM [express] GET /api/conversations 304 in 6ms :: []
+12:33:42 AM [express] GET /api/conversations 304 in 28ms :: []
+12:33:48 AM [express] PUT /api/clinic 200 in 75ms :: {"id":"e30b1802-1d65-4f70-a13d-b35b30171419","na…
+12:33:48 AM [express] GET /api/clinic 200 in 5ms :: {"id":"e30b1802-1d65-4f70-a13d-b35b30171419","nam…
+12:33:51 AM [express] GET /api/whatsapp/instances 304 in 10ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:33:52 AM [express] GET /api/conversations 304 in 6ms :: []
+12:33:57 AM [express] GET /api/dashboard/stats 304 in 34ms :: {"activePatients":7502,"todayAppointmen…
+12:33:57 AM [express] GET /api/dashboard/today-appointments 304 in 33ms :: []
+12:33:57 AM [express] GET /api/dashboard/birthday-patients 304 in 38ms :: {"data":[{"id":"0d148bb1-53…
+12:34:05 AM [express] GET /api/conversations 304 in 6ms :: []
+12:34:10 AM [express] GET /api/conversations 304 in 15ms :: []
+12:34:15 AM [express] GET /api/conversations 304 in 19ms :: []
+12:34:20 AM [express] GET /api/whatsapp/instances 304 in 16ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:34:20 AM [express] GET /api/conversations 304 in 7ms :: []
+12:34:26 AM [express] GET /api/conversations 304 in 6ms :: []
+12:34:31 AM [express] GET /api/conversations 304 in 7ms :: []
+12:34:36 AM [express] GET /api/conversations 304 in 5ms :: []
+12:34:40 AM [express] GET /api/whatsapp/instances 304 in 11ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:34:41 AM [express] GET /api/conversations 304 in 5ms :: []
+12:34:46 AM [express] GET /api/conversations 304 in 6ms :: []
+12:34:52 AM [express] GET /api/conversations 304 in 6ms :: []
+12:34:57 AM [express] GET /api/conversations 304 in 5ms :: []
+12:35:00 AM [express] GET /api/whatsapp/instances 304 in 10ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:35:02 AM [express] GET /api/conversations 304 in 6ms :: []
+12:35:07 AM [express] GET /api/conversations 304 in 6ms :: []
+12:35:13 AM [express] GET /api/conversations 304 in 6ms :: []
+12:35:18 AM [express] GET /api/conversations 304 in 14ms :: []
+12:35:20 AM [express] GET /api/whatsapp/instances 304 in 10ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:35:23 AM [express] GET /api/conversations 304 in 6ms :: []
+12:35:28 AM [express] GET /api/conversations 304 in 5ms :: []
+12:35:33 AM [express] GET /api/conversations 304 in 6ms :: []
+12:35:39 AM [express] GET /api/conversations 304 in 5ms :: []
+12:35:40 AM [express] GET /api/whatsapp/instances 304 in 9ms :: [{"id":"40a46eba-ad86-4725-9de3-9a621…
+12:35:44 AM [express] GET /api/conversations 304 in 5ms :: []
+12:35:49 AM [express] GET /api/conversations 304 in 5ms :: []
+12:35:54 AM [express] GET /api/conversations 304 in 6ms :: []
+12:35:59 AM [express] GET /api/conversations 304 in 6ms :: []
+12:36:01 AM [express] GET /api/whatsapp/instances 304 in 10ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:36:05 AM [express] GET /api/conversations 304 in 6ms :: []
+12:36:10 AM [express] GET /api/conversations 304 in 7ms :: []
+12:36:15 AM [express] GET /api/conversations 304 in 6ms :: []
+12:36:20 AM [express] GET /api/conversations 304 in 5ms :: []
+12:36:21 AM [express] GET /api/whatsapp/instances 304 in 9ms :: [{"id":"40a46eba-ad86-4725-9de3-9a621…
+12:36:25 AM [express] GET /api/conversations 304 in 8ms :: []
+12:36:31 AM [express] GET /api/conversations 304 in 4ms :: []
+12:37:53 AM [express] GET /api/conversations 304 in 28ms :: []
+12:37:58 AM [express] GET /api/conversations 304 in 8ms :: []
+12:37:58 AM [express] GET /api/clinic 304 in 10ms :: {"id":"e30b1802-1d65-4f70-a13d-b35b30171419","na…
+12:37:58 AM [express] GET /api/whatsapp/instances 304 in 22ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:38:03 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:38:03 AM [express] GET /api/dashboard/birthday-patients 403 in 0ms :: {"message":"Invalid token"}
+12:38:13 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:38:24 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:38:34 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
