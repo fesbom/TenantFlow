@@ -342,6 +342,16 @@ export default function SettingsPage() {
     if (invoiceFieldsData?.fields) setInvoiceFields(invoiceFieldsData.fields);
   }, [invoiceFieldsData]);
 
+  // Cleanup do polling de QR ao desmontar a página
+  useEffect(() => {
+    return () => {
+      if (qrPollingRef.current) {
+        clearInterval(qrPollingRef.current);
+        qrPollingRef.current = null;
+      }
+    };
+  }, []);
+
   // Save invoice fields mutation
   const saveInvoiceFieldsMutation = useMutation({
     mutationFn: async (fields: string[]) => {

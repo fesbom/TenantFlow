@@ -3084,12 +3084,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
 
         if (!conversation) {
-          conversation = await storage.createWhatsappConversation({
-            clinicId,
-            phone: normalizedPhone,
-            patientId: patientByPhone?.id || null,
-            status: "ai",
-          });
+          try {
+            conversation = await storage.createWhatsappConversation({
+              clinicId,
+              phone: normalizedPhone,
+              patientId: patientByPhone?.id || null,
+              status: "ai",
+            });
+          } catch (err: any) {
+            // Corrida: outro webhook criou a conversa primeiro (unique clinic+phone)
+            if (err.code === "23505") {
+              conversation = (await storage.getWhatsappConversationByPhone(
+                clinicId,
+                normalizedPhone,
+              ))!;
+              if (!conversation) throw err;
+            } else {
+              throw err;
+            }
+          }
         } else {
           const convUpdates: Record<string, any> = {};
 

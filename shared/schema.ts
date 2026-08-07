@@ -215,7 +215,7 @@ export const whatsappConversations = pgTable("whatsapp_conversations", {
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
   lastMessageSender: text("last_message_sender"), // 'patient' | 'ai' | 'staff' — quem enviou a última mensagem
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [unique("uq_wpp_conv_clinic_phone").on(t.clinicId, t.phone)]);
 
 // WhatsApp Chat Messages - individual messages in conversations
 export const whatsappMessages = pgTable("whatsapp_messages", {
