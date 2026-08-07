@@ -211,6 +211,7 @@ export const whatsappConversations = pgTable("whatsapp_conversations", {
   patientId: varchar("patient_id").references(() => patients.id), // Optional - linked when patient is identified
   phone: text("phone").notNull(), // WhatsApp phone number
   status: text("status").default('ai').notNull(), // 'ai' | 'human' | 'closed'
+  instanceName: text("instance_name"), // Evolution instance (WhatsApp number) this conversation belongs to
   assignedUserId: varchar("assigned_user_id").references(() => users.id), // Staff member who took over
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
   lastMessageSender: text("last_message_sender"), // 'patient' | 'ai' | 'staff' — quem enviou a última mensagem

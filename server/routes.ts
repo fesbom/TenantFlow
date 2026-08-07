@@ -76,7 +76,8 @@ async function resolveSendConfig(
   const evoUrl = sanitizeUrl(process.env.EVO_URL || "");
   if (preferredInstanceName) {
     const row = await storage.getWhatsappInstanceByName(preferredInstanceName);
-    if (row) {
+    // Segurança: a instância preferida precisa pertencer à mesma clínica
+    if (row && row.clinicId === clinicId) {
       return {
         evoUrl,
         evoKey: (row.apiKey || process.env.EVO_KEY || "").trim(),
@@ -3118,6 +3119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               phone: normalizedPhone,
               patientId: patientByPhone?.id || null,
               status: "ai",
+              instanceName: webhookInstanceName || null,
             });
           } catch (err: any) {
             // Corrida: outro webhook criou a conversa primeiro (unique clinic+phone)
@@ -3127,6 +3129,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 normalizedPhone,
               ))!;
               if (!conversation) throw err;
+              // Garantir atribuição de instância também no caminho de corrida
+              if (webhookInstanceName && conversation.instanceName !== webhookInstanceName) {
+                conversation = (await storage.updateWhatsappConversation(conversation.id, {
+                  instanceName: webhookInstanceName,
+                }))!;
+              }
             } else {
               throw err;
             }
@@ -3145,6 +3153,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Vincular paciente se encontrado e ainda não vinculado
           if (patientByPhone && !conversation.patientId) {
             convUpdates.patientId = patientByPhone.id;
+          }
+
+          // Atualizar instância se a conversa veio por outro número (ou ainda não tem)
+          if (webhookInstanceName && conversation.instanceName !== webhookInstanceName) {
+            convUpdates.instanceName = webhookInstanceName;
           }
 
           if (Object.keys(convUpdates).length > 0) {
@@ -4404,7 +4417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Se precisar de mais ajuda, é só nos enviar uma nova mensagem. Até logo! 😊";
 
         try {
-          const closeCfg = await resolveSendConfig(clinicId);
+          const closeCfg = await resolveSendConfig(clinicId, conversation.instanceName || undefined);
           await sendEvolutionMessageForClinic(closeCfg, conversation.phone, `[👤 ${operatorName}] ${closingText}`);
         } catch (sendErr) {
           console.warn(`[ENCERRAMENTO MANUAL] Falha ao enviar mensagem de encerramento para ${conversation.phone}:`, sendErr);
@@ -4534,7 +4547,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const whatsappText = `[👤 ${staffFirstName}] ${cleanText}`;
 
         {
-          const sendCfg = await resolveSendConfig(req.user!.clinicId);
+          const sendCfg = await resolveSendConfig(req.user!.clinicId, conversation.instanceName || undefined);
           if (isClinicEvolutionConfigured(sendCfg)) {
             const sendResult = await sendEvolutionMessageForClinic(
               sendCfg,
@@ -4617,7 +4630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const whatsappTextAlias = `[👤 ${staffFirstNameAlias}] ${cleanTextAlias}`;
 
         {
-          const sendCfg2 = await resolveSendConfig(req.user!.clinicId);
+          const sendCfg2 = await resolveSendConfig(req.user!.clinicId, conversation.instanceName || undefined);
           if (isClinicEvolutionConfigured(sendCfg2)) {
             const sendResult = await sendEvolutionMessageForClinic(
               sendCfg2,
@@ -4667,7 +4680,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             "Qualquer dúvida, é só nos enviar uma nova mensagem. Até logo! 😊";
 
           // Enviar mensagem de encerramento via Evolution API (per-clinic config)
-          const autoCfg = await resolveSendConfig(conv.clinicId);
+          const autoCfg = await resolveSendConfig(conv.clinicId, conv.instanceName || undefined);
           await sendEvolutionMessageForClinic(autoCfg, conv.phone, `[🤖 IA] ${closingMessage}`);
 
           // Salvar a mensagem no banco

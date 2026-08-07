@@ -100,6 +100,7 @@ export default function Support() {
   const [linkSearch, setLinkSearch] = useState("");
   const [linkSearchDebounced, setLinkSearchDebounced] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
+  const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [convSearch, setConvSearch] = useState("");
   const [convSearchDebounced, setConvSearchDebounced] = useState("");
   const [, setTick] = useState(0); // força re-render para timers ao vivo
@@ -124,7 +125,7 @@ export default function Support() {
     refetchInterval: CONVERSATIONS_POLL_INTERVAL,
   });
 
-  const { data: wppInstances = [] } = useQuery<{ id: string; label: string; connectedPhone: string | null }[]>({
+  const { data: wppInstances = [] } = useQuery<{ id: string; label: string; instanceName: string; connectedPhone: string | null }[]>({
     queryKey: ["/api/whatsapp/instances"],
     refetchInterval: 20000,
     retry: false,
@@ -333,6 +334,7 @@ export default function Support() {
     const q = convSearchDebounced.trim().toLowerCase();
 
     return conversations
+      .filter((conv) => instanceFilter === "all" || conv.instanceName === instanceFilter)
       .filter((conv) => {
         // Quando busca ativa: pesquisa em TODAS as conversas (ignora tab), incluindo encerradas
         if (q) {
@@ -352,15 +354,31 @@ export default function Support() {
         // Mesmo grupo: mais recente primeiro
         return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
       });
-  }, [conversations, filterTab, convSearchDebounced]);
+  }, [conversations, filterTab, convSearchDebounced, instanceFilter]);
+
+  // ── Instâncias (números de WhatsApp) ─────────────────────────────────
+  const instanceLabelFor = (name: string | null | undefined) => {
+    if (!name) return null;
+    const inst = wppInstances.find((i) => i.instanceName === name);
+    return inst ? inst.label : name;
+  };
+  const instancePhoneFor = (name: string | null | undefined) => {
+    if (!name) return null;
+    const inst = wppInstances.find((i) => i.instanceName === name);
+    return inst?.connectedPhone ? `+${inst.connectedPhone}` : null;
+  };
+  const showInstanceInfo = wppInstances.length > 1;
 
   // Contadores para os tabs
-  const counts = useMemo(() => ({
-    all: conversations.length,
-    waiting_staff: conversations.filter((c) => getConvDerivedStatus(c) === "waiting_staff").length,
-    waiting_patient: conversations.filter((c) => getConvDerivedStatus(c) === "waiting_patient").length,
-    closed: conversations.filter((c) => getConvDerivedStatus(c) === "closed").length,
-  }), [conversations]);
+  const counts = useMemo(() => {
+    const base = conversations.filter((c) => instanceFilter === "all" || c.instanceName === instanceFilter);
+    return {
+      all: base.length,
+      waiting_staff: base.filter((c) => getConvDerivedStatus(c) === "waiting_staff").length,
+      waiting_patient: base.filter((c) => getConvDerivedStatus(c) === "waiting_patient").length,
+      closed: base.filter((c) => getConvDerivedStatus(c) === "closed").length,
+    };
+  }, [conversations, instanceFilter]);
 
   const selectedConversation = conversations.find((c) => c.id === selectedConversationId);
   const handleSendMessage = () => {
@@ -524,6 +542,44 @@ export default function Support() {
                     ))}
                   </div>
                 )}
+
+                {/* Filtro por número de WhatsApp (instância) */}
+                {showInstanceInfo && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    <button
+                      onClick={() => setInstanceFilter("all")}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
+                        instanceFilter === "all"
+                          ? "bg-green-600 text-white border-green-600"
+                          : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                      }`}
+                      data-testid="instance-filter-all"
+                    >
+                      <Phone className="h-3 w-3" />
+                      Todos os números
+                    </button>
+                    {wppInstances.map((inst) => (
+                      <button
+                        key={inst.id}
+                        onClick={() => setInstanceFilter(inst.instanceName)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
+                          instanceFilter === inst.instanceName
+                            ? "bg-green-600 text-white border-green-600"
+                            : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                        }`}
+                        data-testid={`instance-filter-${inst.instanceName}`}
+                      >
+                        <Phone className="h-3 w-3" />
+                        {inst.label}
+                        {inst.connectedPhone && (
+                          <span className={`ml-0.5 text-[10px] ${instanceFilter === inst.instanceName ? "text-white/80" : "text-gray-400"}`}>
+                            +{inst.connectedPhone}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </CardHeader>
 
               <CardContent className="p-0 flex-1 overflow-hidden">
@@ -575,6 +631,19 @@ export default function Support() {
                               <div className="text-xs text-gray-400 mt-0.5 truncate pl-6">{conversation.phone}</div>
                             )}
 
+                            {/* Número (instância) da conversa — visível quando vendo todos */}
+                            {showInstanceInfo && instanceFilter === "all" && conversation.instanceName && (
+                              <div className="flex items-center gap-1 mt-1 pl-6">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0.5">
+                                  <Phone className="h-2.5 w-2.5" />
+                                  {instanceLabelFor(conversation.instanceName)}
+                                  {instancePhoneFor(conversation.instanceName) && (
+                                    <span className="text-green-600/70">{instancePhoneFor(conversation.instanceName)}</span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+
                             {!conversation.patientId && (
                               <div className="flex items-center gap-1 mt-1 text-xs text-amber-600">
                                 <AlertTriangle className="h-3 w-3" />
@@ -622,6 +691,11 @@ export default function Support() {
                               : selectedConversation?.status === "human"
                               ? "Atendimento Humano"
                               : "Encerrado"}
+                            {showInstanceInfo && selectedConversation?.instanceName && (
+                              <> · via {instanceLabelFor(selectedConversation.instanceName)}
+                                {instancePhoneFor(selectedConversation.instanceName) ? ` (${instancePhoneFor(selectedConversation.instanceName)})` : ""}
+                              </>
+                            )}
                           </p>
                         </div>
                       </div>

@@ -23,3 +23,8 @@ Cada clínica pode ter N instâncias em `whatsapp_instances`. O webhook resolve 
 - Frontend é servido como build estático de `dist/public`; workflow roda `npm run build && npm run dev` — sem build, mudanças de frontend não aparecem.
 - Conversas têm unique `(clinic_id, phone)` (`uq_wpp_conv_clinic_phone`) + catch 23505 no webhook para evitar conversas duplicadas em entregas simultâneas.
 - Webhook `/webhook/evolution` é público e sem autenticação (risco conhecido, ainda não tratado).
+
+## Atribuição de instância por conversa (ago/2026)
+- `whatsapp_conversations.instance_name` guarda por qual número (instância Evolution) a conversa chegou; o webhook grava/atualiza a cada mensagem recebida e todos os envios (staff, IA, encerramentos) preferem essa instância via `resolveSendConfig(clinicId, instanceName)`.
+- **Regra de segurança:** a instância preferida só é usada se pertencer à mesma clínica — nomes de instância não são únicos globalmente no banco.
+- **Limitação conhecida:** conversa é única por (clínica, telefone); se o paciente falar com dois números da clínica, os threads se fundem e a instância registrada passa a ser a da última mensagem recebida. Separar por instância exigiria mudar a identidade da conversa para (clínica, instância, telefone).
