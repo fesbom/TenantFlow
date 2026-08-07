@@ -1,0 +1,80 @@
+est-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+🔧 [Evolution] Configuração global:
+   - EVO_URL: https://whatsapp-production-f4bc.up.railway.app
+   - EVO_KEY: Pkh4^XLw...
+   - EVO_INSTANCE: denticare5
+   - WEBHOOK_GLOBAL_URL: https://deticare.replit.app/webhook/evolution
+12:14:16 AM [express] Servidor rodando na porta 5000
+12:14:23 AM [express] GET /api/dashboard/today-appointments 403 in 5ms :: {"message":"Invalid token"}
+12:14:23 AM [express] GET /api/dashboard/birthday-patients 403 in 1ms :: {"message":"Invalid token"}
+12:14:23 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:14:23 AM [express] GET /api/dashboard/stats 403 in 1ms :: {"message":"Invalid token"}
+12:14:23 AM [express] GET /api/clinic 403 in 1ms :: {"message":"Invalid token"}
+12:14:34 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:14:59 AM [express] GET /api/dashboard/birthday-patients 403 in 1ms :: {"message":"Invalid token"}
+12:15:04 AM [express] GET /api/conversations 403 in 2ms :: {"message":"Invalid token"}
+12:15:14 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:15:24 AM [express] GET /api/conversations 403 in 2ms :: {"message":"Invalid token"}
+12:15:35 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:15:45 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:15:53 AM [express] GET /api/dashboard/stats 403 in 2ms :: {"message":"Invalid token"}
+12:15:53 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:15:53 AM [express] GET /api/dashboard/today-appointments 403 in 1ms :: {"message":"Invalid token"}
+12:15:53 AM [express] GET /api/dashboard/birthday-patients 403 in 0ms :: {"message":"Invalid token"}
+12:15:53 AM [express] GET /api/clinic 403 in 1ms :: {"message":"Invalid token"}
+12:16:09 AM [express] GET /api/clinic/branding/fesbom%40 200 in 45ms :: {"clinicName":"DentiCare","lo…
+12:16:11 AM [express] GET /api/clinic/branding/fesbom%40gmail 304 in 3ms :: {"clinicName":"DentiCare"…
+12:16:12 AM [express] GET /api/clinic/branding/fesbom%40gmail.com 304 in 4ms :: {"clinicName":"DentiC…
+
+[REDE] ========================================
+[REDE] Recebido POST em: /api/auth/login
+[REDE] Content-Type: application/json
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+[REDE] ========================================
+
+12:16:14 AM [express] POST /api/auth/login 200 in 109ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX…
+12:16:14 AM [express] GET /api/conversations 200 in 18ms :: []
+12:16:14 AM [express] GET /api/dashboard/today-appointments 200 in 41ms :: []
+12:16:14 AM [express] GET /api/clinic 200 in 37ms :: {"id":"e30b1802-1d65-4f70-a13d-b35b30171419","na…
+12:16:14 AM [express] GET /api/dashboard/birthday-patients 200 in 299ms :: {"data":[{"id":"0d148bb1-5…
+12:16:14 AM [express] GET /api/dashboard/stats 200 in 296ms :: {"activePatients":7502,"todayAppointme…
+12:16:19 AM [express] GET /api/clinic/invoice-fields 304 in 7ms :: {"fields":["fullName","cpf","birth…
+12:16:19 AM [express] GET /api/users 304 in 6ms :: [{"id":"6e943edc-aeae-462a-8b29-e4959a591711","use…
+12:16:19 AM [express] GET /api/whatsapp/instances 304 in 18ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:16:29 AM [express] GET /api/conversations 304 in 7ms :: []
+12:16:39 AM [express] GET /api/conversations 304 in 19ms :: []
+12:16:39 AM [express] GET /api/whatsapp/instances 304 in 9ms :: [{"id":"40a46eba-ad86-4725-9de3-9a621…
+
+[REDE] ========================================
+[REDE] Recebido POST em: /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/connect
+[REDE] Content-Type: application/json
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+[REDE] ========================================
+
+[Evolution] Webhook configurado: https://deticare.replit.app/webhook/evolution
+[Evolution] POST https://whatsapp-production-f4bc.up.railway.app/instance/create — instance: cto-05
+[Evolution] Erro no /instance/create — HTTP 403: This name "cto-05" is already in use.
+[Evolution] Raw error data: {"status":403,"error":"Forbidden","response":{"message":["This name \"cto-05\" is already in use."]}}
+[Evolution] Instância já existe, tentando /instance/connect
+[Evolution] Webhook configurado em instância existente: cto-05
+[Evolution] GET https://whatsapp-production-f4bc.up.railway.app/instance/connect/cto-05
+[Evolution] /instance/connect response: {"pairingCode":null,"code":"2@AUxQXsvx7xmvCD+bYLG2e/7I9vCS2KGDadi92lE2Ms8VFL9ZWutAQygnFSFI+YOewrc4ZcVR7Wkt2Z3niyh/f7mbLIlcwPVA8NQ=,62rENH7XPWcRBJVF0YnTr0SiFju6FH8tu2uHUD8PolM=,4OsStiY3s0jcNwhazHzM5iJ6GIsxhAQJJNXfSkA1vnI=,0TFbufaYT/2Y4cEpaVrSJ3gDBk/NPGSrp8k7I+mYhlc=","base64":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAVwAAAFcCAYAAACEFgYsAAAi+UlEQVR4AezB0Q0lya5sydWJEsLlohQUyaWgXNSipz/5FUAgd+U9b0Czf/79D2uttf66h7XWWp94WGut9YmHtdZan3hYa631iYe11lqfeFhrrfWJh7XWWp94WGut9YmHtdZan3hYa631iYe11lqf+MMlh
+[Evolution] QR code obtido via /instance/connect (tamanho: 13502)
+12:16:47 AM [express] POST /api/whatsapp/instances/40a46eba-ad86-4725-9de3-9a62128f269e/connect 200 i…
+12:16:49 AM [express] GET /api/conversations 304 in 7ms :: []
+12:16:59 AM [express] GET /api/whatsapp/instances 304 in 24ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:16:59 AM [express] GET /api/conversations 304 in 6ms :: []
+12:17:10 AM [express] GET /api/conversations 304 in 23ms :: []
+12:17:15 AM [express] GET /api/conversations 304 in 5ms :: []
+12:17:15 AM [express] GET /api/users 304 in 5ms :: [{"id":"6e943edc-aeae-462a-8b29-e4959a591711","use…
+12:17:15 AM [express] GET /api/whatsapp/instances 304 in 20ms :: [{"id":"40a46eba-ad86-4725-9de3-9a62…
+12:17:15 AM [express] GET /api/clinic 304 in 24ms :: {"id":"e30b1802-1d65-4f70-a13d-b35b30171419","na…
+12:17:15 AM [express] GET /api/clinic/invoice-fields 304 in 26ms :: {"fields":["fullName","cpf","birt…
+12:17:21 AM [express] GET /api/dashboard/birthday-patients 403 in 1ms :: {"message":"Invalid token"}
+12:17:25 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:17:35 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:17:46 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}
+12:17:56 AM [express] GET /api/conversations 403 in 2ms :: {"message":"Invalid token"}
+12:18:06 AM [express] GET /api/conversations 403 in 1ms :: {"message":"Invalid token"}

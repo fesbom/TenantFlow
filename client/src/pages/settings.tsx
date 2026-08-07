@@ -58,6 +58,7 @@ export default function SettingsPage() {
   const [instanceForm, setInstanceForm] = useState({ label: "", instanceName: "", apiKey: "", dentistIds: [] as string[] });
   const [qrState, setQrState] = useState<{ instanceId: string; qrCode: string | null; status: string } | null>(null);
   const [instanceToDelete, setInstanceToDelete] = useState<WppInstance | null>(null);
+  const qrPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch users
   const { data: users = [], isLoading } = useQuery<User[]>({
@@ -234,6 +235,44 @@ export default function SettingsPage() {
     onError: (e: any) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });
 
+  // Start polling the status endpoint directly (bypasses React effect scheduling)
+  function startQrPolling(instanceId: string) {
+    if (qrPollingRef.current) clearInterval(qrPollingRef.current);
+    let attempts = 0;
+    const maxAttempts = 30; // 30 × 4s = 120s
+    console.log("[QR Poll] iniciando polling para", instanceId);
+    qrPollingRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const token = localStorage.getItem("dental_token");
+        const res = await fetch(`/api/whatsapp/instances/${instanceId}/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
+        const data = await res.json();
+        console.log(`[QR Poll] tentativa ${attempts}:`, data);
+        if (data.connected) {
+          clearInterval(qrPollingRef.current!);
+          qrPollingRef.current = null;
+          setQrState(null);
+          refetchInstances();
+          toast({
+            title: "WhatsApp conectado!",
+            description: data.phone ? `Número: ${data.phone}` : "Conectado com sucesso",
+          });
+          return;
+        }
+      } catch (e) {
+        console.warn("[QR Poll] erro na tentativa", attempts, e);
+      }
+      if (attempts >= maxAttempts) {
+        clearInterval(qrPollingRef.current!);
+        qrPollingRef.current = null;
+        console.warn("[QR Poll] timeout — encerrando polling");
+      }
+    }, 4000);
+  }
+
   // Connect (QR code) mutation
   const connectInstanceMutation = useMutation({
     mutationFn: async (instanceId: string) => {
@@ -244,6 +283,7 @@ export default function SettingsPage() {
     onSuccess: (data, instanceId) => {
       if (data.qrCode) {
         setQrState({ instanceId, qrCode: data.qrCode, status: "scan" });
+        startQrPolling(instanceId);
       } else if (data.status === "connected") {
         setQrState({ instanceId, qrCode: null, status: "connected" });
         refetchInstances();
@@ -253,40 +293,6 @@ export default function SettingsPage() {
     },
     onError: (e: any) => toast({ title: "Erro ao conectar", description: e.message, variant: "destructive" }),
   });
-
-  // Poll connection status while QR is shown (every 4s, up to 120s)
-  useEffect(() => {
-    if (!qrState || qrState.status !== "scan") return;
-    const instanceId = qrState.instanceId;
-    let attempts = 0;
-    const maxAttempts = 30;
-    const token = localStorage.getItem("dental_token");
-
-    const interval = setInterval(async () => {
-      attempts++;
-      try {
-        const res = await fetch(`/api/whatsapp/instances/${instanceId}/status`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          console.log("[QR Poll] status:", data);
-          if (data.connected) {
-            clearInterval(interval);
-            setQrState(null);
-            refetchInstances();
-            toast({ title: "WhatsApp conectado!", description: data.phone ? `Número: ${data.phone}` : "Conectado com sucesso" });
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn("[QR Poll] erro:", e);
-      }
-      if (attempts >= maxAttempts) clearInterval(interval);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [qrState?.instanceId, qrState?.status]);
 
   const openNewInstance = () => {
     setEditingInstance(null);
