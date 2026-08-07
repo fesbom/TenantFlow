@@ -66,6 +66,37 @@ import multer from "multer";
 const ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN || "";
 const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN || "setup123";
 
+// Resolve a config de envio correta: prioriza a instância do webhook (se informada),
+// depois qualquer instância conectada da clínica (whatsapp_instances),
+// e por último a config legada da clínica.
+async function resolveSendConfig(
+  clinicId: string,
+  preferredInstanceName?: string,
+): Promise<ClinicEvolutionConfig> {
+  const evoUrl = sanitizeUrl(process.env.EVO_URL || "");
+  if (preferredInstanceName) {
+    const row = await storage.getWhatsappInstanceByName(preferredInstanceName);
+    if (row) {
+      return {
+        evoUrl,
+        evoKey: (row.apiKey || process.env.EVO_KEY || "").trim(),
+        instanceName: row.instanceName,
+      };
+    }
+  }
+  const instances = await storage.getWhatsappInstancesByClinic(clinicId);
+  const connected = instances.find((i) => i.connectedPhone);
+  if (connected) {
+    return {
+      evoUrl,
+      evoKey: (connected.apiKey || process.env.EVO_KEY || "").trim(),
+      instanceName: connected.instanceName,
+    };
+  }
+  const clinic = await storage.getClinicById(clinicId);
+  return clinic ? buildClinicConfig(clinic) : globalConfig();
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve uploaded files
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
@@ -2711,10 +2742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Prefixo [🤖 IA] apenas na string enviada ao WhatsApp
-        const webhookClinic = await storage.getClinicById(clinicId);
-        const webhookClinicCfg = webhookClinic
-          ? buildClinicConfig(webhookClinic)
-          : globalConfig();
+        const webhookClinicCfg = await resolveSendConfig(clinicId, webhookInstanceName);
         const sendResult = await sendEvolutionMessageForClinic(
           webhookClinicCfg,
           normalizedPhone,
@@ -3438,8 +3466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Prefixo [🤖 IA] apenas na string enviada ao WhatsApp
           const aiWhatsappText = `[🤖 IA] ${aiResponse.message}`;
-          const wh2Clinic = await storage.getClinicById(clinicId);
-          const wh2Cfg = wh2Clinic ? buildClinicConfig(wh2Clinic) : globalConfig();
+          const wh2Cfg = await resolveSendConfig(clinicId, webhookInstanceName);
           await sendEvolutionMessageForClinic(wh2Cfg, normalizedPhone, aiWhatsappText);
         }
       } catch (error: any) {
@@ -4377,8 +4404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Se precisar de mais ajuda, é só nos enviar uma nova mensagem. Até logo! 😊";
 
         try {
-          const closeClinic = await storage.getClinicById(clinicId);
-          const closeCfg = closeClinic ? buildClinicConfig(closeClinic) : globalConfig();
+          const closeCfg = await resolveSendConfig(clinicId);
           await sendEvolutionMessageForClinic(closeCfg, conversation.phone, `[👤 ${operatorName}] ${closingText}`);
         } catch (sendErr) {
           console.warn(`[ENCERRAMENTO MANUAL] Falha ao enviar mensagem de encerramento para ${conversation.phone}:`, sendErr);
@@ -4508,8 +4534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const whatsappText = `[👤 ${staffFirstName}] ${cleanText}`;
 
         {
-          const sendClinic = await storage.getClinicById(req.user!.clinicId);
-          const sendCfg = sendClinic ? buildClinicConfig(sendClinic) : globalConfig();
+          const sendCfg = await resolveSendConfig(req.user!.clinicId);
           if (isClinicEvolutionConfigured(sendCfg)) {
             const sendResult = await sendEvolutionMessageForClinic(
               sendCfg,
@@ -4592,8 +4617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const whatsappTextAlias = `[👤 ${staffFirstNameAlias}] ${cleanTextAlias}`;
 
         {
-          const sendClinic2 = await storage.getClinicById(req.user!.clinicId);
-          const sendCfg2 = sendClinic2 ? buildClinicConfig(sendClinic2) : globalConfig();
+          const sendCfg2 = await resolveSendConfig(req.user!.clinicId);
           if (isClinicEvolutionConfigured(sendCfg2)) {
             const sendResult = await sendEvolutionMessageForClinic(
               sendCfg2,
@@ -4643,8 +4667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             "Qualquer dúvida, é só nos enviar uma nova mensagem. Até logo! 😊";
 
           // Enviar mensagem de encerramento via Evolution API (per-clinic config)
-          const autoClinic = await storage.getClinicById(conv.clinicId);
-          const autoCfg = autoClinic ? buildClinicConfig(autoClinic) : globalConfig();
+          const autoCfg = await resolveSendConfig(conv.clinicId);
           await sendEvolutionMessageForClinic(autoCfg, conv.phone, `[🤖 IA] ${closingMessage}`);
 
           // Salvar a mensagem no banco
