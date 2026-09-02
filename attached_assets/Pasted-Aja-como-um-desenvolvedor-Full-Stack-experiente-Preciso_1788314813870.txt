@@ -1,0 +1,64 @@
+Aja como um desenvolvedor Full Stack experiente.
+
+Preciso implementar um painel administrativo global (Superadmin / Backoffice) na plataforma Denticare para gerenciamento geral, operacional, segurança e governança de todas as clínicas cadastradas.
+
+Abaixo estão os requisitos técnicos, regras de negócio e funcionalidades necessárias:
+
+---
+
+### 1. Autenticação, Autorização e Controle de Acesso (RBAC)
+* Garantir que apenas usuários com papel `superadmin` tenham acesso a esta área `/admin`.
+* Bloquear o acesso de administradores comuns de clínicas e demais papéis a estas rotas.
+
+---
+
+### 2. Gestão de Bloqueio, Desativação e Auditoria de Acessos
+* **Bloqueio de Clínica:**
+  * Opção para bloquear/suspender o acesso da clínica como um todo.
+  * Quando uma clínica estiver suspensa, nenhum usuário vinculado a ela (dentistas, secretárias ou administradores) conseguirá autenticar ou executar requisições (retornar feedback visual claro no login informando o bloqueio administrativo).
+* **Desativação Individual de Usuários:**
+  * Visualizar a lista detalhada de todos os usuários da clínica com seus respectivos papéis.
+  * Permitir ativar/desativar qualquer usuário individualmente, revogando imediatamente as sessões/tokens ativos daquele usuário.
+* **Logs de Acesso e Auditoria:**
+  * Painel de visualização de logs de acesso da clínica selecionada (e de seus usuários).
+  * Exibir: usuário, data/hora do login, endereço IP, status da tentativa (sucesso/falha/bloqueado) e user-agent.
+  * Filtros por intervalo de datas, status e usuário específico.
+
+---
+
+### 3. Painel e Listagem Global de Clínicas (Dashboard Backoffice)
+Criar uma interface em tabela/grid com filtros, busca e paginação contendo:
+* **Identificação:** Nome da clínica, status (Ativa, Suspensa/Bloqueada) e data de cadastro.
+* **Responsável:** Nome e e-mail do usuário proprietário/responsável pelo cadastro.
+* **Métricas Operacionais:**
+  * Quantidade de dentistas cadastrados.
+  * Quantidade de secretárias/recepcionistas cadastradas.
+  * Quantidade total de pacientes.
+  * Quantidade de instâncias/números de WhatsApp ativos/configurados.
+* **Métricas de Consumo de IA e Mensageria:**
+  * Total de requisições/chamadas enviadas via API de WhatsApp.
+  * Total de tokens de IA consumidos (distribuídos por prompt/completion, se aplicável).
+
+---
+
+### 4. Módulo de Backup e Exportação de Dados
+Na tela de detalhes da clínica, fornecer opção para **Exportação Completa de Dados Transacionais**:
+* **Planilhas (Excel/CSV):** Exportar pacientes, agendamentos, históricos e prontuários em formato padronizado e compatível diretamente com o módulo de importação existente do sistema.
+* **Mídias/Fotos:** Gerar um arquivo compactado (ZIP) ou manifest estruturado contendo as fotos dos pacientes com seus respectivos identificadores para reimportação automática posterior.
+
+---
+
+### 5. Módulo de Limpeza e Exclusão Segura
+Adicionar modal com confirmação dupla e digitação de segurança para exclusão de dados transacionais da clínica (permitindo selecionar exclusão em lote unificada ou individual por módulo):
+* Excluir agendamentos, prontuários, mensagens e pacientes (preservando configurações da clínica e acessos dos profissionais, caso selecionado).
+* **Remoção no Google Cloud Storage (GCS):**
+  * Ao excluir pacientes com fotos, executar a exclusão física dos arquivos correspondentes no bucket do Google Cloud Storage.
+  * **Rotina de Limpeza de Arquivos Órfãos:** Ação administrativa dedicada para escanear o diretório/prefixo da clínica no bucket do GCS e remover arquivos residuais/órfãos que não possuem mais qualquer registro ou referência correspondente no banco de dados.
+
+---
+
+### 6. Diretrizes Técnicas de Implementação
+* Não execute testes funcionais automatizados nesta etapa (apenas implemente os fluxos, validações e rotinas de backend/frontend).
+* Estruture o backend com Services/Repositories limpos para desacoplar as operações de banco de dados, storage (Google Cloud Storage), logs de auditoria e agregações de consumo.
+* Trate exclusões em lote e exports em segundo plano (jobs/filas) para evitar timeouts HTTP caso o volume de dados seja expressivo.
+* Desenvolva o frontend seguindo um design limpo, focado em usabilidade e painel de processos.
