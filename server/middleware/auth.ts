@@ -2,7 +2,11 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { storage } from "../storage";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dental-clinic-secret-key";
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+  if (!secret) throw new Error("JWT_SECRET ou SESSION_SECRET deve estar configurado.");
+  return secret;
+}
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -23,45 +27,63 @@ export const authenticateToken = async (
   const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ message: "Access token required" });
+    return res.status(401).json({ code: "TOKEN_OBRIGATORIO", message: "Token de acesso obrigatório." });
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, getJwtSecret()) as any;
     const user = await storage.getUserById(decoded.userId);
     
-    if (!user || !user.isActive) {
-      return res.status(401).json({ message: "Invalid or inactive user" });
+    if (!user) {
+      return res.status(401).json({ code: "USUARIO_INVALIDO", message: "Usuário inválido." });
+    }
+    if (!user.isActive) {
+      return res.status(401).json({ code: "USUARIO_INATIVO", message: "Usuário inativo." });
+    }
+    if (decoded.tokenVersion !== user.tokenVersion) {
+      return res.status(401).json({ code: "TOKEN_REVOGADO", message: "Sessão revogada. Entre novamente." });
+    }
+    if (user.role !== "superadmin") {
+      if (!user.clinicId) {
+        return res.status(403).json({ code: "CLINICA_AUSENTE", message: "Usuário sem clínica vinculada." });
+      }
+      const clinic = await storage.getClinicById(user.clinicId);
+      if (!clinic) {
+        return res.status(403).json({ code: "CLINICA_INVALIDA", message: "Clínica não encontrada." });
+      }
+      if (clinic.status === "suspended") {
+        return res.status(403).json({ code: "CLINICA_SUSPENSA", message: "Clínica suspensa. Contate o suporte." });
+      }
     }
 
     req.user = {
       id: user.id,
       email: user.email,
       role: user.role,
-      clinicId: user.clinicId,
+      clinicId: user.clinicId || "",
       fullName: user.fullName,
     };
 
     next();
   } catch (error) {
-    return res.status(403).json({ message: "Invalid token" });
+    return res.status(403).json({ code: "TOKEN_INVALIDO", message: "Token inválido ou expirado." });
   }
 };
 
 export const requireRole = (roles: string[]) => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ message: "Authentication required" });
+      return res.status(401).json({ code: "AUTENTICACAO_OBRIGATORIA", message: "Autenticação obrigatória." });
     }
 
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Insufficient permissions" });
+      return res.status(403).json({ code: "PERMISSAO_INSUFICIENTE", message: "Permissão insuficiente." });
     }
 
     next();
   };
 };
 
-export const generateToken = (userId: string): string => {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "24h" });
+export const generateToken = (userId: string, tokenVersion = 0): string => {
+  return jwt.sign({ userId, tokenVersion }, getJwtSecret(), { expiresIn: "24h" });
 };

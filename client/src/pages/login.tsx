@@ -72,9 +72,15 @@ export default function Login() {
         description: `Bem-vindo ao ${branding.clinicName}`,
       });
     } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "";
+      const blockedMessage = rawMessage.includes("CLINICA_SUSPENSA")
+        ? "O acesso desta clínica foi suspenso administrativamente. Entre em contato com o suporte."
+        : rawMessage.includes("USUARIO_INATIVO") || rawMessage.includes("inactive")
+          ? "Este usuário está desativado. Entre em contato com o administrador."
+          : "Email ou senha incorretos";
       toast({
         title: "Erro no login",
-        description: "Email ou senha incorretos",
+        description: blockedMessage,
         variant: "destructive",
       });
     } finally {

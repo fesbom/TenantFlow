@@ -59,13 +59,11 @@ export class ObjectStorageService {
         },
       });
 
-      // Generate signed URL (valid for 100 anos - Google Cloud max)
-      const maxExpiration = Date.now() + 100 * 365 * 24 * 60 * 60 * 1000;
-
       const [url] = await file.getSignedUrl({
         version: 'v2',
         action: 'read',
-        expires: Date.now() + maxExpiration,
+        // V2 signed URLs use a Unix timestamp and cannot exceed 2038.
+        expires: new Date("2038-01-18T00:00:00.000Z"),
       });
 
       return url;
@@ -79,10 +77,10 @@ export class ObjectStorageService {
     }
   }
 
-  async deleteFile(fileUrl: string): Promise<void> {
+  async deleteFile(fileUrl: string, expectedClinicId: string): Promise<void> {
     try {
       const objectPath = this.extractObjectPathFromUrl(fileUrl);
-      if (!objectPath) {
+      if (!objectPath || !objectPath.startsWith(`${expectedClinicId}/`)) {
         return;
       }
 
@@ -98,12 +96,30 @@ export class ObjectStorageService {
     }
   }
 
-  private extractObjectPathFromUrl(url: string): string | null {
+  async listObjectPaths(prefix: string): Promise<string[]> {
+    const bucket = objectStorageClient.bucket(this.getBucketName());
+    const [files] = await bucket.getFiles({ prefix });
+    return files.map((file) => file.name);
+  }
+
+  async deleteObjectPath(objectPath: string): Promise<boolean> {
+    const bucket = objectStorageClient.bucket(this.getBucketName());
+    const file = bucket.file(objectPath);
+    const [exists] = await file.exists();
+    if (!exists) return false;
+    await file.delete();
+    return true;
+  }
+
+  extractObjectPathFromUrl(url: string): string | null {
     try {
       if (url.startsWith('http')) {
         // Extract path from signed URL
         // URL format: https://storage.googleapis.com/bucket-name/path/to/file?X-Goog-Algorithm=...
         const urlObj = new URL(url);
+        if (urlObj.protocol !== "https:" || urlObj.hostname !== "storage.googleapis.com") {
+          return null;
+        }
         const pathname = urlObj.pathname;
         
         // Remove leading slash and bucket name
@@ -111,7 +127,7 @@ export class ObjectStorageService {
         const pathParts = pathname.split('/').filter(p => p.length > 0);
         
         // Remove bucket name (first part) and return the rest
-        if (pathParts.length > 1) {
+        if (pathParts.length > 1 && pathParts[0] === this.getBucketName()) {
           return pathParts.slice(1).join('/');
         }
       }

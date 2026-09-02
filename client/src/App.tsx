@@ -20,6 +20,7 @@ import BatchUpload from "@/pages/batch-upload";
 import Support from "@/pages/support";
 import Availability from "@/pages/availability";
 import PrintSchedule from "@/pages/print-schedule";
+import { AdminAudit, AdminForbidden, AdminHome, ClinicDetail } from "@/pages/admin";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const authContext = useAuth();
@@ -35,6 +36,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 function Router() {
   const authContext = useAuth();
   const isAuthenticated = authContext?.isAuthenticated;
+  const isSuperadmin = authContext?.user?.role === "superadmin";
 
   return (
     <Switch>
@@ -46,8 +48,11 @@ function Router() {
         <Route component={() => <Login />} />
       ) : (
         <>
-          <Route path="/" component={() => <Dashboard />} />
-          <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
+          <Route path="/admin" component={() => isSuperadmin ? <AdminHome /> : <AdminForbidden />} />
+          <Route path="/admin/audit" component={() => isSuperadmin ? <AdminAudit /> : <AdminForbidden />} />
+          <Route path="/admin/clinics/:id" component={() => isSuperadmin ? <ClinicDetail /> : <AdminForbidden />} />
+          <Route path="/" component={() => isSuperadmin ? <AdminHome /> : <Dashboard />} />
+          <Route path="/dashboard" component={() => isSuperadmin ? <AdminHome /> : <ProtectedRoute component={Dashboard} />} />
           <Route path="/patients" component={() => <ProtectedRoute component={Patients} />} />
           <Route path="/appointments" component={() => <ProtectedRoute component={Appointments} />} />
           <Route path="/medical-records" component={() => <ProtectedRoute component={MedicalRecords} />} />

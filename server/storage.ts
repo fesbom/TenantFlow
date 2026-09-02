@@ -273,9 +273,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const values: Record<string, unknown> = { ...updates, updatedAt: new Date() };
+    if (typeof updates.isActive === "boolean") {
+      values.tokenVersion = sql`${users.tokenVersion} + 1`;
+    }
     const [user] = await db
       .update(users)
-      .set({ ...updates, updatedAt: new Date() } as any)
+      .set(values as any)
       .where(eq(users.id, id))
       .returning();
     return user || undefined;

@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { pool } from "./db";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
@@ -153,6 +154,7 @@ export async function processPatientMessage(
   patientContext?: PatientContext,
   clinicName?: string,
   instanceContext?: InstanceContext,
+  clinicId?: string,
 ): Promise<AIResponse> {
   try {
     const systemPrompt = buildSystemPrompt(patientContext, clinicName, instanceContext);
@@ -171,6 +173,18 @@ export async function processPatientMessage(
       contents: fullPrompt,
       config: { responseMimeType: "application/json" },
     });
+
+    if (clinicId && response.usageMetadata) {
+      const promptTokens = Number(response.usageMetadata.promptTokenCount || 0);
+      const completionTokens = Number(response.usageMetadata.candidatesTokenCount || 0);
+      const totalTokens = Number(response.usageMetadata.totalTokenCount || promptTokens + completionTokens);
+      await pool.query(
+        `INSERT INTO ai_usage_records
+          (clinic_id, source, prompt_tokens, completion_tokens, total_tokens)
+         VALUES ($1, 'whatsapp_gemini', $2, $3, $4)`,
+        [clinicId, promptTokens, completionTokens, totalTokens],
+      );
+    }
 
     const parsed = JSON.parse(response.text || '{}');
 

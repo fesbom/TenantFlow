@@ -60,11 +60,13 @@ import {
   sanitizeUrl,
 } from "./evolutionService";
 import type { InstanceContext } from "./whatsappAI";
+import { registerAdminRoutes } from "./admin/adminRoutes";
+import { recordAccessAudit } from "./admin/adminRepository";
 
 import multer from "multer";
 
 const ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN || "";
-const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN || "setup123";
+const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN || "";
 
 // Resolve a config de envio correta: prioriza a instância do webhook (se informada),
 // depois qualquer instância conectada da clínica (whatsapp_instances),
@@ -101,6 +103,7 @@ async function resolveSendConfig(
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve uploaded files
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+  registerAdminRoutes(app);
 
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
@@ -108,22 +111,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { email, password } = req.body;
 
       if (!email || !password) {
+        await recordAccessAudit({
+          event: "login_failure", attemptedEmail: email ? String(email).toLowerCase() : undefined,
+          ipAddress: req.ip, userAgent: req.get("user-agent"), reason: "missing_credentials",
+        });
         return res
           .status(400)
           .json({ message: "Email and password are required" });
       }
 
       const user = await storage.getUserByEmail(email);
-      if (!user || !user.isActive) {
+      if (!user) {
+        await recordAccessAudit({
+          event: "login_failure", attemptedEmail: String(email).toLowerCase(),
+          ipAddress: req.ip, userAgent: req.get("user-agent"), reason: "invalid_credentials",
+        });
         return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      if (!user.isActive) {
+        await recordAccessAudit({
+          event: "login_blocked", userId: user.id, clinicId: user.clinicId,
+          attemptedEmail: user.email, ipAddress: req.ip, userAgent: req.get("user-agent"), reason: "inactive_user",
+        });
+        return res.status(401).json({ code: "USUARIO_INATIVO", message: "Usuário inativo." });
       }
 
       const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {
+        await recordAccessAudit({
+          event: "login_failure", userId: user.id, clinicId: user.clinicId,
+          attemptedEmail: user.email, ipAddress: req.ip, userAgent: req.get("user-agent"), reason: "invalid_credentials",
+        });
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      const token = generateToken(user.id);
+      if (user.role !== "superadmin" && !user.clinicId) {
+        await recordAccessAudit({
+          event: "login_blocked", userId: user.id, attemptedEmail: user.email,
+          ipAddress: req.ip, userAgent: req.get("user-agent"), reason: "missing_clinic",
+        });
+        return res.status(403).json({ code: "CLINICA_AUSENTE", message: "Usuário sem clínica vinculada." });
+      }
+      if (user.role !== "superadmin" && user.clinicId) {
+        const clinic = await storage.getClinicById(user.clinicId);
+        if (!clinic || clinic.status === "suspended") {
+          await recordAccessAudit({
+            event: "login_blocked", userId: user.id, clinicId: user.clinicId,
+            attemptedEmail: user.email, ipAddress: req.ip, userAgent: req.get("user-agent"), reason: "suspended_clinic",
+          });
+          return res.status(403).json({ code: "CLINICA_SUSPENSA", message: "Clínica suspensa. Contate o suporte." });
+        }
+      }
+
+      const token = generateToken(user.id, user.tokenVersion);
+      await recordAccessAudit({
+        event: "login_success", userId: user.id, clinicId: user.clinicId,
+        attemptedEmail: user.email, ipAddress: req.ip, userAgent: req.get("user-agent"),
+      });
 
       res.json({
         token,
@@ -317,7 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const token = generateToken(admin.id);
+      const token = generateToken(admin.id, admin.tokenVersion);
 
       res.status(201).json({
         token,
@@ -410,6 +455,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole(["admin"]),
     async (req: AuthenticatedRequest, res) => {
       try {
+        if (!["admin", "dentist", "secretary"].includes(req.body?.role)) {
+          return res.status(403).json({ code: "FUNCAO_PROIBIDA", message: "Função de usuário não permitida." });
+        }
         const userData = insertUserSchema.parse({
           ...req.body,
           clinicId: req.user!.clinicId,
@@ -467,7 +515,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: AuthenticatedRequest, res) => {
       try {
         const { id } = req.params;
-        const parsedData = insertUserSchema.partial().parse(req.body);
+        const targetUser = await storage.getUserById(id);
+        if (!targetUser || targetUser.clinicId !== req.user!.clinicId || targetUser.role === "superadmin") {
+          return res.status(404).json({ code: "USUARIO_NAO_ENCONTRADO", message: "Usuário não encontrado nesta clínica." });
+        }
+        if ((req.body?.role && !["admin", "dentist", "secretary"].includes(req.body.role)) || ("clinicId" in (req.body || {}) && req.body.clinicId !== req.user!.clinicId)) {
+          return res.status(403).json({ code: "ALTERACAO_PROIBIDA", message: "Não é permitido promover superadministrador ou mover usuário entre clínicas." });
+        }
+        const { clinicId: _ignoredClinic, tokenVersion: _ignoredVersion, ...safeBody } = req.body || {};
+        const parsedData = insertUserSchema.partial().parse(safeBody);
         const updateData = { ...parsedData };
 
         if (updateData.password && updateData.password.trim() !== "") {
@@ -643,7 +699,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const clinic = await storage.getClinicById(clinicId);
             if (clinic?.logoUrl && clinic.logoUrl.startsWith("http")) {
               try {
-                await objectStorageService.deleteFile(clinic.logoUrl);
+                await objectStorageService.deleteFile(clinic.logoUrl, clinicId);
               } catch (deleteError) {
                 console.error("Error deleting old logo:", deleteError);
               }
@@ -801,7 +857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ) {
             try {
               const objectStorageService = new ObjectStorageService();
-              await objectStorageService.deleteFile(patient.photoUrl);
+              await objectStorageService.deleteFile(patient.photoUrl, req.user!.clinicId);
             } catch (deleteError) {
               console.error(
                 "Error deleting old photo from object storage:",
@@ -1102,7 +1158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ) {
               try {
                 const objectStorageService = new ObjectStorageService();
-                await objectStorageService.deleteFile(currentPatient.photoUrl);
+                await objectStorageService.deleteFile(currentPatient.photoUrl, req.user!.clinicId);
               } catch (deleteError) {
                 console.error(
                   "Error deleting photo from object storage:",
@@ -1985,6 +2041,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const objectStorageService = new ObjectStorageService();
                 await objectStorageService.deleteFile(
                   currentMovement.fotoAtividade,
+                  req.user!.clinicId,
                 );
               } catch (deleteError) {
                 console.error(
@@ -2019,6 +2076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const objectStorageService = new ObjectStorageService();
               await objectStorageService.deleteFile(
                 currentMovement.fotoAtividade,
+                req.user!.clinicId,
               );
             } catch (deleteError) {
               console.error(
@@ -2719,7 +2777,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           text: m.text,
         }));
 
-        const aiResponse = await processPatientMessage(messageText, history);
+        const aiResponse = await processPatientMessage(messageText, history, undefined, undefined, undefined, clinicId);
         console.log(
           "🧠 [DEBUG] Resposta do Gemini:",
           JSON.stringify(aiResponse, null, 2),
@@ -3217,6 +3275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             patientContext,
             clinicName,
             webhookInstanceContext,
+            clinicId,
           );
 
           /* --- ROTINA DE AGENDAMENTO COM FILTRO DE HORÁRIO CORRIGIDO --- */

@@ -2,8 +2,8 @@ export interface User {
   id: string;
   email: string;
   fullName: string;
-  role: 'admin' | 'dentist' | 'secretary';
-  clinicId: string;
+  role: 'admin' | 'dentist' | 'secretary' | 'superadmin';
+  clinicId: string | null;
 }
 
 export interface AuthState {

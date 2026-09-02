@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, date, decimal, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, date, decimal, unique, jsonb, index, check } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -28,8 +28,14 @@ export const clinics = pgTable("clinics", {
   evolutionConnectedPhone: text("evolution_connected_phone"),
   // Nota Fiscal — campos habilitados para cópia rápida (JSON array of field keys)
   invoiceFields: text("invoice_fields"),
+  status: text("status").default("active").notNull(), // active | suspended
+  suspendedAt: timestamp("suspended_at"),
+  suspendedBy: varchar("suspended_by"),
+  suspensionReason: text("suspension_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => [
+  check("clinics_status_check", sql`${t.status} IN ('active', 'suspended')`),
+]);
 
 // Users table with clinic association and roles
 export const users = pgTable("users", {
@@ -39,12 +45,66 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   fullName: text("full_name").notNull(),
   role: text("role").notNull(), // 'admin', 'dentist', 'secretary'
-  clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+  clinicId: varchar("clinic_id").references(() => clinics.id),
   externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   isActive: boolean("is_active").default(true).notNull(),
+  tokenVersion: integer("token_version").default(0).notNull(),
   defaultAppointmentDuration: integer("default_appointment_duration"), // Default duration in minutes for dentist appointments
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Authentication/security audit. Never stores credentials or bearer tokens.
+export const accessAuditLogs = pgTable("access_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  event: text("event").notNull(), // login_success | login_failure | login_blocked
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  clinicId: varchar("clinic_id").references(() => clinics.id, { onDelete: "set null" }),
+  attemptedEmail: text("attempted_email"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("access_audit_created_idx").on(t.createdAt),
+  index("access_audit_clinic_idx").on(t.clinicId),
+  index("access_audit_user_idx").on(t.userId),
+]);
+
+// Persisted Gemini usage attributed to a clinic. Historical usage before this
+// table was introduced is intentionally not reconstructed.
+export const aiUsageRecords = pgTable("ai_usage_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id, { onDelete: "cascade" }),
+  source: text("source").notNull(),
+  promptTokens: integer("prompt_tokens").default(0).notNull(),
+  completionTokens: integer("completion_tokens").default(0).notNull(),
+  totalTokens: integer("total_tokens").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("ai_usage_clinic_created_idx").on(t.clinicId, t.createdAt),
+]);
+
+// Durable queue/state for privileged exports and destructive cleanup operations.
+export const adminJobs = pgTable("admin_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // clinic_export | clinic_cleanup | orphan_media_scan | orphan_media_cleanup
+  status: text("status").default("queued").notNull(), // queued | running | completed | failed
+  progress: integer("progress").default(0).notNull(),
+  clinicId: varchar("clinic_id").references(() => clinics.id, { onDelete: "set null" }),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  payload: jsonb("payload").$type<Record<string, unknown>>().default({}).notNull(),
+  result: jsonb("result").$type<Record<string, unknown>>(),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+}, (t) => [
+  index("admin_jobs_actor_idx").on(t.actorUserId),
+  index("admin_jobs_clinic_idx").on(t.clinicId),
+  index("admin_jobs_status_idx").on(t.status),
+  check("admin_jobs_status_check", sql`${t.status} IN ('queued', 'running', 'completed', 'failed')`),
+  check("admin_jobs_progress_check", sql`${t.progress} BETWEEN 0 AND 100`),
+]);
 
 // Patients table with clinic isolation
 export const patients = pgTable("patients", {
@@ -469,11 +529,16 @@ export const whatsappMessagesRelations = relations(whatsappMessages, ({ one }) =
 export const insertClinicSchema = createInsertSchema(clinics).omit({
   id: true,
   createdAt: true,
+  status: true,
+  suspendedAt: true,
+  suspendedBy: true,
+  suspensionReason: true,
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
+  tokenVersion: true,
 });
 
 export const insertPatientSchema = createInsertSchema(patients).omit({
@@ -567,6 +632,10 @@ export type InsertClinic = z.infer<typeof insertClinicSchema>;
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type AccessAuditLog = typeof accessAuditLogs.$inferSelect;
+export type AiUsageRecord = typeof aiUsageRecords.$inferSelect;
+export type AdminJob = typeof adminJobs.$inferSelect;
 
 export type Patient = typeof patients.$inferSelect;
 export type InsertPatient = z.infer<typeof insertPatientSchema>;

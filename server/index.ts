@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import fs from "fs";
+import { ensureAdminSchema } from "./admin/ensureAdminSchema";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -71,6 +72,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await ensureAdminSchema();
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
