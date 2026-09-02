@@ -122,7 +122,6 @@ export async function getEvolutionInstanceStatus(
     return { connected: false, status: "not_configured" };
   }
 
-  // Try direct connectionState endpoint first (faster and more reliable)
   try {
     const stateUrl = `${config.evoUrl}/instance/connectionState/${config.instanceName}`;
     const stateResp = await axios.get(stateUrl, {
@@ -141,7 +140,6 @@ export async function getEvolutionInstanceStatus(
     const isConnected = state === "open" || state === "connected" || state === "CONNECTED";
 
     if (isConnected) {
-      // Fetch phone from fetchInstances when connected
       try {
         const listUrl = `${config.evoUrl}/instance/fetchInstances`;
         const listResp = await axios.get(listUrl, {
@@ -174,7 +172,6 @@ export async function getEvolutionInstanceStatus(
     return { connected: false, status: state };
   } catch (error: any) {
     console.warn(`⚠️ [Evolution] Erro ao buscar connectionState de ${config.instanceName}:`, error.message);
-    // Fallback to fetchInstances
     try {
       const url = `${config.evoUrl}/instance/fetchInstances`;
       const response = await axios.get(url, {
@@ -220,11 +217,17 @@ export async function generateQRCodeForClinic(
 
   const webhookUrl = getWebhookUrl();
 
+  // Payload ajustado enviando syncFullHistory na raiz e no objeto config
   const createBody: Record<string, any> = {
     instanceName: config.instanceName,
     token: config.instanceName,
     qrcode: true,
     integration: "WHATSAPP-BAILEYS",
+    syncFullHistory: false,
+    readMessages: false,
+    groupsIgnore: true,
+    readStatus: false,
+    alwaysOnline: false,
     config: {
       syncFullHistory: false,
       readMessages: false,
@@ -277,7 +280,6 @@ export async function generateQRCodeForClinic(
     }
 
     console.log(`[Evolution] QR não encontrado no create (state: ${state}), tentando /instance/connect`);
-    // Fallback: hit /instance/connect
     return await fetchQRFromConnect(config);
   } catch (err: any) {
     const status = err.response?.status;
@@ -288,10 +290,9 @@ export async function generateQRCodeForClinic(
       "";
 
     console.log(`[Evolution] Erro no /instance/create — HTTP ${status}: ${msg}`);
-    console.log(`[Evolution] Raw error data:`, JSON.stringify(err.response?.data || {}).substring(0, 300));
 
     if (status === 403 || msg.toLowerCase().includes("already") || msg.toLowerCase().includes("in use")) {
-      console.log(`[Evolution] Instância já existe, tentando /instance/connect`);
+      console.log(`[Evolution] Instância já existe, atualizando opções e tentando /instance/connect`);
       return await fetchQRFromConnect(config);
     }
     return { success: false, error: msg || "Erro ao comunicar com a Evolution API" };
@@ -321,11 +322,31 @@ async function configureWebhookForInstance(config: ClinicEvolutionConfig): Promi
   }
 }
 
+// Garante que instâncias já existentes atualizem as opções para não sincronizar histórico
+async function updateInstanceOptions(config: ClinicEvolutionConfig): Promise<void> {
+  try {
+    await axios.post(
+      `${config.evoUrl}/instance/setOptions/${config.instanceName}`,
+      {
+        syncFullHistory: false,
+        readMessages: false,
+        groupsIgnore: true,
+        readStatus: false,
+        alwaysOnline: false,
+      },
+      { headers: { apikey: config.evoKey, "Content-Type": "application/json" }, timeout: 10000 },
+    );
+    console.log(`[Evolution] Opções de instância atualizadas (syncFullHistory: false): ${config.instanceName}`);
+  } catch (e: any) {
+    console.warn(`[Evolution] Aviso: falha ao atualizar setOptions — ${e.message}`);
+  }
+}
+
 async function fetchQRFromConnect(
   config: ClinicEvolutionConfig,
 ): Promise<EvolutionInstanceResult> {
-  // Ensure webhook is set for existing instances
   await configureWebhookForInstance(config);
+  await updateInstanceOptions(config); // Aplica as opções na instância existente
 
   try {
     const connectUrl = `${config.evoUrl}/instance/connect/${config.instanceName}`;
@@ -354,7 +375,6 @@ async function fetchQRFromConnect(
       return { success: true, status: "connected" };
     }
 
-    console.log(`[Evolution] QR não encontrado em /instance/connect. State: ${state}. Dados:`, JSON.stringify(resp.data).substring(0, 200));
     return { success: false, error: `Não foi possível obter o QR code (state: ${state}). Verifique se a instância existe na Evolution API.`, status: state, rawResponse: resp.data };
   } catch (err: any) {
     console.log(`[Evolution] Erro em /instance/connect:`, err.message);
@@ -362,7 +382,7 @@ async function fetchQRFromConnect(
   }
 }
 
-// ─── Legacy helpers (backward compat — use per-clinic functions instead) ──
+// ─── Legacy helpers ───────────────────────────────────────────────────────
 export async function sendEvolutionMessage(
   phone: string,
   text: string,
