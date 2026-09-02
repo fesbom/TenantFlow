@@ -35,7 +35,7 @@ export function getWebhookUrl(): string {
 
 console.log("🔧 [Evolution] Configuração global:");
 console.log(`   - EVO_URL: ${GLOBAL_EVO_URL || "(não configurada)"}`);
-console.log(`   - EVO_KEY: ${GLOBAL_EVO_KEY ? `${GLOBAL_EVO_KEY.substring(0, 8)}...` : "(não configurada)"}`);
+console.log(`   - EVO_KEY: ${GLOBAL_EVO_KEY ? "(configurada)" : "(não configurada)"}`);
 console.log(`   - EVO_INSTANCE: ${GLOBAL_EVO_INSTANCE}`);
 console.log(`   - WEBHOOK_GLOBAL_URL: ${WEBHOOK_GLOBAL_URL || "(não configurada)"}`);
 

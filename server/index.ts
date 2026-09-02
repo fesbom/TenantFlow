@@ -56,8 +56,12 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (reqPath.startsWith("/api")) {
       let logLine = `${req.method} ${reqPath} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      if (capturedJsonResponse && res.statusCode >= 400) {
+        const safeError = {
+          code: capturedJsonResponse.code,
+          message: capturedJsonResponse.message,
+        };
+        logLine += ` :: ${JSON.stringify(safeError)}`;
       }
 
       if (logLine.length > 80) {

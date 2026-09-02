@@ -38,7 +38,10 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
     console.log(`Email sent successfully to ${params.to}`);
     return true;
   } catch (error: any) {
-    console.error('SendGrid email error:', error);
+    console.error('SendGrid email error:', {
+      code: error?.code,
+      message: error?.message,
+    });
     if (error.response && error.response.body) {
       console.error('Full SendGrid response body:', JSON.stringify(error.response.body, null, 2));
       if (error.response.body.errors) {
@@ -48,7 +51,11 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
         });
       }
     }
-    console.error('Email data that failed:', JSON.stringify(emailData, null, 2));
+    console.error('Email delivery failed:', {
+      to: params.to,
+      from: params.from,
+      subject: params.subject,
+    });
     return false;
   }
 }
