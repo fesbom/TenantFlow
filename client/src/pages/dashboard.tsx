@@ -22,6 +22,7 @@ import {
   User,
 } from "lucide-react";
 import { Appointment, Patient } from "@/types";
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 interface DashboardStats {
   activePatients: number;
@@ -300,7 +301,7 @@ export default function Dashboard() {
                         {/* Patient Photo or Birthday Icon */}
                         <div className="relative h-10 w-10 rounded-full overflow-hidden border-2 border-pink-300 bg-pink-100 flex items-center justify-center flex-shrink-0">
                           {patient.photoUrl ? (
-                            <img
+                            <ProtectedImage
                               src={patient.photoUrl}
                               alt={patient.fullName}
                               className="w-full h-full object-cover"

@@ -15,6 +15,7 @@ import AppointmentModal from "@/components/modals/appointment-modal";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter, User as UserIcon } from "lucide-react";
 import moment from "moment";
 import 'moment/locale/pt-br';
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 // Configura o moment para o Português (Brasil)
 moment.locale('pt-br');
@@ -278,7 +279,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
           {/* Patient Photo */}
           <div className="w-5 h-5 rounded-full overflow-hidden border border-current bg-white flex items-center justify-center flex-shrink-0">
             {patient?.photoUrl ? (
-              <img
+              <ProtectedImage
                 src={patient.photoUrl}
                 alt={patient.fullName}
                 className="w-full h-full object-cover"

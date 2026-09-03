@@ -12,6 +12,7 @@ import { Patient, MedicalRecord } from "@/types";
 import { Camera, X, Upload, User } from "lucide-react";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { TreatmentPhotoUpload } from "@/components/treatment/treatment-photo-upload";
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 interface MedicalRecordModalProps {
   isOpen: boolean;
@@ -176,7 +177,7 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
               {/* Patient Photo */}
               <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-gray-200 bg-gray-100 flex items-center justify-center flex-shrink-0">
                 {patient.photoUrl ? (
-                  <img
+                  <ProtectedImage
                     src={patient.photoUrl}
                     alt={patient.fullName}
                     className="w-full h-full object-cover"
@@ -351,7 +352,7 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {existingImages.map((imagePath, index) => (
                     <div key={index} className="relative group">
-                      <img
+                      <ProtectedImage
                         src={imagePath}
                         alt={`Procedimento ${index + 1}`}
                         className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"

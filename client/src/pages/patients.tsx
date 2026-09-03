@@ -14,6 +14,7 @@ import InvoiceCopyModal, { DEFAULT_INVOICE_FIELDS } from "@/components/modals/in
 import { Patient } from "@/types";
 import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User, FileText } from "lucide-react";
 import { formatDateBR } from "@/lib/date-formatter";
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 interface PaginatedResponse {
   data: Patient[];
@@ -208,7 +209,7 @@ export default function Patients() {
                                 {/* Patient Photo */}
                                 <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center flex-shrink-0">
                                   {patient.photoUrl ? (
-                                    <img
+                                    <ProtectedImage
                                       src={patient.photoUrl}
                                       alt={patient.fullName}
                                       className="w-full h-full object-cover"

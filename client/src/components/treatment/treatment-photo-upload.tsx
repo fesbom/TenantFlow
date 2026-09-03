@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Camera, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 interface TreatmentPhotoUploadProps {
   onPhotoSelect: (file: File) => void;
@@ -169,7 +170,7 @@ export function TreatmentPhotoUpload({
         {/* Preview of selected/current photo */}
         {previewUrl && (
           <div className="relative inline-block mt-2">
-            <img
+            <ProtectedImage
               src={previewUrl}
               alt="Preview"
               className="w-32 h-32 object-cover rounded-lg border border-gray-200"

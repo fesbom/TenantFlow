@@ -1,4 +1,10 @@
 import { Storage, File } from "@google-cloud/storage";
+import path from "path";
+import express, { type Express, type NextFunction, type Response } from "express";
+import {
+  authenticateToken,
+  type AuthenticatedRequest,
+} from "./middleware/auth";
 
 // Validate and load credentials
 let credentialsJson;
@@ -31,6 +37,60 @@ export class ObjectNotFoundError extends Error {
     this.name = "ObjectNotFoundError";
     Object.setPrototypeOf(this, ObjectNotFoundError.prototype);
   }
+}
+
+export function isLocalUploadPathOwnedByClinic(
+  requestPath: string,
+  expectedClinicId: string,
+): boolean {
+  if (!expectedClinicId || !/^[a-zA-Z0-9_-]+$/.test(expectedClinicId)) {
+    return false;
+  }
+
+  try {
+    const decodedPath = decodeURIComponent(requestPath.split("?")[0]).replace(/\\/g, "/");
+    if (decodedPath.includes("\0")) return false;
+
+    const normalizedPath = path.posix.normalize(`/${decodedPath}`);
+    const [clinicId] = normalizedPath.split("/").filter(Boolean);
+    return clinicId === expectedClinicId;
+  } catch {
+    return false;
+  }
+}
+
+export function authorizeLocalUpload(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.user) {
+    return res.status(401).json({
+      code: "AUTENTICACAO_OBRIGATORIA",
+      message: "Autenticação obrigatória.",
+    });
+  }
+
+  if (!isLocalUploadPathOwnedByClinic(req.url, req.user.clinicId)) {
+    return res.status(403).json({
+      code: "MIDIA_DE_OUTRA_CLINICA",
+      message: "Acesso à mídia não autorizado.",
+    });
+  }
+
+  next();
+}
+
+export function mountLocalUploads(
+  app: Express,
+  uploadsRoot = path.join(process.cwd(), "uploads"),
+) {
+  app.use(
+    "/uploads",
+    authenticateToken,
+    authorizeLocalUpload,
+    express.static(uploadsRoot),
+  );
 }
 
 export class ObjectStorageService {

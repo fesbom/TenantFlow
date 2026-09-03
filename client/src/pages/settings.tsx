@@ -20,6 +20,7 @@ import { User, Clinic } from "@/types";
 import { Settings, Plus, Edit, Pencil, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2, FileText } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ALL_INVOICE_FIELDS, DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 export default function SettingsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -866,7 +867,7 @@ export default function SettingsPage() {
                           
                           {clinicFormData.logoUrl && (
                             <div className="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden border">
-                              <img
+                              <ProtectedImage
                                 src={clinicFormData.logoUrl}
                                 alt="Logo da clínica"
                                 className="max-w-full max-h-full object-contain"

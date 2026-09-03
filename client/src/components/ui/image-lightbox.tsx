@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { X, Download, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
+import { downloadMedia, ProtectedImage } from "@/components/ui/protected-image";
 
 interface ImageLightboxProps {
   isOpen: boolean;
@@ -28,16 +29,7 @@ export function ImageLightbox({ isOpen, onClose, imageSrc, imageAlt = "Imagem" }
 
   const handleDownload = async () => {
     try {
-      const response = await fetch(imageSrc);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `imagem-${Date.now()}.jpg`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      await downloadMedia(imageSrc, `imagem-${Date.now()}.jpg`);
     } catch (error) {
       console.error('Erro ao baixar imagem:', error);
     }
@@ -118,7 +110,7 @@ export function ImageLightbox({ isOpen, onClose, imageSrc, imageAlt = "Imagem" }
               transformOrigin: 'center center',
             }}
           >
-            <img
+            <ProtectedImage
               src={imageSrc}
               alt={imageAlt}
               className="max-w-[90vw] max-h-[90vh] object-contain select-none"

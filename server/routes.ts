@@ -31,7 +31,7 @@ import {
   generatePasswordResetEmail,
   handleBrevoEmailWebhook,
 } from "./email";
-import { ObjectStorageService } from "./objectStorage";
+import { mountLocalUploads, ObjectStorageService } from "./objectStorage";
 import {
   insertUserSchema,
   insertPatientSchema,
@@ -105,8 +105,8 @@ async function resolveSendConfig(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Serve uploaded files
-  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+  // Local uploads are private and scoped to the authenticated user's clinic.
+  mountLocalUploads(app);
   registerAdminRoutes(app);
 
   // Auth routes

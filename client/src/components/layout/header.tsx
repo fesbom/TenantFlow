@@ -2,6 +2,7 @@ import { Menu, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useBranding } from "@/contexts/branding-context";
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 interface HeaderProps {
   title: string;
@@ -50,7 +51,7 @@ export default function Header({ title, onMenuClick, actions }: HeaderProps) {
           
           <div className="flex items-center space-x-3">
             {branding.logoUrl && (
-              <img
+              <ProtectedImage
                 src={branding.logoUrl}
                 alt={`Logo ${branding.clinicName}`}
                 className="h-8 w-8 object-contain"

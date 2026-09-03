@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Camera, Upload, Trash2, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 interface PhotoUploadProps {
   currentPhotoUrl?: string | null;
@@ -255,7 +256,7 @@ export function PhotoUpload({
         >
           <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-200 bg-gray-100 flex items-center justify-center hover:border-blue-500 transition-colors">
             {currentPhotoUrl ? (
-              <img
+              <ProtectedImage
                 src={currentPhotoUrl}
                 alt={patientName}
                 className="w-full h-full object-cover"

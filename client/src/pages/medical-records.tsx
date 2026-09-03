@@ -19,6 +19,7 @@ import BudgetDiscountModal from "@/components/modals/budget-discount-modal";
 import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement } from "@/types";
 import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
+import { ProtectedImage } from "@/components/ui/protected-image";
 
 interface PaginatedPatientsResponse {
   data: Patient[];
@@ -372,7 +373,7 @@ export default function MedicalRecords() {
                                                 className="inline-flex items-center justify-center"
                                                 onClick={(e) => handleImageClick(mov.fotoAtividade!, e)}
                                               >
-                                                <img
+                                                <ProtectedImage
                                                   src={mov.fotoAtividade}
                                                   alt="Foto da atividade"
                                                   className="w-24 h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity shadow-sm"
