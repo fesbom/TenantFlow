@@ -209,7 +209,9 @@ async function mediaOperation(type: string, clinicId: string, payload: Record<st
   const localDir = path.join(process.cwd(), "uploads", clinicId);
   if (process.env.NODE_ENV === "production") {
     const objectStorage = new ObjectStorageService();
-    const allObjects = await objectStorage.listObjectPaths(`${clinicId}/`);
+    const clinicPrefix = `${clinicId}/`;
+    const allObjects = (await objectStorage.listObjectPaths(clinicPrefix))
+      .filter((objectPath) => objectPath.startsWith(clinicPrefix));
     const media = await collectMedia(clinicId);
     const referenced = new Set(media.map((item) => item.objectPath).filter(Boolean));
     const orphans = allObjects.filter((objectPath) => !referenced.has(objectPath));
@@ -217,7 +219,7 @@ async function mediaOperation(type: string, clinicId: string, payload: Record<st
       return { supported: true, dryRun: true, objectCount: allObjects.length, orphanCount: orphans.length, objects: orphans };
     }
     const reviewedObjects = Array.isArray(payload.objects)
-      ? payload.objects.filter((value): value is string => typeof value === "string" && value.startsWith(`${clinicId}/`))
+      ? payload.objects.filter((value): value is string => typeof value === "string" && value.startsWith(clinicPrefix))
       : [];
     if (!reviewedObjects.length) {
       return { supported: true, dryRun: false, orphanCount: 0, deleted: 0, failed: 0 };
