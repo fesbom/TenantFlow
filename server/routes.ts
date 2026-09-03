@@ -292,24 +292,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "Password must be at least 8 characters long" });
       }
 
-      const resetToken = await storage.getPasswordResetToken(token);
-
-      if (!resetToken) {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      const wasReset = await storage.consumePasswordResetToken(token, hashedPassword);
+      if (!wasReset) {
         return res.status(400).json({ message: "Invalid or expired token" });
       }
-
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-      const updatedUser = await storage.updateUserPassword(
-        resetToken.userId,
-        hashedPassword,
-      );
-
-      if (!updatedUser) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      await storage.markTokenAsUsed(token);
       await storage.deleteExpiredTokens();
 
       res.json({ message: "Password reset successfully" });

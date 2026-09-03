@@ -56,7 +56,7 @@ import {
   type InsertClinicHoliday,
 } from "@shared/schema";
 
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, and, desc, gte, lte, count, sql, isNotNull, isNull, or, ilike } from "drizzle-orm";
 
 export interface PaginatedResponse<T> {
@@ -89,6 +89,7 @@ export interface IStorage {
   createPasswordResetToken(token: InsertPasswordResetToken): Promise<PasswordResetToken>;
   getPasswordResetToken(token: string): Promise<PasswordResetToken | undefined>;
   markTokenAsUsed(token: string): Promise<boolean>;
+  consumePasswordResetToken(token: string, hashedPassword: string): Promise<boolean>;
   deleteExpiredTokens(): Promise<void>;
 
   // Patient methods
@@ -948,6 +949,56 @@ export class DatabaseStorage implements IStorage {
       .set({ isUsed: true })
       .where(eq(passwordResetTokens.token, token));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async consumePasswordResetToken(token: string, hashedPassword: string): Promise<boolean> {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const tokenResult = await client.query<{ user_id: string }>(
+        `SELECT user_id
+           FROM password_reset_tokens
+          WHERE token = $1
+            AND is_used = false
+            AND expires_at >= now()
+          FOR UPDATE`,
+        [token],
+      );
+
+      const userId = tokenResult.rows[0]?.user_id;
+      if (!userId) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+
+      const userResult = await client.query(
+        `UPDATE users
+            SET password = $1,
+                token_version = token_version + 1
+          WHERE id = $2
+          RETURNING id`,
+        [hashedPassword, userId],
+      );
+      if (userResult.rowCount !== 1) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+
+      await client.query(
+        `UPDATE password_reset_tokens
+            SET is_used = true
+          WHERE user_id = $1
+            AND is_used = false`,
+        [userId],
+      );
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async deleteExpiredTokens(): Promise<void> {

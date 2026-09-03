@@ -1,0 +1,292 @@
+=====
+
+2026-09-02 23:43:23.89
+db8270e4
+User
+[REDE] Content-Type: application/json
+
+2026-09-02 23:43:23.89
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:43:23.89
+db8270e4
+User
+[REDE] Recebido POST em: /api/auth/reset-password
+
+2026-09-02 23:43:23.89
+db8270e4
+User
+[REDE] User-Agent: curl/8.14.1
+
+2026-09-02 23:43:23.91
+db8270e4
+User
+Password reset requested for: fesbom+superadmin@gmail.com (user found)
+
+2026-09-02 23:43:24.73
+db8270e4
+User
+[email] Brevo accepted message {
+
+2026-09-02 23:43:24.73
+db8270e4
+User
+}
+
+2026-09-02 23:43:24.73
+db8270e4
+User
+recipient: 'fe***@gmail.com',
+
+2026-09-02 23:43:24.73
+db8270e4
+User
+messageId: '<202609030243.47140412913@smtp-relay.mailin.fr>'
+
+2026-09-02 23:43:24.73
+db8270e4
+User
+subject: 'DentiCare - Redefinição de Senha',
+
+
+2026-09-02 23:43:24.73
+db8270e4
+User
+Password reset email sent successfully { recipient: 'fe***@gmail.com' }
+
+2026-09-02 23:43:24.73
+db8270e4
+User
+2:43:24 AM [express] POST /api/auth/reset-password 200 in 844ms
+
+2026-09-02 23:44:19.50
+db8270e4
+User
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-02 23:44:19.50
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:44:19.50
+db8270e4
+User
+[REDE] Recebido POST em: /api/auth/login
+
+2026-09-02 23:44:19.50
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:44:19.50
+db8270e4
+User
+[REDE] Content-Type: application/json
+
+2026-09-02 23:44:19.51
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:44:19.51
+db8270e4
+User
+[REDE] Content-Type: application/json
+
+2026-09-02 23:44:19.51
+db8270e4
+User
+[REDE] Recebido POST em: /api/auth/reset-password
+
+2026-09-02 23:44:19.51
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:44:19.51
+db8270e4
+User
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-02 23:44:19.62
+db8270e4
+User
+Password reset requested for: fesbom+superadmin@gmail.com (user found)
+
+2026-09-02 23:44:20.18
+db8270e4
+User
+2:44:20 AM [express] POST /api/auth/login 401 in 671ms :: {"message":"Invalid credentials"}
+
+2026-09-02 23:44:20.51
+db8270e4
+User
+messageId: '<202609030244.49087464922@smtp-relay.mailin.fr>'
+
+2026-09-02 23:44:20.51
+db8270e4
+User
+}
+
+2026-09-02 23:44:20.51
+db8270e4
+User
+Password reset email sent successfully { recipient: 'fe***@gmail.com' }
+
+2026-09-02 23:44:20.51
+db8270e4
+User
+recipient: 'fe***@gmail.com',
+
+2026-09-02 23:44:20.51
+db8270e4
+User
+subject: 'DentiCare - Redefinição de Senha',
+
+2026-09-02 23:44:20.51
+db8270e4
+User
+[email] Brevo accepted message {
+
+2026-09-02 23:44:20.51
+db8270e4
+User
+2:44:20 AM [express] POST /api/auth/reset-password 200 in 1004ms
+
+2026-09-02 23:44:39.37
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:44:39.37
+db8270e4
+User
+[REDE] Recebido POST em: /api/auth/validate-reset-token
+
+2026-09-02 23:44:39.37
+db8270e4
+User
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-02 23:44:39.37
+db8270e4
+User
+[REDE] Content-Type: application/json
+
+2026-09-02 23:44:39.37
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:44:39.52
+db8270e4
+User
+2:44:39 AM [express] POST /api/auth/validate-reset-token 200 in 157ms
+
+2026-09-02 23:45:53.56
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:45:53.56
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:45:53.56
+db8270e4
+User
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-02 23:45:53.56
+db8270e4
+User
+[REDE] Recebido POST em: /api/auth/confirm-reset-password
+
+2026-09-02 23:45:53.56
+db8270e4
+User
+[REDE] Content-Type: application/json
+
+2026-09-02 23:45:53.88
+db8270e4
+User
+2:45:53 AM [express] POST /api/auth/confirm-reset-password 200 in 320ms
+
+2026-09-02 23:45:57.27
+db8270e4
+User
+2:45:57 AM [express] GET /api/clinic/branding/fesbom@gmail.com 304 in 66ms
+
+2026-09-02 23:46:33.10
+db8270e4
+User
+2:46:33 AM [express] GET /api/clinic/branding/fesbom%2Bsuperadmin@gmail.com 304 in 134ms
+
+2026-09-02 23:46:33.95
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:46:33.95
+db8270e4
+User
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-02 23:46:33.95
+db8270e4
+User
+[REDE] Recebido POST em: /api/auth/login
+
+2026-09-02 23:46:33.95
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:46:33.95
+db8270e4
+User
+[REDE] Content-Type: application/json
+
+2026-09-02 23:46:34.43
+db8270e4
+User
+2:46:34 AM [express] POST /api/auth/login 401 in 485ms :: {"message":"Invalid credentials"}
+
+2026-09-02 23:46:59.70
+db8270e4
+User
+2:46:59 AM [express] GET /api/clinic/branding/fesbom%2Bsuperadmin@gmail.com 304 in 159ms
+
+2026-09-02 23:47:02.00
+db8270e4
+User
+[REDE] Content-Type: application/json
+
+2026-09-02 23:47:02.00
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:47:02.00
+db8270e4
+User
+[REDE] Recebido POST em: /api/auth/login
+
+2026-09-02 23:47:02.00
+db8270e4
+User
+[REDE] ========================================
+
+2026-09-02 23:47:02.00
+db8270e4
+User
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-02 23:47:02.54
+db8270e4
+User
+2:47:02 AM [express] POST /api/auth/login 401 in 533ms :: {"message":"Invalid credentials"}
