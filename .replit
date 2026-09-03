@@ -46,3 +46,10 @@ integrations = ["javascript_gemini_ai_integrations:2.0.0"]
 
 [objectStorage]
 defaultBucketID = "replit-objstore-e2515c9c-5075-4c5f-9b55-bb59a86c3dfe"
+
+[userenv]
+
+[userenv.shared]
+PASSWORD_RESET_BASE_URL = "https://deticare.replit.app"
+BREVO_FROM_EMAIL = "fesbom@gmail.com"
+BREVO_FROM_NAME = "DentiCare"

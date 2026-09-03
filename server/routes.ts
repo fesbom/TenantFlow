@@ -186,6 +186,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/webhooks/brevo/email", (req, res) => {
+    const configuredSecret = process.env.BREVO_WEBHOOK_SECRET || "";
+    const providedSecret = req.get("x-denticare-webhook-secret") || "";
+    const configuredBuffer = Buffer.from(configuredSecret);
+    const providedBuffer = Buffer.from(providedSecret);
+
+    if (
+      !configuredSecret ||
+      configuredBuffer.length !== providedBuffer.length ||
+      !crypto.timingSafeEqual(configuredBuffer, providedBuffer)
+    ) {
+      return res.status(401).json({ message: "Unauthorized webhook" });
+    }
+
+    const events = Array.isArray(req.body) ? req.body : [req.body];
+    for (const payload of events) {
+      const recipient = typeof payload?.email === "string"
+        ? payload.email.replace(/^(.{2}).*(@.*)$/, "$1***$2")
+        : "[unknown]";
+      const reason = typeof payload?.reason === "string"
+        ? payload.reason.slice(0, 300)
+        : undefined;
+
+      console.log("[email-webhook] Brevo delivery event", {
+        event: typeof payload?.event === "string" ? payload.event : "unknown",
+        messageId: typeof payload?.["message-id"] === "string"
+          ? payload["message-id"]
+          : undefined,
+        recipient,
+        reason,
+      });
+    }
+
+    return res.status(204).send();
+  });
+
   // Password reset request route
   app.post("/api/auth/reset-password", async (req, res) => {
     try {
@@ -213,23 +249,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         try {
-          const protocol = req.secure ? "https" : "http";
-          const baseUrl = `${protocol}://${req.get("host") || "localhost:5000"}`;
           const emailData = generatePasswordResetEmail(
             user.email,
             resetToken,
-            baseUrl,
+            process.env.PASSWORD_RESET_BASE_URL,
           );
 
           const emailSent = await sendEmail(emailData);
 
           if (emailSent) {
-            console.log(`Password reset email sent successfully to ${email}`);
+            console.log("Password reset email sent successfully", {
+              recipient: email.replace(/^(.{2}).*(@.*)$/, "$1***$2"),
+            });
           } else {
-            console.error(`Failed to send password reset email to ${email}`);
+            console.error("Password reset email delivery failed", {
+              recipient: email.replace(/^(.{2}).*(@.*)$/, "$1***$2"),
+            });
           }
         } catch (emailError) {
-          console.error(`Email sending error:`, emailError);
+          console.error("Password reset email configuration or delivery error", {
+            message: emailError instanceof Error ? emailError.message : "Unknown email error",
+          });
         }
       }
 

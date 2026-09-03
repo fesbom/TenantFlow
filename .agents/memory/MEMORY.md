@@ -1,1 +1,2 @@
 - [WhatsApp Multi-Instance](whatsapp-multi-instance.md) — múltiplos números por clínica via tabela `whatsapp_instances`; webhook resolve instância por nome e constrói InstanceContext para a IA.
+- [Brevo no Replit](brevo-replit.md) — o conector usa IPs de saída dinâmicos; allowlist por IP causa bloqueios intermitentes mesmo com credencial válida.

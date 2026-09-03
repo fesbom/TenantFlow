@@ -1,14 +1,4 @@
-import sgMail from '@sendgrid/mail';
-
-if (!process.env.SENDGRID_API_KEY) {
-  throw new Error("SENDGRID_API_KEY environment variable must be set");
-}
-
-if (!process.env.SENDGRID_API_KEY.startsWith('SG.')) {
-  console.warn("SendGrid API key should start with 'SG.' - please verify your API key");
-}
-
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+import { ReplitConnectors } from "@replit/connectors-sdk";
 
 interface EmailParams {
   to: string;
@@ -18,54 +8,100 @@ interface EmailParams {
   html?: string;
 }
 
+function maskEmail(email: string): string {
+  const [localPart, domain] = email.split("@");
+  if (!localPart || !domain) return "[invalid-email]";
+  return `${localPart.slice(0, 2)}***@${domain}`;
+}
+
+async function readBrevoResponse(response: Response): Promise<Record<string, unknown>> {
+  try {
+    return await response.json() as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 export async function sendEmail(params: EmailParams): Promise<boolean> {
-  const emailData: any = {
-    to: params.to,
-    from: params.from,
+  const emailData = {
+    sender: {
+      email: params.from,
+      name: process.env.BREVO_FROM_NAME || "DentiCare",
+    },
+    to: [{ email: params.to }],
     subject: params.subject,
+    ...(params.text ? { textContent: params.text } : {}),
+    ...(params.html ? { htmlContent: params.html } : {}),
   };
-  
-  if (params.text) {
-    emailData.text = params.text;
-  }
-  
-  if (params.html) {
-    emailData.html = params.html;
-  }
 
   try {
-    await sgMail.send(emailData);
-    console.log(`Email sent successfully to ${params.to}`);
-    return true;
-  } catch (error: any) {
-    console.error('SendGrid email error:', {
-      code: error?.code,
-      message: error?.message,
+    const connectors = new ReplitConnectors();
+    const response = await connectors.proxy("brevo", "/smtp/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(emailData),
     });
-    if (error.response && error.response.body) {
-      console.error('Full SendGrid response body:', JSON.stringify(error.response.body, null, 2));
-      if (error.response.body.errors) {
-        console.error('SendGrid error details:');
-        error.response.body.errors.forEach((err: any, index: number) => {
-          console.error(`Error ${index + 1}:`, err);
-        });
-      }
+    const responseBody = await readBrevoResponse(response);
+
+    if (!response.ok) {
+      console.error("[email] Brevo rejected message", {
+        recipient: maskEmail(params.to),
+        subject: params.subject,
+        statusCode: response.status,
+        code: typeof responseBody.code === "string" ? responseBody.code : undefined,
+        message: typeof responseBody.message === "string"
+          ? responseBody.message
+          : "Unknown provider error",
+      });
+      return false;
     }
-    console.error('Email delivery failed:', {
-      to: params.to,
-      from: params.from,
+
+    console.log("[email] Brevo accepted message", {
+      recipient: maskEmail(params.to),
       subject: params.subject,
+      messageId: typeof responseBody.messageId === "string"
+        ? responseBody.messageId
+        : undefined,
+    });
+    return true;
+  } catch (error) {
+    // Never log emailData here: password reset messages contain the secret token.
+    console.error("[email] Brevo request failed", {
+      recipient: maskEmail(params.to),
+      subject: params.subject,
+      message: error instanceof Error ? error.message : "Unknown connector error",
     });
     return false;
   }
 }
 
 export function generatePasswordResetEmail(userEmail: string, resetToken: string, baseUrl?: string) {
-  const resetUrl = `${baseUrl || 'http://localhost:5000'}/reset-password?token=${resetToken}`;
+  const configuredBaseUrl = (baseUrl || process.env.PASSWORD_RESET_BASE_URL || "").trim();
+  if (!configuredBaseUrl) {
+    throw new Error("PASSWORD_RESET_BASE_URL must be configured for password reset emails");
+  }
+
+  let publicBaseUrl: URL;
+  try {
+    publicBaseUrl = new URL(configuredBaseUrl);
+  } catch {
+    throw new Error("PASSWORD_RESET_BASE_URL must be a valid URL");
+  }
+
+  if (publicBaseUrl.protocol !== "https:") {
+    throw new Error("PASSWORD_RESET_BASE_URL must use HTTPS");
+  }
+
+  const basePath = publicBaseUrl.pathname.replace(/\/+$/, "");
+  publicBaseUrl.search = "";
+  publicBaseUrl.hash = "";
+  publicBaseUrl.pathname = `${basePath}/reset-password`;
+  publicBaseUrl.searchParams.set("token", resetToken);
+  const resetUrl = publicBaseUrl.toString();
   
   return {
     to: userEmail,
-    from: 'fesbom@gmail.com', // Using your verified email address
+    from: process.env.BREVO_FROM_EMAIL || 'fesbom@gmail.com',
     subject: 'DentiCare - Redefinição de Senha',
     text: `
 Olá!
