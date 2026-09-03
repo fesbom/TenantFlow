@@ -1,4 +1,6 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import crypto from "crypto";
+import type { Request, Response } from "express";
 
 interface EmailParams {
   to: string;
@@ -46,12 +48,8 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
     if (!response.ok) {
       console.error("[email] Brevo rejected message", {
         recipient: maskEmail(params.to),
-        subject: params.subject,
         statusCode: response.status,
         code: typeof responseBody.code === "string" ? responseBody.code : undefined,
-        message: typeof responseBody.message === "string"
-          ? responseBody.message
-          : "Unknown provider error",
       });
       return false;
     }
@@ -68,11 +66,42 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
     // Never log emailData here: password reset messages contain the secret token.
     console.error("[email] Brevo request failed", {
       recipient: maskEmail(params.to),
-      subject: params.subject,
-      message: error instanceof Error ? error.message : "Unknown connector error",
+      errorType: error instanceof Error ? error.name : "UnknownConnectorError",
     });
     return false;
   }
+}
+
+export function handleBrevoEmailWebhook(req: Request, res: Response) {
+  const configuredSecret = process.env.BREVO_WEBHOOK_SECRET || "";
+  const providedSecret = req.get("x-denticare-webhook-secret") || "";
+  const configuredBuffer = Buffer.from(configuredSecret);
+  const providedBuffer = Buffer.from(providedSecret);
+
+  if (
+    !configuredSecret ||
+    configuredBuffer.length !== providedBuffer.length ||
+    !crypto.timingSafeEqual(configuredBuffer, providedBuffer)
+  ) {
+    return res.status(401).json({ message: "Unauthorized webhook" });
+  }
+
+  const events = Array.isArray(req.body) ? req.body : [req.body];
+  for (const payload of events) {
+    const recipient = typeof payload?.email === "string"
+      ? maskEmail(payload.email)
+      : "[unknown]";
+
+    console.log("[email-webhook] Brevo delivery event", {
+      event: typeof payload?.event === "string" ? payload.event : "unknown",
+      messageId: typeof payload?.["message-id"] === "string"
+        ? payload["message-id"]
+        : undefined,
+      recipient,
+    });
+  }
+
+  return res.status(204).send();
 }
 
 export function generatePasswordResetEmail(userEmail: string, resetToken: string, baseUrl?: string) {

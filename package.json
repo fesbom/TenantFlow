@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "npm test && vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "test": "vitest run --config vitest.config.ts",
     "check": "tsc",
@@ -108,6 +108,7 @@
     "twilio": "^5.11.1",
     "vaul": "^1.1.2",
     "vite": "^5.4.21",
+    "vitest": "^4.1.11",
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
     "zod": "^3.25.7",
@@ -124,8 +125,7 @@
     "@types/react-dom": "^18.3.1",
     "@types/ws": "^8.5.13",
     "drizzle-kit": "^0.30.6",
-    "typescript": "^5.6.3",
-    "vitest": "^4.1.11"
+    "typescript": "^5.6.3"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
