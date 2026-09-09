@@ -1,0 +1,200 @@
+
+2026-09-09 20:21:59.16
+63658236
+Sistema
+starting up user application
+
+2026-09-09 20:21:59.16
+63658236
+Sistema
+metasidecar: loaded enterprise status from environment is_enterprise=false
+
+2026-09-09 20:21:59.16
+63658236
+Sistema
+forwarding local port 5000 to external port 80 (mapped as 1104)
+
+2026-09-09 20:21:59.16
+63658236
+Sistema
+healthcheck failed error=healthcheck /: Get "http://127.0.0.1:1104/": dial tcp 127.0.0.1:1104: connect: connection refused
+
+2026-09-09 20:21:59.17
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:21:59.18
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:21:59.21
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:21:59.26
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:21:59.40
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:21:59.71
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:22:00.34
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:22:00.48
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:22:00.76
+63658236
+Usuário
+> NODE_ENV=production node dist/index.js
+
+2026-09-09 20:22:00.76
+63658236
+Usuário
+> rest-express@1.0.0 start
+
+2026-09-09 20:22:01.75
+63658236
+Sistema
+healthcheck failed error=healthcheck / returned status 500
+
+2026-09-09 20:22:02.38
+63658236
+Usuário
+- EVO_URL: https://whatsapp-production-f4bc.up.railway.app
+
+2026-09-09 20:22:02.38
+63658236
+Usuário
+🔧 [Evolution] Configuração global:
+
+2026-09-09 20:22:02.38
+63658236
+Usuário
+- EVO_KEY: (configurada)
+
+2026-09-09 20:22:02.38
+63658236
+Usuário
+- EVO_INSTANCE: denticare5
+
+2026-09-09 20:22:02.38
+63658236
+Usuário
+- WEBHOOK_GLOBAL_URL: https://deticare.replit.app/webhook/evolution
+
+2026-09-09 20:22:02.73
+63658236
+Usuário
+11:22:02 PM [express] Servidor rodando na porta 5000
+
+2026-09-09 20:22:06.70
+5a83b8f1
+Sistema
+system: received signal terminated
+
+2026-09-09 20:22:32.14
+63658236
+Usuário
+11:22:32 PM [express] GET /api/clinic/branding/fesbom@gmail.com 304 in 189ms
+
+2026-09-09 20:22:56.40
+63658236
+Usuário
+11:22:56 PM [express] GET /api/clinic/branding/fesbom%2Bsuperadmin@gmail.com 304 in 188ms
+
+2026-09-09 20:23:07.48
+63658236
+Usuário
+[REDE] Content-Type: application/json
+
+2026-09-09 20:23:07.48
+63658236
+Usuário
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-09 20:23:07.48
+63658236
+Usuário
+[REDE] Recebido POST em: /api/auth/reset-password
+
+2026-09-09 20:23:07.48
+63658236
+Usuário
+[REDE] ========================================
+
+2026-09-09 20:23:07.48
+63658236
+Usuário
+[REDE] ========================================
+
+2026-09-09 20:23:07.57
+63658236
+Usuário
+Password reset requested for: fesbom+superadmin@gmail.com (user found)
+
+2026-09-09 20:23:08.18
+63658236
+Usuário
+[email] Brevo rejected message { recipient: 'fe***@gmail.com', statusCode: 401, code: undefined }
+
+2026-09-09 20:23:08.18
+63658236
+Usuário
+Password reset email delivery failed { recipient: 'fe***@gmail.com' }
+
+2026-09-09 20:23:08.18
+63658236
+Usuário
+11:23:08 PM [express] POST /api/auth/reset-password 200 in 670ms
+
+2026-09-09 20:23:59.65
+63658236
+Usuário
+[REDE] Recebido POST em: /api/auth/login
+
+2026-09-09 20:23:59.65
+63658236
+Usuário
+[REDE] ========================================
+
+2026-09-09 20:23:59.65
+63658236
+Usuário
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-09 20:23:59.65
+63658236
+Usuário
+[REDE] ========================================
+
+2026-09-09 20:23:59.65
+63658236
+Usuário
+[REDE] Content-Type: application/json
+
+2026-09-09 20:24:00.03
+63658236
+Usuário
+11:24:00 PM [express] POST /api/auth/login 401 in 372ms :: {"message":"Invalid credentials"}
+
+2026-09-09 20:24:00.03
+63658236
+Usuário
+11:24:00 PM [express] POST /api/auth/login 401 in 372ms :: {"message":"Invalid credentials"}
