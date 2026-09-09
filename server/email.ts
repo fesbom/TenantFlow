@@ -37,12 +37,21 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
   };
 
   try {
-    const connectors = new ReplitConnectors();
-    const response = await connectors.proxy("brevo", "/smtp/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(emailData),
-    });
+    const apiKey = process.env.BREVO_API_KEY?.trim();
+    const response = apiKey
+      ? await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": apiKey,
+          },
+          body: JSON.stringify(emailData),
+        })
+      : await new ReplitConnectors().proxy("brevo", "/smtp/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(emailData),
+        });
     const responseBody = await readBrevoResponse(response);
 
     if (!response.ok) {
