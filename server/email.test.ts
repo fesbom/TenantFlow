@@ -30,6 +30,7 @@ describe("password reset email safeguards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BREVO_WEBHOOK_SECRET = "webhook-test-secret";
+    delete process.env.BREVO_API_KEY;
     delete process.env.PASSWORD_RESET_BASE_URL;
   });
 
