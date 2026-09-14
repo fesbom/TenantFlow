@@ -12,4 +12,9 @@ if (!process.env.DATABASE_URL) {
 }
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Idle connections can be closed by the database service. The pool removes
+// failed clients; handling this event prevents an unrelated process crash.
+pool.on("error", () => {
+  console.error("[database] Idle connection closed unexpectedly; pool will replace it.");
+});
 export const db = drizzle({ client: pool, schema });

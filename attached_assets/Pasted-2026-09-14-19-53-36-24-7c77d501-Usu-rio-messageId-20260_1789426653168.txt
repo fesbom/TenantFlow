@@ -1,0 +1,204 @@
+2026-09-14 19:53:36.24
+7c77d501
+Usuário
+messageId: '<202609142253.17575407516@smtp-relay.mailin.fr>'
+
+2026-09-14 19:53:36.24
+7c77d501
+Usuário
+Password reset email sent successfully { recipient: 'fe***@gmail.com' }
+
+2026-09-14 19:53:36.24
+7c77d501
+Usuário
+10:53:36 PM [express] POST /api/auth/reset-password 200 in 771ms
+
+2026-09-14 19:53:52.17
+7c77d501
+Usuário
+[REDE] ========================================
+
+2026-09-14 19:53:52.17
+7c77d501
+Usuário
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-14 19:53:52.17
+7c77d501
+Usuário
+[REDE] Content-Type: application/json
+
+2026-09-14 19:53:52.17
+7c77d501
+Usuário
+[REDE] ========================================
+
+2026-09-14 19:53:52.17
+7c77d501
+Usuário
+[REDE] Recebido POST em: /api/auth/validate-reset-token
+
+2026-09-14 19:53:52.36
+7c77d501
+Usuário
+10:53:52 PM [express] POST /api/auth/validate-reset-token 200 in 187ms
+
+2026-09-14 19:55:16.23
+7c77d501
+Usuário
+[REDE] Content-Type: application/json
+
+2026-09-14 19:55:16.23
+7c77d501
+Usuário
+[REDE] ========================================
+
+2026-09-14 19:55:16.23
+7c77d501
+Usuário
+[REDE] User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb
+
+2026-09-14 19:55:16.23
+7c77d501
+Usuário
+[REDE] ========================================
+
+2026-09-14 19:55:16.65
+7c77d501
+Usuário
+10:55:16 PM [express] POST /api/auth/confirm-reset-password 200 in 410ms
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+^
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+_repeat: null,
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+},
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at v.emit (file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:397:12)
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at cn.handlePacket (file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1143:13)
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at v.<anonymous> (file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1190:16)
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at callListener (/home/runner/workspace/node_modules/ws/lib/event-target.js:290:14)
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+[Symbol(asyncId)]: 1831,
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at Receiver.receiverOnMessage (/home/runner/workspace/node_modules/ws/lib/websocket.js:1220:20) {
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+[Symbol(kHasPrimitive)]: false,
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:395
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+[Symbol(refed)]: true,
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at cn.parseErrorMessage (file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:1182:6)
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at WebSocket.<anonymous> (file:///home/runner/workspace/node_modules/@neondatabase/serverless/index.mjs:987:80)
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+severity: 'FATAL',
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at WebSocket.onMessage (/home/runner/workspace/node_modules/ws/lib/event-target.js:209:9)
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+length: 116,
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+[Symbol(triggerId)]: 1786
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+at WebSocket.emit (node:events:524:28)
+
+2026-09-14 19:55:16.87
+7c77d501
+Usuário
+error: terminating connection due to administrator command
+
+2026-09-14 19:55:46.16
+7c77d501
+Usuário
+🔧 [Evolution] Configuração global:
+
+2026-09-14 19:55:46.16
+7c77d501
+Usuário
+- EVO_URL: https://whatsapp-production-f4bc.up.railway.app
+
+2026-09-14 19:55:46.16
+7c77d501
+Usuário
+- EVO_KEY: (configurada)
+
+2026-09-14 19:55:46.16
+7c77d501
+Usuário
+- EVO_INSTANCE: denticare5
+
+2026-09-14 19:55:46.16
+7c77d501
+Usuário
+- WEBHOOK_GLOBAL_URL: https://deticare.replit.app/webhook/evolution
+
+2026-09-14 19:55:51.04
+7c77d501
+Usuário
+10:55:48 PM [express] Servidor rodando na porta 5000
+
+2026-09-14 19:55:51.04
+7c77d501
+Usuário
+10:55:48 PM [express] Servidor rodando na porta 5000
