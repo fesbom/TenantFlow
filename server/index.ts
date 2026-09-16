@@ -99,12 +99,18 @@ app.use((req, res, next) => {
     res.sendFile(path.resolve(publicPath, "index.html"));
   });
 
-  const port = parseInt(process.env.PORT || '5000', 10);
+  /*const port = parseInt(process.env.PORT || '5000', 10);
   server.listen({
     port,
-    host: "0.0.0.0",
+    host: "127.0.0.1",
     reusePort: true,
   }, () => {
     log(`Servidor rodando na porta ${port}`);
-  });
+  });*/
+
+  const PORT = Number(process.env.PORT) || 8080;
+server.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
+
 })();

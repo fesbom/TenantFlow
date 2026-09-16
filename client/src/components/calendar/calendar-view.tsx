@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { Appointment, Patient, User } from "@/types";
 import AppointmentModal from "@/components/modals/appointment-modal";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter, User as UserIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter, Maximize2, Minimize2, User as UserIcon } from "lucide-react";
 import moment from "moment";
 import 'moment/locale/pt-br';
 import { ProtectedImage } from "@/components/ui/protected-image";
@@ -59,6 +59,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null);
   const [newAppointmentSlot, setNewAppointmentSlot] = useState<{ start: Date; end: Date } | null>(null);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   // --- TODAS AS CHAMADAS useQuery CORRIGIDAS ---
   const { data: appointments = [], isLoading: appointmentsLoading } = useQuery<Appointment[]>({
@@ -348,6 +349,17 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
             </div>
             <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <span>{filteredAppointments.length} agendamento{filteredAppointments.length !== 1 ? 's' : ''}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setIsMaximized((maximized) => !maximized)}
+                  title={isMaximized ? "Restaurar tamanho da agenda" : "Maximizar agenda"}
+                  aria-label={isMaximized ? "Restaurar tamanho da agenda" : "Maximizar agenda"}
+                  data-testid="button-toggle-calendar-size"
+                >
+                  {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </Button>
             </div>
         </div>
       </CardHeader>
@@ -355,16 +367,16 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   };
 
   return (
-    <div className={`space-y-6 ${className}`}>
-      <Card>
-        <CardContent className="p-0">
+    <div className={isMaximized ? "fixed inset-0 z-50 bg-slate-50 p-4 lg:p-6" : className}>
+      <Card className="h-full">
+        <CardContent className="h-full p-0">
           {(appointmentsLoading || patientsLoading) ? (
             <div className="h-96 flex items-center justify-center text-gray-500">
               <CalendarIcon className="h-8 w-8 mr-2 animate-spin" />
               Carregando agenda...
             </div>
           ) : (
-            <div className="h-[75vh]">
+            <div className="h-full">
               <Calendar
                 components={{
                   toolbar: CustomToolbar,

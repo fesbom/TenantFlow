@@ -219,6 +219,11 @@ export interface IStorage {
   getAvailableSlotsForDate(clinicId: string, dentistId: string, date: Date): Promise<string[]>;
 }
 
+// Emails must be compared/stored case-insensitively to avoid login failures from autocapitalized mobile keyboards
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 export class DatabaseStorage implements IStorage {
   // Clinic methods
   async createClinic(insertClinic: InsertClinic): Promise<Clinic> {
@@ -250,7 +255,8 @@ export class DatabaseStorage implements IStorage {
 
   // User methods
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const values = { ...insertUser, email: normalizeEmail(insertUser.email) };
+    const [user] = await db.insert(users).values(values).returning();
     return user;
   }
 
@@ -265,7 +271,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const [user] = await db.select().from(users).where(eq(users.email, normalizeEmail(email)));
     return user || undefined;
   }
 
@@ -275,6 +281,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
     const values: Record<string, unknown> = { ...updates, updatedAt: new Date() };
+    if (typeof updates.email === "string") {
+      values.email = normalizeEmail(updates.email);
+    }
     if (typeof updates.isActive === "boolean") {
       values.tokenVersion = sql`${users.tokenVersion} + 1`;
     }

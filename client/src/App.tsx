@@ -1,4 +1,5 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -25,11 +26,24 @@ import { AdminAudit, AdminForbidden, AdminHome, ClinicDetail } from "@/pages/adm
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const authContext = useAuth();
   const isAuthenticated = authContext?.isAuthenticated;
-  
+  const isSuperadmin = authContext?.user?.role === "superadmin";
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (isSuperadmin) {
+      navigate("/admin");
+    }
+  }, [isSuperadmin, navigate]);
+
   if (!isAuthenticated) {
     return <Login />;
   }
-  
+
+  // Superadmin has no clinicId, so clinic-scoped pages are not applicable; redirect above handles navigation
+  if (isSuperadmin) {
+    return null;
+  }
+
   return <Component />;
 }
 

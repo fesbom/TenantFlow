@@ -31,7 +31,7 @@ import {
   generatePasswordResetEmail,
   handleBrevoEmailWebhook,
 } from "./email";
-import { mountLocalUploads, ObjectStorageService } from "./objectStorage";
+import { mountLocalUploads, ObjectStorageService, isObjectStorageConfigured } from "./objectStorage";
 import {
   insertUserSchema,
   insertPatientSchema,
@@ -112,7 +112,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { password } = req.body;
+      const email = typeof req.body.email === "string" ? req.body.email.trim() : req.body.email;
 
       if (!email || !password) {
         await recordAccessAudit({
@@ -681,9 +682,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const filename = `${timestamp}-${safeName}`;
 
         let logoUrl: string;
-        const isProduction = process.env.NODE_ENV === "production";
+        const useObjectStorage = isObjectStorageConfigured();
 
-        if (isProduction) {
+        if (useObjectStorage) {
           try {
             const objectStorageService = new ObjectStorageService();
             const objectPath = `${clinicId}/profile/${filename}`;
@@ -801,9 +802,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const filename = `${timestamp}-${safeName}`;
 
         let photoUrl: string;
-        const isProduction = process.env.NODE_ENV === "production";
+        const useObjectStorage = isObjectStorageConfigured();
 
-        if (isProduction) {
+        if (useObjectStorage) {
           try {
             const objectStorageService = new ObjectStorageService();
             const objectPath = `${clinicId}/patients/${patientId}/${filename}`;
@@ -1515,10 +1516,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const tempRecordId = crypto.randomBytes(16).toString("hex");
         const timestamp = Date.now();
         const imagePaths: string[] = [];
-        const isProduction = process.env.NODE_ENV === "production";
+        const useObjectStorage = isObjectStorageConfigured();
 
         if (files && files.length > 0) {
-          if (isProduction) {
+          if (useObjectStorage) {
             const objectStorageService = new ObjectStorageService();
             for (const file of files) {
               try {

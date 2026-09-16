@@ -66,7 +66,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await login(loginForm.email, loginForm.password);
+      await login(loginForm.email.trim(), loginForm.password);
       toast({
         title: "Login realizado com sucesso!",
         description: `Bem-vindo ao ${branding.clinicName}`,
@@ -195,6 +195,9 @@ export default function Login() {
                       <Input
                         id="email"
                         type="email"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={loginForm.email}
                         onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                         placeholder="seu@email.com"
@@ -246,6 +249,9 @@ export default function Login() {
                               <Input
                                 id="reset-email"
                                 type="email"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                                 value={resetForm.email}
                                 onChange={(e) => setResetForm({ email: e.target.value })}
                                 placeholder="seu@email.com"
@@ -349,6 +355,9 @@ export default function Login() {
                         <Input
                           id="adminEmail"
                           type="email"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
                           value={registerForm.adminEmail}
                           onChange={(e) => setRegisterForm({ ...registerForm, adminEmail: e.target.value })}
                           placeholder="seu@email.com"

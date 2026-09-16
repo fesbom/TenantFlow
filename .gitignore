@@ -19,3 +19,9 @@ vite.config.ts.*
 # --- ADIÇÃO CRÍTICA ---
 # Ignorar fotos e arquivos de pacientes
 uploads/
+
+.env
+*.dump
+backup_replit.dump
+dist
+node_modules

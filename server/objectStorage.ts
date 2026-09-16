@@ -39,6 +39,11 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
+// GOOGLE_CREDENTIALS is guaranteed present here (throws above otherwise); only the bucket name is optional
+export function isObjectStorageConfigured(): boolean {
+  return Boolean(process.env.PRIVATE_OBJECT_DIR);
+}
+
 export function isLocalUploadPathOwnedByClinic(
   requestPath: string,
   expectedClinicId: string,

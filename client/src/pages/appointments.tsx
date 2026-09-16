@@ -32,8 +32,8 @@ export default function Appointments() {
           }
         />
         
-        <main className="p-4 lg:p-6 flex-grow">
-          <CalendarView className="w-full" />
+        <main className="flex min-h-0 flex-grow flex-col p-4 lg:p-6">
+          <CalendarView className="h-full w-full" />
         </main>
       </div>
     </div>
