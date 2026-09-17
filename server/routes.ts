@@ -802,42 +802,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const filename = `${timestamp}-${safeName}`;
 
         let photoUrl: string;
-        const useObjectStorage = isObjectStorageConfigured();
-
-        if (useObjectStorage) {
-          try {
-            const objectStorageService = new ObjectStorageService();
-            const objectPath = `${clinicId}/patients/${patientId}/${filename}`;
-            photoUrl = await objectStorageService.uploadFile(
-              req.file.buffer,
-              objectPath,
-              req.file.mimetype,
-            );
-          } catch (storageError: any) {
-            console.error(
-              "Object storage error (NÃO HÁ FALLBACK):",
-              storageError,
-            );
-            return res.status(500).json({
-              message: "Falha ao processar upload no GCS.",
-              error: storageError.message,
-            });
-          }
-        } else {
-          const uploadDir = path.join(
-            process.cwd(),
-            "uploads",
-            clinicId,
-            "patients",
-            patientId,
+        try {
+          const objectStorageService = new ObjectStorageService();
+          const objectPath = `${clinicId}/patients/${patientId}/${filename}`;
+          photoUrl = await objectStorageService.uploadFile(
+            req.file.buffer,
+            objectPath,
+            req.file.mimetype,
           );
-          if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-          }
-
-          const targetPath = path.join(uploadDir, filename);
-          fs.writeFileSync(targetPath, req.file.buffer);
-          photoUrl = `/uploads/${clinicId}/patients/${patientId}/${filename}`;
+        } catch (storageError: any) {
+          console.error("Object storage error (NÃO HÁ FALLBACK):", storageError);
+          return res.status(500).json({
+            message: "Falha ao processar upload no GCS.",
+            error: storageError.message,
+          });
         }
 
         const patient = await storage.getPatientById(
