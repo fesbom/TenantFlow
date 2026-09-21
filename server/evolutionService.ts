@@ -276,6 +276,8 @@ export async function generateQRCodeForClinic(
 
     if (state === "open" || state === "connected") {
       console.log(`[Evolution] Instância já conectada (state: ${state})`);
+      // Reforça o webhook mesmo em instância já conectada (migração de host, ex. Railway)
+      await configureWebhookForInstance(config);
       return { success: true, status: "connected" };
     }
 
