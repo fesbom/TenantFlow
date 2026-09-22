@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   MessageSquare,
@@ -42,6 +43,8 @@ import {
   X,
   Wifi,
   WifiOff,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -106,6 +109,7 @@ export default function Support() {
   const [, setTick] = useState(0); // força re-render para timers ao vivo
   const [flashedIds, setFlashedIds] = useState<Set<string>>(new Set());
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -386,18 +390,32 @@ export default function Support() {
     sendMessageMutation.mutate({ conversationId: selectedConversationId, message: messageText.trim() });
   };
 
-  // ── Status badge para o card ─────────────────────────────────────────
+  // ── Status badge para o card (abreviado, com tooltip explicando) ─────
   const ConvStatusBadge = ({ conv }: { conv: ConversationWithPatient }) => {
     const derived = getConvDerivedStatus(conv);
-    if (derived === "closed")
-      return <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-500"><CheckCircle className="h-3 w-3 mr-1" />Concluído</Badge>;
-    if (derived === "waiting_staff")
-      return <Badge variant="destructive" className="text-xs"><Hourglass className="h-3 w-3 mr-1" />Aguardando</Badge>;
-    // waiting_patient
-    if (conv.status === "ai")
-      return <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-700"><Bot className="h-3 w-3 mr-1" />IA</Badge>;
-    return <Badge variant="default" className="text-xs"><UserCheck className="h-3 w-3 mr-1" />Humano</Badge>;
+    let content: React.ReactNode;
+    let label: string;
+    if (derived === "closed") {
+      content = <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-gray-100 text-gray-500"><CheckCircle className="h-2.5 w-2.5" /></Badge>;
+      label = "Concluído";
+    } else if (derived === "waiting_staff") {
+      content = <Badge variant="destructive" className="text-[10px] px-1.5 py-0"><Hourglass className="h-2.5 w-2.5" /></Badge>;
+      label = "Aguardando atendimento";
+    } else if (conv.status === "ai") {
+      content = <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-purple-100 text-purple-700"><Bot className="h-2.5 w-2.5" /></Badge>;
+      label = "Atendimento por IA";
+    } else {
+      content = <Badge variant="default" className="text-[10px] px-1.5 py-0"><UserCheck className="h-2.5 w-2.5" /></Badge>;
+      label = "Atendimento humano";
+    }
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild><span>{content}</span></TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    );
   };
+
 
   // ── Elapsed / progress no card ───────────────────────────────────────
   const ConvTimeInfo = ({ conv }: { conv: ConversationWithPatient }) => {
@@ -408,8 +426,8 @@ export default function Support() {
 
     if (derived === "closed") {
       return (
-        <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
-          <Clock className="h-3 w-3" />
+        <div className="flex items-center gap-1 mt-0.5 text-[10px] text-gray-400">
+          <Clock className="h-2.5 w-2.5" />
           Encerrado {conv.lastMessageAt ? formatDistanceToNow(new Date(conv.lastMessageAt), { locale: ptBR, addSuffix: true }) : ""}
         </div>
       );
@@ -417,8 +435,8 @@ export default function Support() {
 
     if (derived === "waiting_staff") {
       return (
-        <div className="flex items-center gap-1 mt-1 text-xs text-red-500 font-medium">
-          <Timer className="h-3 w-3" />
+        <div className="flex items-center gap-1 mt-0.5 text-[10px] text-red-500 font-medium">
+          <Timer className="h-2.5 w-2.5" />
           Aguardando há {elapsed}
         </div>
       );
@@ -427,16 +445,16 @@ export default function Support() {
     // waiting_patient — mostra barra de progresso de 2h
     const barColor = pct >= 75 ? "bg-orange-400" : pct >= 50 ? "bg-yellow-400" : "bg-emerald-400";
     return (
-      <div className="mt-1.5 space-y-0.5">
+      <div className="mt-0.5 space-y-0.5">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-400">Respondido há {elapsed}</span>
-          <span className={`text-xs font-medium ${pct >= 75 ? "text-orange-500" : "text-gray-400"}`}>
-            {pct}% de 2h
+          <span className="text-[10px] text-gray-400">Respondido há {elapsed}</span>
+          <span className={`text-[10px] font-medium ${pct >= 75 ? "text-orange-500" : "text-gray-400"}`}>
+            {pct}%
           </span>
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-1.5">
+        <div className="w-full bg-gray-100 rounded-full h-1">
           <div
-            className={`${barColor} h-1.5 rounded-full transition-all`}
+            className={`${barColor} h-1 rounded-full transition-all`}
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -445,63 +463,84 @@ export default function Support() {
   };
 
   // ── TABS de filtro ────────────────────────────────────────────────────
-  const TABS: { key: FilterTab; label: string; icon: any; color: string }[] = [
-    { key: "all", label: "Todos", icon: MessageSquare, color: "text-gray-600" },
-    { key: "waiting_staff", label: "Aguardando Atendimento", icon: Hourglass, color: "text-red-500" },
-    { key: "waiting_patient", label: "Aguardando Cliente", icon: Clock, color: "text-gray-500" },
-    { key: "closed", label: "Concluídos", icon: CheckCircle, color: "text-green-500" },
+  const TABS: { key: FilterTab; label: string; shortLabel: string; icon: any; color: string }[] = [
+    { key: "all", label: "Todos", shortLabel: "Todos", icon: MessageSquare, color: "text-gray-600" },
+    { key: "waiting_staff", label: "Aguardando Atendimento", shortLabel: "AA", icon: Hourglass, color: "text-red-500" },
+    { key: "waiting_patient", label: "Aguardando Cliente", shortLabel: "AC", icon: Clock, color: "text-gray-500" },
+    { key: "closed", label: "Concluídos", shortLabel: "Conc.", icon: CheckCircle, color: "text-green-500" },
   ];
 
   return (
-    <div className="app-container bg-slate-50">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} isExpanded={sidebarExpanded} onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)} />
+    <div className={isMaximized ? "fixed inset-0 z-50 bg-slate-50" : "app-container bg-slate-50"}>
+      {!isMaximized && (
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} isExpanded={sidebarExpanded} onToggleExpanded={() => setSidebarExpanded(!sidebarExpanded)} />
+      )}
 
-      <div className="main-content">
-        <Header title="Atendimento" onMenuClick={() => setSidebarOpen(true)} />
+      <div className={isMaximized ? "flex flex-col h-full" : "main-content"}>
+        {!isMaximized && <Header title="Atendimento" onMenuClick={() => setSidebarOpen(true)} />}
 
-        <main className="p-4 lg:p-6 flex-grow overflow-hidden">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-gray-600">Gerencie conversas do WhatsApp com pacientes</p>
-            {(() => {
-              const connected = wppInstances.filter((i) => !!i.connectedPhone);
-              if (wppInstances.length === 0) return null;
-              if (connected.length > 0) {
+        <main className={isMaximized ? "p-2 flex-1 min-h-0 flex flex-col" : "p-4 lg:p-6 flex-grow overflow-hidden"}>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm text-gray-600 truncate">Gerencie conversas do WhatsApp com pacientes</p>
+            <div className="flex items-center gap-2 shrink-0">
+              {(() => {
+                const connected = wppInstances.filter((i) => !!i.connectedPhone);
+                if (wppInstances.length === 0) return null;
+                if (connected.length > 0) {
+                  return (
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
+                      <Wifi className="h-3 w-3" />
+                      {connected.length === 1
+                        ? `WhatsApp conectado · +${connected[0].connectedPhone}`
+                        : `${connected.length} números conectados`}
+                    </span>
+                  );
+                }
                 return (
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
-                    <Wifi className="h-3 w-3" />
-                    {connected.length === 1
-                      ? `WhatsApp conectado · +${connected[0].connectedPhone}`
-                      : `${connected.length} números conectados`}
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1">
+                    <WifiOff className="h-3 w-3" />
+                    WhatsApp desconectado
                   </span>
                 );
-              }
-              return (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1">
-                  <WifiOff className="h-3 w-3" />
-                  WhatsApp desconectado
-                </span>
-              );
-            })()}
+              })()}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setIsMaximized((v) => !v)}
+                    data-testid="button-toggle-maximize"
+                  >
+                    {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isMaximized ? "Sair da tela cheia" : "Maximizar atendimento"}</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-180px)]">
+          <div className={`grid grid-cols-1 lg:grid-cols-3 gap-3 ${isMaximized ? "flex-1 min-h-0" : "h-[calc(100vh-150px)]"}`}>
 
             {/* ── LISTA DE CONVERSAS ─────────────────────────────── */}
             <Card className="lg:col-span-1 flex flex-col overflow-hidden">
-              <CardHeader className="pb-2 shrink-0">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <MessageSquare className="h-5 w-5" />
-                  Conversas
-                </CardTitle>
+              <CardHeader className="pb-1.5 pt-3 px-3 shrink-0">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-1.5 text-sm">
+                    <MessageSquare className="h-4 w-4" />
+                    Conversas
+                  </CardTitle>
+                  <span className="text-[10px] text-gray-400 font-medium">{filteredConversations.length}</span>
+                </div>
 
                 {/* Campo de busca */}
-                <div className="relative mt-2">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                <div className="relative mt-1.5">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
                   <Input
                     value={convSearch}
                     onChange={(e) => setConvSearch(e.target.value)}
                     placeholder="Buscar por nome ou telefone..."
-                    className="pl-8 pr-8 h-8 text-xs"
+                    className="pl-8 pr-8 h-7 text-xs"
                   />
                   {convSearch && (
                     <button
@@ -515,68 +554,79 @@ export default function Support() {
 
                 {/* Indicador de busca ativa */}
                 {convSearchDebounced && (
-                  <p className="text-xs text-primary font-medium mt-1">
+                  <p className="text-[11px] text-primary font-medium mt-1">
                     {filteredConversations.length} resultado{filteredConversations.length !== 1 ? "s" : ""} encontrado{filteredConversations.length !== 1 ? "s" : ""} (incluindo encerradas)
                   </p>
                 )}
 
-                {/* Filtro por status (oculto durante busca) */}
+                {/* Filtro por status (oculto durante busca) — labels abreviados, tooltip com descrição completa */}
                 {!convSearchDebounced && (
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="flex flex-wrap gap-1 mt-1.5">
                     {TABS.map((tab) => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setFilterTab(tab.key)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
-                          filterTab === tab.key
-                            ? "bg-primary text-white border-primary"
-                            : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <tab.icon className="h-3 w-3" />
-                        {tab.label}
-                        <span className={`ml-0.5 text-[10px] px-1 rounded-full ${filterTab === tab.key ? "bg-white/20" : "bg-gray-100"}`}>
-                          {counts[tab.key]}
-                        </span>
-                      </button>
+                      <Tooltip key={tab.key}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => setFilterTab(tab.key)}
+                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium transition-colors border ${
+                              filterTab === tab.key
+                                ? "bg-primary text-white border-primary"
+                                : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                            }`}
+                          >
+                            <tab.icon className="h-3 w-3" />
+                            {tab.shortLabel}
+                            <span className={`ml-0.5 text-[9px] px-1 rounded-full ${filterTab === tab.key ? "bg-white/20" : "bg-gray-100"}`}>
+                              {counts[tab.key]}
+                            </span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>{tab.label}</TooltipContent>
+                      </Tooltip>
                     ))}
                   </div>
                 )}
 
-                {/* Filtro por número de WhatsApp (instância) */}
+                {/* Filtro por número de WhatsApp (instância) — abreviado com tooltip */}
                 {showInstanceInfo && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    <button
-                      onClick={() => setInstanceFilter("all")}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
-                        instanceFilter === "all"
-                          ? "bg-green-600 text-white border-green-600"
-                          : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                      }`}
-                      data-testid="instance-filter-all"
-                    >
-                      <Phone className="h-3 w-3" />
-                      Todos os números
-                    </button>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => setInstanceFilter("all")}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium transition-colors border ${
+                            instanceFilter === "all"
+                              ? "bg-green-600 text-white border-green-600"
+                              : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                          }`}
+                          data-testid="instance-filter-all"
+                        >
+                          <Phone className="h-3 w-3" />
+                          Todos
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Todos os números</TooltipContent>
+                    </Tooltip>
                     {wppInstances.map((inst) => (
-                      <button
-                        key={inst.id}
-                        onClick={() => setInstanceFilter(inst.instanceName)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors border ${
-                          instanceFilter === inst.instanceName
-                            ? "bg-green-600 text-white border-green-600"
-                            : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                        }`}
-                        data-testid={`instance-filter-${inst.instanceName}`}
-                      >
-                        <Phone className="h-3 w-3" />
-                        {inst.label}
-                        {inst.connectedPhone && (
-                          <span className={`ml-0.5 text-[10px] ${instanceFilter === inst.instanceName ? "text-white/80" : "text-gray-400"}`}>
-                            +{inst.connectedPhone}
-                          </span>
-                        )}
-                      </button>
+                      <Tooltip key={inst.id}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => setInstanceFilter(inst.instanceName)}
+                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium transition-colors border ${
+                              instanceFilter === inst.instanceName
+                                ? "bg-green-600 text-white border-green-600"
+                                : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                            }`}
+                            data-testid={`instance-filter-${inst.instanceName}`}
+                          >
+                            <Phone className="h-3 w-3" />
+                            {inst.label.slice(0, 3)}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {inst.label}
+                          {inst.connectedPhone ? ` · +${inst.connectedPhone}` : ""}
+                        </TooltipContent>
+                      </Tooltip>
                     ))}
                   </div>
                 )}
@@ -591,7 +641,7 @@ export default function Support() {
                       Nenhuma conversa nesta categoria
                     </div>
                   ) : (
-                    <div className="space-y-1 p-2">
+                    <div className="space-y-0.5 p-1.5">
                       {filteredConversations.map((conversation) => {
                         const derived = getConvDerivedStatus(conversation);
                         const isFlashing = flashedIds.has(conversation.id);
@@ -603,7 +653,7 @@ export default function Support() {
                               // Remove flash ao abrir a conversa
                               setFlashedIds((s) => { const ns = new Set(s); ns.delete(conversation.id); return ns; });
                             }}
-                            className={`w-full text-left p-3 rounded-lg transition-all duration-300 ${
+                            className={`w-full text-left p-2 rounded-lg transition-all duration-300 ${
                               isFlashing
                                 ? "bg-red-50 border-2 border-red-400 ring-2 ring-red-300 ring-offset-1 animate-pulse"
                                 : selectedConversationId === conversation.id
@@ -616,10 +666,10 @@ export default function Support() {
                             }`}
                             data-testid={`conversation-item-${conversation.id}`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Phone className="h-4 w-4 text-gray-400 shrink-0" />
-                                <span className="font-medium text-sm truncate">
+                            <div className="flex items-center justify-between gap-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Phone className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                <span className="font-medium text-[13px] truncate">
                                   {(conversation as any).patientName || conversation.phone}
                                 </span>
                               </div>
@@ -628,27 +678,37 @@ export default function Support() {
 
                             {/* Nome do paciente (subtítulo) quando patientName é exibido acima */}
                             {(conversation as any).patientName && (
-                              <div className="text-xs text-gray-400 mt-0.5 truncate pl-6">{conversation.phone}</div>
+                              <div className="text-[11px] text-gray-400 truncate pl-5">{conversation.phone}</div>
                             )}
 
-                            {/* Número (instância) da conversa — visível quando vendo todos */}
+                            {/* Número (instância) da conversa — abreviado, tooltip com nome completo */}
                             {showInstanceInfo && instanceFilter === "all" && conversation.instanceName && (
-                              <div className="flex items-center gap-1 mt-1 pl-6">
-                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0.5">
-                                  <Phone className="h-2.5 w-2.5" />
-                                  {instanceLabelFor(conversation.instanceName)}
-                                  {instancePhoneFor(conversation.instanceName) && (
-                                    <span className="text-green-600/70">{instancePhoneFor(conversation.instanceName)}</span>
-                                  )}
-                                </span>
+                              <div className="flex items-center gap-1 pl-5">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0">
+                                      <Phone className="h-2.5 w-2.5" />
+                                      {instanceLabelFor(conversation.instanceName)?.slice(0, 3)}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {instanceLabelFor(conversation.instanceName)}
+                                    {instancePhoneFor(conversation.instanceName) ? ` · ${instancePhoneFor(conversation.instanceName)}` : ""}
+                                  </TooltipContent>
+                                </Tooltip>
                               </div>
                             )}
 
                             {!conversation.patientId && (
-                              <div className="flex items-center gap-1 mt-1 text-xs text-amber-600">
-                                <AlertTriangle className="h-3 w-3" />
-                                Contato não vinculado
-                              </div>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-1 text-[10px] text-amber-600">
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    Não vinculado
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>Contato não vinculado a nenhum paciente</TooltipContent>
+                              </Tooltip>
                             )}
 
                             <ConvTimeInfo conv={conversation} />
@@ -665,26 +725,26 @@ export default function Support() {
             <Card className="lg:col-span-2 flex flex-col overflow-hidden">
               {selectedConversationId ? (
                 <>
-                  <CardHeader className="pb-3 border-b shrink-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                          <User className="h-5 w-5 text-primary" />
+                  <CardHeader className="py-2 px-3 border-b shrink-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="h-8 w-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+                          <User className="h-4 w-4 text-primary" />
                         </div>
                         <div className="min-w-0">
-                          <h3 className="font-medium truncate">
+                          <h3 className="font-medium text-sm truncate">
                             {(selectedConversation as any)?.patientName || selectedConversation?.phone}
                           </h3>
                           {!selectedConversation?.patientId && (
                             <button
                               onClick={() => { setShowLinkModal(true); setLinkSearch(""); }}
-                              className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 hover:underline transition-colors"
+                              className="flex items-center gap-1 text-[11px] text-amber-600 hover:text-amber-700 hover:underline transition-colors"
                             >
                               <AlertTriangle className="h-3 w-3" />
-                              Número não identificado. Clique para vincular a um paciente
+                              Não identificado. Clique para vincular
                             </button>
                           )}
-                          <p className="text-sm text-gray-500">
+                          <p className="text-[11px] text-gray-500 truncate">
                             {selectedConversation?.patientId ? selectedConversation?.phone + " · " : ""}
                             {selectedConversation?.status === "ai"
                               ? "Atendimento IA"
@@ -699,38 +759,58 @@ export default function Support() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         {selectedConversation?.status === "ai" && (
-                          <Button variant="outline" size="sm" onClick={() => takeoverMutation.mutate(selectedConversationId)} disabled={takeoverMutation.isPending} data-testid="button-takeover">
-                            <UserCheck className="h-4 w-4 mr-2" /> Assumir
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => takeoverMutation.mutate(selectedConversationId)} disabled={takeoverMutation.isPending} data-testid="button-takeover">
+                                <UserCheck className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Assumir atendimento</TooltipContent>
+                          </Tooltip>
                         )}
                         {selectedConversation?.status === "human" && (
-                          <Button variant="outline" size="sm" onClick={() => returnToAiMutation.mutate(selectedConversationId)} disabled={returnToAiMutation.isPending} data-testid="button-return-to-ai">
-                            <Sparkles className="h-4 w-4 mr-2" /> Devolver à IA
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => returnToAiMutation.mutate(selectedConversationId)} disabled={returnToAiMutation.isPending} data-testid="button-return-to-ai">
+                                <Sparkles className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Devolver à IA</TooltipContent>
+                          </Tooltip>
                         )}
                         {selectedConversation?.status !== "closed" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowCloseConfirm(true)}
-                            disabled={closeConversationMutation.isPending}
-                            className="text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400"
-                            data-testid="button-close-conversation"
-                          >
-                            <XCircle className="h-4 w-4 mr-2" /> Encerrar
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400"
+                                onClick={() => setShowCloseConfirm(true)}
+                                disabled={closeConversationMutation.isPending}
+                                data-testid="button-close-conversation"
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Encerrar conversa</TooltipContent>
+                          </Tooltip>
                         )}
-                        <Button variant="ghost" size="sm" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/conversations"] }); queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] }); }} data-testid="button-refresh">
-                          <RefreshCw className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/conversations"] }); queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] }); }} data-testid="button-refresh">
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Atualizar</TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
 
                     {/* Barra de progresso no header do chat ativo */}
                     {selectedConversation && getConvDerivedStatus(selectedConversation as ConversationWithPatient) === "waiting_patient" && (
-                      <div className="mt-2 space-y-1">
+                      <div className="mt-1 space-y-0.5">
                         {(() => {
                           const pct = autoClosePercent(selectedConversation as ConversationWithPatient);
                           const ms = elapsedMs(selectedConversation.lastMessageAt);
@@ -738,11 +818,11 @@ export default function Support() {
                           const remMin = Math.ceil(remaining / 60_000);
                           return (
                             <>
-                              <div className="flex justify-between text-xs text-gray-400">
+                              <div className="flex justify-between text-[10px] text-gray-400">
                                 <span>Encerramento automático em {remMin > 60 ? `${Math.ceil(remMin / 60)}h` : `${remMin}min`}</span>
                                 <span className={pct >= 75 ? "text-orange-500 font-medium" : ""}>{pct}%</span>
                               </div>
-                              <Progress value={pct} className={`h-1.5 ${pct >= 75 ? "[&>div]:bg-orange-400" : pct >= 50 ? "[&>div]:bg-yellow-400" : "[&>div]:bg-emerald-400"}`} />
+                              <Progress value={pct} className={`h-1 ${pct >= 75 ? "[&>div]:bg-orange-400" : pct >= 50 ? "[&>div]:bg-yellow-400" : "[&>div]:bg-emerald-400"}`} />
                             </>
                           );
                         })()}
