@@ -193,7 +193,7 @@ export interface IStorage {
   // WhatsApp conversation methods
   createWhatsappConversation(conversation: InsertWhatsappConversation): Promise<WhatsappConversation>;
   getWhatsappConversationsByClinic(clinicId: string): Promise<WhatsappConversation[]>;
-  getWhatsappConversationByPhone(clinicId: string, phone: string): Promise<WhatsappConversation | undefined>;
+  getWhatsappConversationByPhone(clinicId: string, phone: string, instanceName?: string): Promise<WhatsappConversation | undefined>;
   getWhatsappConversationById(id: string): Promise<WhatsappConversation | undefined>;
   updateWhatsappConversation(id: string, updates: Partial<InsertWhatsappConversation>): Promise<WhatsappConversation | undefined>;
   linkUnlinkedConversationsByPhone(clinicId: string, phone: string, patientId: string): Promise<number>;
@@ -1100,14 +1100,15 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(whatsappConversations.lastMessageAt));
   }
 
-  async getWhatsappConversationByPhone(clinicId: string, phone: string): Promise<WhatsappConversation | undefined> {
+  async getWhatsappConversationByPhone(clinicId: string, phone: string, instanceName: string = ""): Promise<WhatsappConversation | undefined> {
     const [conversation] = await db
       .select()
       .from(whatsappConversations)
       .where(
         and(
           eq(whatsappConversations.clinicId, clinicId),
-          eq(whatsappConversations.phone, phone)
+          eq(whatsappConversations.phone, phone),
+          eq(whatsappConversations.instanceName, instanceName)
         )
       );
     return conversation || undefined;

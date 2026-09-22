@@ -3141,9 +3141,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           normalizedPhone,
         );
 
+        // Cada número/instância tem sua própria conversa com o paciente (não deve mesclar entre dentistas)
+        const conversationInstanceKey = webhookInstanceName || "";
+
         let conversation = await storage.getWhatsappConversationByPhone(
           clinicId,
           normalizedPhone,
+          conversationInstanceKey,
         );
 
         if (!conversation) {
@@ -3153,22 +3157,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
               phone: normalizedPhone,
               patientId: patientByPhone?.id || null,
               status: "ai",
-              instanceName: webhookInstanceName || null,
+              instanceName: conversationInstanceKey,
             });
           } catch (err: any) {
-            // Corrida: outro webhook criou a conversa primeiro (unique clinic+phone)
+            // Corrida: outro webhook criou a conversa primeiro (unique clinic+phone+instance)
             if (err.code === "23505") {
               conversation = (await storage.getWhatsappConversationByPhone(
                 clinicId,
                 normalizedPhone,
+                conversationInstanceKey,
               ))!;
               if (!conversation) throw err;
-              // Garantir atribuição de instância também no caminho de corrida
-              if (webhookInstanceName && conversation.instanceName !== webhookInstanceName) {
-                conversation = (await storage.updateWhatsappConversation(conversation.id, {
-                  instanceName: webhookInstanceName,
-                }))!;
-              }
             } else {
               throw err;
             }
@@ -3187,11 +3186,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Vincular paciente se encontrado e ainda não vinculado
           if (patientByPhone && !conversation.patientId) {
             convUpdates.patientId = patientByPhone.id;
-          }
-
-          // Atualizar instância se a conversa veio por outro número (ou ainda não tem)
-          if (webhookInstanceName && conversation.instanceName !== webhookInstanceName) {
-            convUpdates.instanceName = webhookInstanceName;
           }
 
           if (Object.keys(convUpdates).length > 0) {
