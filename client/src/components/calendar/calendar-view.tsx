@@ -100,7 +100,15 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
   const holidaySet = useMemo(() => {
     const s = new Set<string>();
-    for (const h of holidays) s.add(h.date);
+    for (const h of holidays) {
+      const endDate = h.endDate || h.date;
+      const current = new Date(`${h.date}T00:00:00Z`);
+      const last = new Date(`${endDate}T00:00:00Z`);
+      while (current <= last) {
+        s.add(current.toISOString().slice(0, 10));
+        current.setUTCDate(current.getUTCDate() + 1);
+      }
+    }
     return s;
   }, [holidays]);
 
@@ -267,16 +275,27 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
     const appointment = event.resource;
     const patient = patients.find(p => p.id === appointment.patientId);
     const statusColors = {
-      scheduled: "bg-blue-100 border-blue-500 text-blue-800",
+      pending: "bg-amber-100 border-amber-500 text-amber-900",
+      scheduled: "bg-amber-100 border-amber-500 text-amber-900",
+      confirmed: "bg-emerald-100 border-emerald-500 text-emerald-900",
       in_progress: "bg-yellow-100 border-yellow-500 text-yellow-800",
       completed: "bg-green-100 border-green-500 text-green-800",
-      cancelled: "bg-red-100 border-red-500 text-red-800",
+      cancelled: "bg-slate-200 border-slate-500 text-slate-700",
     };
     const colorClass = statusColors[appointment.status as keyof typeof statusColors] || statusColors.scheduled;
+    const patientName = getPatientName(appointment.patientId);
+    const statusLabel = appointment.status === "confirmed"
+      ? "Confirmado"
+      : appointment.status === "cancelled"
+      ? "Cancelado / desmarcado"
+      : "Aguardando confirmação";
 
     return (
-      <div className={`p-1 rounded border-l-4 text-xs ${colorClass} h-full overflow-hidden`}>
-        <div className="flex items-center gap-1">
+      <div
+        className={`calendar-event-card rounded border-l-4 text-xs ${colorClass} h-full min-w-0 overflow-hidden px-1.5 py-1`}
+        title={`${patientName} | ${format(event.start, "HH:mm")} - ${format(event.end, "HH:mm")} | ${appointment.procedure || "Consulta"} | ${statusLabel}`}
+      >
+        <div className="flex min-w-0 items-center gap-1">
           {/* Patient Photo */}
           <div className="w-5 h-5 rounded-full overflow-hidden border border-current bg-white flex items-center justify-center flex-shrink-0">
             {patient?.photoUrl ? (
@@ -290,9 +309,9 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
             )}
           </div>
           {/* Patient Name */}
-          <div className="font-medium truncate flex-1">{getPatientName(appointment.patientId)}</div>
+          <div className="min-w-0 flex-1 truncate font-semibold text-sm">{patientName}</div>
         </div>
-        <div className="text-xs opacity-75 truncate ml-6">{appointment.procedure || "Consulta"}</div>
+        <div className="ml-6 truncate text-xs opacity-75">{appointment.procedure || "Consulta"}</div>
       </div>
     );
   };
@@ -343,6 +362,11 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                 <Button variant="outline" size="sm" onClick={goToBack}><ChevronLeft className="h-4 w-4" /></Button>
                 <Button variant="outline" size="sm" onClick={goToCurrent}>Hoje</Button>
                 <Button variant="outline" size="sm" onClick={goToNext}><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 pt-3 text-xs text-gray-600" aria-label="Legenda de confirmação">
+              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-amber-400" />Aguardando confirmação</span>
+              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-emerald-500" />Confirmado</span>
+              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-slate-400" />Cancelado / desmarcado</span>
             </div>
             <div className="text-lg font-medium text-gray-900 hidden lg:block">
                 {toolbar.label}
@@ -402,6 +426,10 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
                 step={30}
                 timeslots={2}
                 slotPropGetter={slotPropGetter}
+                eventPropGetter={() => ({
+                  className: "calendar-event-wrapper",
+                  style: { left: "0%", width: "100%" },
+                })}
                 dayPropGetter={(date) => {
                   const dateStr = date.toISOString().slice(0, 10);
                   if (holidaySet.has(dateStr)) {

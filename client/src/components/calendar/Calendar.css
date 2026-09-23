@@ -21,3 +21,27 @@
 .rbc-today {
   background-color: #f3f9ff;
 }
+
+/* O card define sua própria legenda; o wrapper padrão não deve pintá-lo de azul. */
+.rbc-event.calendar-event-wrapper {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.rbc-event.calendar-event-wrapper:focus,
+.rbc-event.calendar-event-wrapper:hover {
+  background: transparent;
+}
+
+.calendar-event-card {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.rbc-event.calendar-event-wrapper .rbc-event-content {
+  width: 100%;
+  height: 100%;
+}

@@ -204,7 +204,7 @@ export default function Availability() {
     mutationFn: async () =>
       apiRequest("POST", "/api/availability/holidays", {
         date: holidayDate,
-        endDate: holidayType === "recess" && holidayEndDate ? holidayEndDate : null,
+        endDate: holidayEndDate || holidayDate,
         name: holidayName,
         type: holidayType,
         message: holidayMessage.trim() || null,
@@ -225,7 +225,7 @@ export default function Availability() {
     mutationFn: async () =>
       apiRequest("PATCH", `/api/availability/holidays/${editingHoliday!.id}`, {
         date: editDate,
-        endDate: editType === "recess" && editEndDate ? editEndDate : null,
+        endDate: editEndDate || editDate,
         name: editName,
         type: editType,
         message: editMessage.trim() || null,
@@ -450,9 +450,9 @@ export default function Availability() {
 
               {/* Add holiday form */}
               <div className="flex flex-col gap-3 p-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                   <div>
-                    <Label className="text-xs mb-1 block text-gray-500">Data{holidayType === "recess" ? " início" : ""}</Label>
+                    <Label className="text-xs mb-1 block text-gray-500">Data inicial</Label>
                     <Input
                       type="date"
                       value={holidayDate}
@@ -460,19 +460,17 @@ export default function Availability() {
                       className="h-9 text-sm"
                     />
                   </div>
-                  {holidayType === "recess" && (
-                    <div>
-                      <Label className="text-xs mb-1 block text-gray-500">Data fim</Label>
-                      <Input
-                        type="date"
-                        value={holidayEndDate}
-                        min={holidayDate}
-                        onChange={(e) => setHolidayEndDate(e.target.value)}
-                        className="h-9 text-sm"
-                      />
-                    </div>
-                  )}
-                  <div className={holidayType === "recess" ? "sm:col-span-1" : "sm:col-span-2"}>
+                  <div>
+                    <Label className="text-xs mb-1 block text-gray-500">Data final</Label>
+                    <Input
+                      type="date"
+                      value={holidayEndDate}
+                      min={holidayDate}
+                      onChange={(e) => setHolidayEndDate(e.target.value)}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
                     <Label className="text-xs mb-1 block text-gray-500">Nome</Label>
                     <Input
                       placeholder="Ex: Natal, Recesso de Julho..."
@@ -483,7 +481,7 @@ export default function Availability() {
                   </div>
                   <div>
                     <Label className="text-xs mb-1 block text-gray-500">Tipo</Label>
-                    <Select value={holidayType} onValueChange={(v) => { setHolidayType(v as "holiday" | "recess"); if (v === "holiday") setHolidayEndDate(""); }}>
+                    <Select value={holidayType} onValueChange={(v) => setHolidayType(v as "holiday" | "recess")}>
                       <SelectTrigger className="h-9 text-sm">
                         <SelectValue />
                       </SelectTrigger>
@@ -513,7 +511,7 @@ export default function Availability() {
                   <Button
                     size="sm"
                     onClick={() => addHolidayMutation.mutate()}
-                    disabled={!holidayDate || !holidayName || addHolidayMutation.isPending}
+                    disabled={!holidayDate || !holidayEndDate || !holidayName || addHolidayMutation.isPending}
                     className="gap-2"
                   >
                     <Plus className="h-4 w-4" />
@@ -607,15 +605,13 @@ export default function Availability() {
           <div className="flex flex-col gap-4 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs mb-1 block text-gray-500">Data{editType === "recess" ? " início" : ""}</Label>
+                <Label className="text-xs mb-1 block text-gray-500">Data inicial</Label>
                 <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-9 text-sm" />
               </div>
-              {editType === "recess" && (
-                <div>
-                  <Label className="text-xs mb-1 block text-gray-500">Data fim</Label>
-                  <Input type="date" value={editEndDate} min={editDate} onChange={(e) => setEditEndDate(e.target.value)} className="h-9 text-sm" />
-                </div>
-              )}
+              <div>
+                <Label className="text-xs mb-1 block text-gray-500">Data final</Label>
+                <Input type="date" value={editEndDate} min={editDate} onChange={(e) => setEditEndDate(e.target.value)} className="h-9 text-sm" />
+              </div>
             </div>
             <div>
               <Label className="text-xs mb-1 block text-gray-500">Nome</Label>
@@ -623,7 +619,7 @@ export default function Availability() {
             </div>
             <div>
               <Label className="text-xs mb-1 block text-gray-500">Tipo</Label>
-              <Select value={editType} onValueChange={(v) => { setEditType(v as "holiday" | "recess"); if (v === "holiday") setEditEndDate(""); }}>
+              <Select value={editType} onValueChange={(v) => setEditType(v as "holiday" | "recess")}>
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue />
                 </SelectTrigger>
@@ -652,7 +648,7 @@ export default function Availability() {
             <Button variant="outline" onClick={() => setEditingHoliday(null)}>Cancelar</Button>
             <Button
               onClick={() => updateHolidayMutation.mutate()}
-              disabled={!editDate || !editName || updateHolidayMutation.isPending}
+              disabled={!editDate || !editEndDate || !editName || updateHolidayMutation.isPending}
               className="gap-2"
             >
               <Save className="h-4 w-4" />

@@ -40,6 +40,7 @@ interface AppointmentFormData {
   duration: number;
   procedure: string;
   notes: string;
+  status: string;
 }
 
 export default function AppointmentModal({ 
@@ -57,7 +58,7 @@ export default function AppointmentModal({
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
   const [formData, setFormData] = useState<AppointmentFormData>({
-    patientId: "", dentistId: "", scheduledDate: "", duration: 60, procedure: "", notes: "",
+    patientId: "", dentistId: "", scheduledDate: "", duration: 60, procedure: "", notes: "", status: "scheduled",
   });
 
   useEffect(() => {
@@ -112,6 +113,7 @@ export default function AppointmentModal({
             setFormData({
                 patientId: appointment.patientId, dentistId: appointment.dentistId, scheduledDate: formattedDateTime,
                 duration: appointment.duration || 60, procedure: appointment.procedure || "", notes: appointment.notes || "",
+                status: appointment.status || "scheduled",
             });
         } else {
             let formattedDateTime = "";
@@ -120,7 +122,7 @@ export default function AppointmentModal({
                 formattedDateTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
             }
             setFormData({
-                patientId: "", dentistId: "", scheduledDate: formattedDateTime, duration: 60, procedure: "", notes: "",
+                patientId: "", dentistId: "", scheduledDate: formattedDateTime, duration: 60, procedure: "", notes: "", status: "scheduled",
             });
         }
         setPatientSearchTerm("");
@@ -240,6 +242,20 @@ export default function AppointmentModal({
                   </div>
                   {patientsLoading && (
                       <div className="flex items-center justify-center p-2 text-sm text-gray-500">
+                      {appointment && (
+                        <div>
+                          <Label>Status da confirmação</Label>
+                          <Select value={formData.status} onValueChange={value => handleInputChange("status", value)}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Aguardando confirmação</SelectItem>
+                              <SelectItem value="confirmed">Confirmado</SelectItem>
+                              <SelectItem value="cancelled">Cancelado / desmarcado</SelectItem>
+                              <SelectItem value="scheduled">Agendado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           Buscando...
                       </div>

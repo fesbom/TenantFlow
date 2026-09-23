@@ -167,7 +167,8 @@ export const appointments = pgTable("appointments", {
   scheduledDate: timestamp("scheduled_date").notNull(),
   duration: integer("duration").default(60), // minutes
   procedure: text("procedure"),
-  status: text("status").default('scheduled').notNull(), // 'scheduled', 'in_progress', 'completed', 'cancelled'
+  status: text("status").default('scheduled').notNull(), // 'pending', 'scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'
+  confirmationSentAt: timestamp("confirmation_sent_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

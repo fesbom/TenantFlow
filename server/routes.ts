@@ -105,6 +105,8 @@ async function resolveSendConfig(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Mantém instalações existentes compatíveis antes de consultar o novo campo.
+  await db.execute(sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS confirmation_sent_at timestamp`);
   // Local uploads are private and scoped to the authenticated user's clinic.
   mountLocalUploads(app);
   registerAdminRoutes(app);
@@ -1350,6 +1352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let updateData = { ...req.body };
         if (updateData.scheduledDate) {
           updateData.scheduledDate = new Date(updateData.scheduledDate);
+          updateData.confirmationSentAt = null;
         }
 
         if (updateData.duration !== undefined) {
@@ -2885,13 +2888,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const clinicId = req.user!.clinicId;
         const { date, endDate, name, type, message } = req.body;
-        if (!date || !name) {
-          return res.status(400).json({ message: "date e name são obrigatórios" });
+        if (!date || !endDate || !name) {
+          return res.status(400).json({ message: "date, endDate e name são obrigatórios" });
+        }
+        if (endDate < date) {
+          return res.status(400).json({ message: "endDate não pode ser anterior a date" });
         }
         const holiday = await storage.createClinicHoliday({
           clinicId,
           date,
-          endDate: endDate || null,
+          endDate,
           name,
           type: type || "holiday",
           message: message || null,
@@ -2912,12 +2918,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { id } = req.params;
         const clinicId = req.user!.clinicId;
         const { date, endDate, name, type, message } = req.body;
-        if (!date || !name) {
-          return res.status(400).json({ message: "date e name são obrigatórios" });
+        if (!date || !endDate || !name) {
+          return res.status(400).json({ message: "date, endDate e name são obrigatórios" });
+        }
+        if (endDate < date) {
+          return res.status(400).json({ message: "endDate não pode ser anterior a date" });
         }
         const updated = await storage.updateClinicHoliday(id, clinicId, {
           date,
-          endDate: endDate || null,
+          endDate,
           name,
           type: type || "holiday",
           message: message || null,
@@ -3219,6 +3228,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (err: any) {
           if (err.code === "23505") return;
           throw err;
+        }
+
+        // Resposta curta da confirmação D-1: 1 confirma, 2 desmarca.
+        const confirmationChoice = messageText.trim().toLowerCase();
+        if (patient && (confirmationChoice === "1" || confirmationChoice === "2")) {
+          const futureAppointments = (await storage.getAppointmentsByClinic(clinicId))
+            .filter((appointment) => {
+              const appointmentDate = new Date(appointment.scheduledDate).getTime();
+              return appointment.patientId === patient.id &&
+                appointmentDate >= Date.now() &&
+                ["pending", "scheduled"].includes(appointment.status);
+            })
+            .sort((left, right) => new Date(left.scheduledDate).getTime() - new Date(right.scheduledDate).getTime());
+          const appointment = futureAppointments[0];
+
+          if (appointment) {
+            const status = confirmationChoice === "1" ? "confirmed" : "cancelled";
+            await storage.updateAppointment(appointment.id, { status }, clinicId);
+            const reply = confirmationChoice === "1"
+              ? "Presença confirmada! Aguardamos você na clínica."
+              : "Tudo bem, sua consulta foi desmarcada. Se precisar, podemos ajudar a encontrar um novo horário.";
+            await storage.createWhatsappMessage({
+              conversationId: conversation.id,
+              sender: "ai",
+              direction: "outbound",
+              text: reply,
+            });
+            const sendConfig = await resolveSendConfig(clinicId, webhookInstanceName);
+            if (isClinicEvolutionConfigured(sendConfig)) {
+              await sendEvolutionMessageForClinic(sendConfig, normalizedPhone, reply);
+            }
+            return;
+          }
         }
 
         // Lógica da IA
@@ -4738,6 +4780,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     runAutoCloseJob();
     setInterval(runAutoCloseJob, AUTO_CLOSE_INTERVAL_MS);
   }, 60_000);
+
+  const runAppointmentConfirmationJob = async () => {
+    try {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const clinicRows = await db.select({ id: clinics.id }).from(clinics);
+
+      for (const clinicRow of clinicRows) {
+        const appointmentsForTomorrow = await storage.getAppointmentsByDate(clinicRow.id, tomorrow);
+        const dentistsForClinic = await storage.getUsersByClinic(clinicRow.id);
+
+        for (const appointment of appointmentsForTomorrow) {
+          if (appointment.confirmationSentAt || !["pending", "scheduled"].includes(appointment.status)) continue;
+
+          const patient = await storage.getPatientById(appointment.patientId, clinicRow.id);
+          const phone = patient?.phone?.replace(/\D/g, "") || "";
+          if (!patient || phone.length < 10) continue;
+
+          const dentist = dentistsForClinic.find((user) => user.id === appointment.dentistId);
+          const appointmentDate = new Date(appointment.scheduledDate);
+          const dateText = appointmentDate.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+          const timeText = appointmentDate.toLocaleTimeString("pt-BR", {
+            timeZone: "UTC",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          const message = `Olá, ${patient.fullName.split(" ")[0]}. Você confirma sua consulta amanhã, ${dateText} às ${timeText}, com o ${dentist?.fullName || "dentista"}? Responda 1 para Confirmar ou 2 para Desmarcar.`;
+          const sendConfig = await resolveSendConfig(clinicRow.id);
+          if (!isClinicEvolutionConfigured(sendConfig)) continue;
+
+          const result = await sendEvolutionMessageForClinic(sendConfig, phone, message);
+          if (result.success) {
+            await storage.updateAppointment(appointment.id, { confirmationSentAt: new Date() }, clinicRow.id);
+            console.log(`[CONFIRMAÇÃO D-1] Enviada para ${patient.fullName} (${appointment.id})`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[CONFIRMAÇÃO D-1] Erro no job:", error);
+    }
+  };
+
+  setTimeout(() => {
+    runAppointmentConfirmationJob();
+    setInterval(runAppointmentConfirmationJob, 15 * 60_000);
+  }, 30_000);
 
   const httpServer = createServer(app);
   return httpServer;
