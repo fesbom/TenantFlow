@@ -1,9 +1,13 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Calendar, View, Views, dateFnsLocalizer } from "react-big-calendar";
-import { format, parse, startOfWeek, getDay } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import "react-big-calendar/lib/css/react-big-calendar.css";
+import { useCalendarApp, ScheduleXCalendar } from "@schedule-x/react";
+import { viewDay, viewWeek, viewMonthGrid } from "@schedule-x/calendar";
+import { createEventsServicePlugin } from "@schedule-x/events-service";
+import { createCurrentTimePlugin } from "@schedule-x/current-time";
+import { createScrollControllerPlugin } from "@schedule-x/scroll-controller";
+import "temporal-polyfill/global";
+import type {} from "temporal-spec/global";
+import "@schedule-x/theme-default/dist/index.css";
 import './Calendar.css';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,13 +16,25 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { Appointment, Patient, User } from "@/types";
 import AppointmentModal from "@/components/modals/appointment-modal";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter, Maximize2, Minimize2, User as UserIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Filter, Maximize2, Minimize2, Clock, CheckCircle2, XCircle } from "lucide-react";
 import moment from "moment";
 import 'moment/locale/pt-br';
-import { ProtectedImage } from "@/components/ui/protected-image";
+import {
+  AppointmentEventCard,
+  AppointmentMonthGridEventCard,
+  ScheduleXAppointmentEvent,
+} from "./schedule-x-event-card";
 
 // Configura o moment para o Português (Brasil)
 moment.locale('pt-br');
+
+/**
+ * A aplicação grava/lê `scheduledDate` como um horário "de parede" (Brasília), sem conversão real de fuso.
+ * Ancorar o calendário nesse fuso real (em vez de rotulá-lo como "UTC") faz com que os plugins que calculam
+ * o instante atual de verdade (indicador de hora atual, rolagem automática) coincidam com essa convenção,
+ * independente do fuso configurado no navegador do usuário.
+ */
+const APPOINTMENTS_TIME_ZONE = "America/Sao_Paulo";
 
 // Função de busca genérica
 const fetchData = async (url: string) => {
@@ -36,24 +52,59 @@ interface PaginatedPatientsResponse {
   pagination: any;
 }
 
-interface CalendarEvent {
-  id: string;
-  title: string;
-  start: Date;
-  end: Date;
-  resource: Appointment;
-}
-
 interface CalendarViewProps {
   className?: string;
+}
+
+/**
+ * Custom components are kept module-scoped so Schedule-X does not remount them on every render.
+ * https://schedule-x.dev/docs/frameworks/react#custom-components
+ */
+const scheduleXCustomComponents = {
+  timeGridEvent: AppointmentEventCard,
+  dateGridEvent: AppointmentEventCard,
+  monthGridEvent: AppointmentMonthGridEventCard,
+};
+
+/** The DB stores scheduledDate as a wall-clock time encoded in UTC fields (no real timezone conversion). */
+function dateToWallClockZonedDateTime(date: Date) {
+  return Temporal.ZonedDateTime.from({
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    hour: date.getUTCHours(),
+    minute: date.getUTCMinutes(),
+    second: 0,
+    timeZone: APPOINTMENTS_TIME_ZONE,
+  });
+}
+
+function zonedDateTimeToDate(zonedDateTime: Temporal.ZonedDateTime): Date {
+  // Keep the wall-clock numbers as-is (Brasília time), regardless of the browser's own timezone.
+  // AppointmentModal reads Date via local getters (getHours/getMinutes), so we build the Date
+  // with the local constructor instead of converting the real UTC instant (epochMilliseconds).
+  return new Date(
+    zonedDateTime.year,
+    zonedDateTime.month - 1,
+    zonedDateTime.day,
+    zonedDateTime.hour,
+    zonedDateTime.minute,
+  );
+}
+
+/** Clamps "now" (real Brasília time, not the browser's own timezone) to the visible day range. */
+function currentTimeWithinBoundaries(dayStart: string, dayEnd: string): string {
+  const now = Temporal.Now.zonedDateTimeISO(APPOINTMENTS_TIME_ZONE);
+  const nowLabel = `${now.hour.toString().padStart(2, "0")}:${now.minute.toString().padStart(2, "0")}`;
+  if (nowLabel < dayStart) return dayStart;
+  if (nowLabel > dayEnd) return dayEnd;
+  return nowLabel;
 }
 
 export default function CalendarView({ className = "" }: CalendarViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [currentView, setCurrentView] = useState<View>(Views.WEEK);
   const [selectedDentist, setSelectedDentist] = useState<string>("all");
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -86,97 +137,6 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   });
 
   const dentists = users.filter(user => user.role === "dentist");
-
-  // Schedules and holidays for slot blocking
-  const { data: allSchedules = [] } = useQuery<any[]>({
-    queryKey: ["/api/availability/all-schedules"],
-    queryFn: ({ queryKey }) => fetchData(queryKey[0] as string),
-  });
-
-  const { data: holidays = [] } = useQuery<any[]>({
-    queryKey: ["/api/availability/holidays"],
-    queryFn: ({ queryKey }) => fetchData(queryKey[0] as string),
-  });
-
-  const holidaySet = useMemo(() => {
-    const s = new Set<string>();
-    for (const h of holidays) {
-      const endDate = h.endDate || h.date;
-      const current = new Date(`${h.date}T00:00:00Z`);
-      const last = new Date(`${endDate}T00:00:00Z`);
-      while (current <= last) {
-        s.add(current.toISOString().slice(0, 10));
-        current.setUTCDate(current.getUTCDate() + 1);
-      }
-    }
-    return s;
-  }, [holidays]);
-
-  // slotPropGetter: color slots outside dentist schedule or on holidays
-  const slotPropGetter = useMemo(() => (date: Date) => {
-    const dateStr = date.toISOString().slice(0, 10);
-
-    // Holiday: always block regardless of dentist
-    if (holidaySet.has(dateStr)) {
-      return {
-        style: {
-          backgroundColor: "#fef2f2",
-          backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, #fecaca 4px, #fecaca 5px)",
-          cursor: "not-allowed",
-        },
-      };
-    }
-
-    // If a specific dentist is selected, check their schedule
-    if (selectedDentist !== "all") {
-      // Get ALL active schedules for this dentist across all weekdays
-      const dentistAllSchedules = allSchedules.filter(
-        (s: any) => s.dentistId === selectedDentist && s.isActive,
-      );
-
-      // Only apply blocking if the dentist has any schedule configured at all
-      if (dentistAllSchedules.length > 0) {
-        const weekday = date.getDay();
-        const h = date.getHours();
-        const m = date.getMinutes();
-        const slotMin = h * 60 + m;
-
-        const dentistDaySchedules = dentistAllSchedules.filter(
-          (s: any) => s.weekday === weekday,
-        );
-
-        // Day has NO schedule configured → gray out the entire day
-        if (dentistDaySchedules.length === 0) {
-          return {
-            style: {
-              backgroundColor: "#f3f4f6",
-              opacity: 0.6,
-              cursor: "not-allowed",
-            },
-          };
-        }
-
-        // Day has schedule → check if slot falls within any configured period
-        const inAnyPeriod = dentistDaySchedules.some((s: any) => {
-          const [sh, sm] = s.startTime.split(":").map(Number);
-          const [eh, em] = s.endTime.split(":").map(Number);
-          return slotMin >= sh * 60 + sm && slotMin < eh * 60 + em;
-        });
-
-        if (!inAnyPeriod) {
-          return {
-            style: {
-              backgroundColor: "#f3f4f6",
-              opacity: 0.6,
-              cursor: "not-allowed",
-            },
-          };
-        }
-      }
-    }
-
-    return {};
-  }, [selectedDentist, allSchedules, holidaySet]);
 
   const deleteAppointmentMutation = useMutation({
     mutationFn: async (appointmentId: string) => {
@@ -219,36 +179,36 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
     return appointments.filter(apt => apt.dentistId === selectedDentist);
   }, [appointments, selectedDentist]);
 
-  const calendarEvents: CalendarEvent[] = useMemo(() => {
+  // Mapeia o payload de agendamentos da aplicação para o formato de evento do Schedule-X.
+  const calendarEvents: ScheduleXAppointmentEvent[] = useMemo(() => {
     return filteredAppointments.map(appointment => {
       // Fix timezone: treat UTC time as local time (no conversion)
       const dataDoBanco = new Date(appointment.scheduledDate);
-      const start = new Date(
-        dataDoBanco.getUTCFullYear(),
-        dataDoBanco.getUTCMonth(),
-        dataDoBanco.getUTCDate(),
-        dataDoBanco.getUTCHours(),
-        dataDoBanco.getUTCMinutes()
-      );
-      const end = new Date(start.getTime() + (appointment.duration || 60) * 60000);
+      const start = dateToWallClockZonedDateTime(dataDoBanco);
+      const end = start.add({ minutes: appointment.duration || 60 });
+      const patient = patients.find(p => p.id === appointment.patientId);
+
       return {
         id: appointment.id,
         title: `${getPatientName(appointment.patientId)} - ${appointment.procedure || 'Consulta'}`,
         start,
         end,
-        resource: appointment,
+        appointment,
+        patientName: getPatientName(appointment.patientId),
+        dentistName: getDentistName(appointment.dentistId),
+        patientPhotoUrl: patient?.photoUrl ?? undefined,
       };
     });
   }, [filteredAppointments, patients, users]);
 
-  const handleSelectSlot = ({ start, end }: { start: Date; end: Date }) => {
+  const handleSelectSlot = (start: Date, end: Date) => {
     setNewAppointmentSlot({ start, end });
     setSelectedAppointment(null);
     setIsAppointmentModalOpen(true);
   };
 
-  const handleSelectEvent = (event: CalendarEvent) => {
-    setSelectedAppointment(event.resource);
+  const handleSelectEvent = (event: ScheduleXAppointmentEvent) => {
+    setSelectedAppointment(event.appointment);
     setNewAppointmentSlot(null);
     setIsAppointmentModalOpen(true);
   };
@@ -263,213 +223,91 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
     }
   };
 
-  const handleNavigate = (newDate: Date) => {
-    setCurrentDate(newDate);
-  };
+  // Plugins livres/MIT: sincronização de eventos, indicador de hora atual e rolagem automática.
+  const [eventsService] = useState(() => createEventsServicePlugin());
+  const [currentTimePlugin] = useState(() => createCurrentTimePlugin());
+  const [scrollController] = useState(() =>
+    createScrollControllerPlugin({ initialScroll: currentTimeWithinBoundaries("07:00", "20:00") }),
+  );
 
-  const handleViewChange = (view: View) => {
-    setCurrentView(view);
-  };
+  const calendar = useCalendarApp({
+    locale: "pt-BR",
+    timezone: APPOINTMENTS_TIME_ZONE,
+    views: [viewDay, viewWeek, viewMonthGrid],
+    defaultView: viewWeek.name,
+    dayBoundaries: { start: "07:00", end: "20:00" },
+    weekOptions: { gridStep: 30 },
+    events: [],
+    plugins: [eventsService, currentTimePlugin, scrollController],
+    callbacks: {
+      // Dispara a ação de visualização/edição atual da aplicação.
+      onEventClick(calendarEvent: unknown) {
+        handleSelectEvent(calendarEvent as ScheduleXAppointmentEvent);
+      },
+      onClickDateTime(dateTime: Temporal.ZonedDateTime) {
+        const start = zonedDateTimeToDate(dateTime);
+        const end = new Date(start.getTime() + 60 * 60000);
+        handleSelectSlot(start, end);
+      },
+      onClickDate(date: Temporal.PlainDate) {
+        const start = zonedDateTimeToDate(date.toZonedDateTime({ timeZone: APPOINTMENTS_TIME_ZONE, plainTime: "09:00" }));
+        const end = new Date(start.getTime() + 60 * 60000);
+        handleSelectSlot(start, end);
+      },
+    },
+  });
 
-  const EventComponent = ({ event }: { event: CalendarEvent }) => {
-    const appointment = event.resource;
-    const patient = patients.find(p => p.id === appointment.patientId);
-    const statusColors = {
-      pending: "bg-amber-100 border-amber-500 text-amber-900",
-      scheduled: "bg-amber-100 border-amber-500 text-amber-900",
-      confirmed: "bg-emerald-100 border-emerald-500 text-emerald-900",
-      in_progress: "bg-yellow-100 border-yellow-500 text-yellow-800",
-      completed: "bg-green-100 border-green-500 text-green-800",
-      cancelled: "bg-slate-200 border-slate-500 text-slate-700",
-    };
-    const colorClass = statusColors[appointment.status as keyof typeof statusColors] || statusColors.scheduled;
-    const patientName = getPatientName(appointment.patientId);
-    const statusLabel = appointment.status === "confirmed"
-      ? "Confirmado"
-      : appointment.status === "cancelled"
-      ? "Cancelado / desmarcado"
-      : "Aguardando confirmação";
-
-    return (
-      <div
-        className={`calendar-event-card rounded border-l-4 text-xs ${colorClass} h-full min-w-0 overflow-hidden px-1.5 py-1`}
-        title={`${patientName} | ${format(event.start, "HH:mm")} - ${format(event.end, "HH:mm")} | ${appointment.procedure || "Consulta"} | ${statusLabel}`}
-      >
-        <div className="flex min-w-0 items-center gap-1">
-          {/* Patient Photo */}
-          <div className="w-5 h-5 rounded-full overflow-hidden border border-current bg-white flex items-center justify-center flex-shrink-0">
-            {patient?.photoUrl ? (
-              <ProtectedImage
-                src={patient.photoUrl}
-                alt={patient.fullName}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <UserIcon className="w-3 h-3" />
-            )}
-          </div>
-          {/* Patient Name */}
-          <div className="min-w-0 flex-1 truncate font-semibold text-sm">{patientName}</div>
-        </div>
-        <div className="ml-6 truncate text-xs opacity-75">{appointment.procedure || "Consulta"}</div>
-      </div>
-    );
-  };
-
-  const locales = { 'pt-BR': ptBR };
-  const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
-
-  const formats = {
-    weekdayFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'eee', culture),
-    dayHeaderFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'eee dd/MM', culture),
-    monthHeaderFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'MMMM yyyy', culture),
-    timeGutterFormat: (date: Date, culture: any, localizer: any) => localizer.format(date, 'HH:mm', culture),
-  };
-
-  const CustomToolbar = (toolbar: any) => {
-    const goToBack = () => toolbar.onNavigate('PREV');
-    const goToNext = () => toolbar.onNavigate('NEXT');
-    const goToCurrent = () => toolbar.onNavigate('TODAY');
-    const view = (view: View) => toolbar.onView(view);
-
-    return (
-      <CardHeader className="pb-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <CardTitle className="flex items-center space-x-2">
-                <CalendarIcon className="h-5 w-5" />
-                <span>Agenda - {toolbar.view}</span>
-            </CardTitle>
-            <div className="flex flex-col lg:flex-row gap-4">
-                <div className="flex items-center space-x-2">
-                    <Filter className="h-4 w-4 text-gray-500" />
-                    <Select value={selectedDentist} onValueChange={setSelectedDentist}>
-                        <SelectTrigger className="w-48"><SelectValue placeholder="Filtrar dentista..." /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Todos os Dentistas</SelectItem>
-                            {dentists.map(dentist => (<SelectItem key={dentist.id} value={dentist.id}>{dentist.fullName}</SelectItem>))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="flex border rounded-lg">
-                    <Button variant={toolbar.view === Views.DAY ? "default" : "ghost"} size="sm" onClick={() => view(Views.DAY)} className="rounded-r-none">Dia</Button>
-                    <Button variant={toolbar.view === Views.WEEK ? "default" : "ghost"} size="sm" onClick={() => view(Views.WEEK)} className="rounded-none">Semana</Button>
-                    <Button variant={toolbar.view === Views.MONTH ? "default" : "ghost"} size="sm" onClick={() => view(Views.MONTH)} className="rounded-l-none">Mês</Button>
-                </div>
-            </div>
-        </div>
-        <div className="flex items-center justify-between pt-4">
-            <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm" onClick={goToBack}><ChevronLeft className="h-4 w-4" /></Button>
-                <Button variant="outline" size="sm" onClick={goToCurrent}>Hoje</Button>
-                <Button variant="outline" size="sm" onClick={goToNext}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 pt-3 text-xs text-gray-600" aria-label="Legenda de confirmação">
-              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-amber-400" />Aguardando confirmação</span>
-              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-emerald-500" />Confirmado</span>
-              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-slate-400" />Cancelado / desmarcado</span>
-            </div>
-            <div className="text-lg font-medium text-gray-900 hidden lg:block">
-                {toolbar.label}
-            </div>
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <span>{filteredAppointments.length} agendamento{filteredAppointments.length !== 1 ? 's' : ''}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setIsMaximized((maximized) => !maximized)}
-                  title={isMaximized ? "Restaurar tamanho da agenda" : "Maximizar agenda"}
-                  aria-label={isMaximized ? "Restaurar tamanho da agenda" : "Maximizar agenda"}
-                  data-testid="button-toggle-calendar-size"
-                >
-                  {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                </Button>
-            </div>
-        </div>
-      </CardHeader>
-    );
-  };
+  // Mantém os eventos do calendário sincronizados com os dados vindos da API.
+  useEffect(() => {
+    eventsService.set(calendarEvents as any);
+  }, [calendarEvents, eventsService]);
 
   return (
     <div className={isMaximized ? "fixed inset-0 z-50 bg-slate-50 p-4 lg:p-6" : className}>
-      <Card className="h-full">
-        <CardContent className="h-full p-0">
+      <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-2 space-y-0 py-1.5">
+          <CardTitle className="flex items-center gap-1.5 text-sm">
+            <CalendarIcon className="h-3.5 w-3.5" />
+            <span>Agenda</span>
+          </CardTitle>
+          <div className="flex items-center gap-1.5">
+            <Filter className="h-3.5 w-3.5 text-gray-500" />
+            <Select value={selectedDentist} onValueChange={setSelectedDentist}>
+              <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder="Filtrar dentista..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Dentistas</SelectItem>
+                {dentists.map(dentist => (<SelectItem key={dentist.id} value={dentist.id}>{dentist.fullName}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="hidden items-center gap-3 text-xs text-gray-600 xl:flex" aria-label="Legenda de status">
+            <span className="flex items-center gap-1"><Clock className="h-3 w-3 text-amber-600" />Aguardando</span>
+            <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-blue-800" />Confirmado</span>
+            <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-red-800" />Cancelado</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-600">
+            <span>{filteredAppointments.length} agendamento{filteredAppointments.length !== 1 ? 's' : ''}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setIsMaximized((maximized) => !maximized)}
+              title={isMaximized ? "Restaurar tamanho da agenda" : "Maximizar agenda"}
+              aria-label={isMaximized ? "Restaurar tamanho da agenda" : "Maximizar agenda"}
+              data-testid="button-toggle-calendar-size"
+            >
+              {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
           {(appointmentsLoading || patientsLoading) ? (
             <div className="h-96 flex items-center justify-center text-gray-500">
               <CalendarIcon className="h-8 w-8 mr-2 animate-spin" />
               Carregando agenda...
             </div>
           ) : (
-            <div className="h-full">
-              <Calendar
-                components={{
-                  toolbar: CustomToolbar,
-                  event: EventComponent,
-                }}
-                localizer={localizer}
-                culture="pt-BR"
-                formats={formats}
-                events={calendarEvents}
-                startAccessor="start"
-                endAccessor="end"
-                views={[Views.MONTH, Views.WEEK, Views.DAY]}
-                view={currentView}
-                date={currentDate}
-                onView={handleViewChange}
-                onNavigate={handleNavigate}
-                onSelectSlot={handleSelectSlot}
-                onSelectEvent={handleSelectEvent}
-                selectable={true}
-                longPressThreshold={250}
-                popup={true}
-                showMultiDayTimes={true}
-                step={30}
-                timeslots={2}
-                slotPropGetter={slotPropGetter}
-                eventPropGetter={() => ({
-                  className: "calendar-event-wrapper",
-                  style: { left: "0%", width: "100%" },
-                })}
-                dayPropGetter={(date) => {
-                  const dateStr = date.toISOString().slice(0, 10);
-                  if (holidaySet.has(dateStr)) {
-                    return { style: { backgroundColor: "#fff1f2" } };
-                  }
-                  if (selectedDentist !== "all") {
-                    const dentistAllSchedules = allSchedules.filter(
-                      (s: any) => s.dentistId === selectedDentist && s.isActive,
-                    );
-                    if (dentistAllSchedules.length > 0) {
-                      const weekday = date.getDay();
-                      const hasDaySchedule = dentistAllSchedules.some(
-                        (s: any) => s.weekday === weekday,
-                      );
-                      if (!hasDaySchedule) {
-                        return { style: { backgroundColor: "#f3f4f6" } };
-                      }
-                    }
-                  }
-                  return {};
-                }}
-                min={new Date(2024, 0, 1, 7, 0)} // 7:00 AM
-                max={new Date(2024, 0, 1, 20, 0)} // 8:00 PM
-                messages={{
-                  allDay: "Dia todo",
-                  previous: "Anterior",
-                  next: "Próximo",
-                  today: "Hoje",
-                  month: "Mês",
-                  week: "Semana",
-                  day: "Dia",
-                  agenda: "Agenda",
-                  date: "Data",
-                  time: "Hora",
-                  event: "Evento",
-                  noEventsInRange: "Não há eventos neste período.",
-                  showMore: (total: number) => `+ ${total} mais`,
-                }}
-              />
-            </div>
+            <ScheduleXCalendar calendarApp={calendar} customComponents={scheduleXCustomComponents} />
           )}
         </CardContent>
       </Card>

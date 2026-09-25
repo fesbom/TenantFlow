@@ -21,6 +21,7 @@ export interface Patient {
   birthDate?: string;
   address?: string;
   medicalNotes?: string;
+  photoUrl?: string;
   clinicId: string;
   createdAt: string;
   updatedAt: string;

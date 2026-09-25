@@ -20,6 +20,9 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  Clock,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { Appointment, Patient } from "@/types";
 import { ProtectedImage } from "@/components/ui/protected-image";
@@ -268,16 +271,19 @@ export default function Dashboard() {
                             ? "secondary"
                             : "outline"
                         }
-                        className={`text-xs ${
+                        className={`flex items-center gap-1 text-xs ${
                           appointment.status === "pending" || appointment.status === "scheduled"
                             ? "border-amber-300 bg-amber-50 text-amber-800"
                             : appointment.status === "confirmed"
-                            ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                            ? "border-blue-300 bg-blue-50 text-blue-900"
                             : appointment.status === "cancelled"
-                            ? "border-slate-300 bg-slate-100 text-slate-700"
+                            ? "border-red-300 bg-red-50 text-red-900"
                             : ""
                         }`}
                       >
+                        {(appointment.status === "pending" || appointment.status === "scheduled") && <Clock className="h-3 w-3" />}
+                        {appointment.status === "confirmed" && <CheckCircle2 className="h-3 w-3" />}
+                        {appointment.status === "cancelled" && <XCircle className="h-3 w-3" />}
                         {appointment.status === "pending" && "Aguardando confirmação"}
                         {appointment.status === "scheduled" && "Agendado"}
                         {appointment.status === "confirmed" && "Confirmado"}

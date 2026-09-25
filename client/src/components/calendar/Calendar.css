@@ -1,47 +1,27 @@
-/* Torna as linhas horizontais mais finas e claras */
-.rbc-day-slot .rbc-time-slot:not(.rbc-time-slot-gt-1) {
-  border-bottom-color: #ccc;
-  border-bottom-width: 1px;
+/* Schedule-X (open-source) sizing and light visual tweaks for the appointment calendar. */
+
+.sx-react-calendar-wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+
+  /* Schedule-X sets these on :root with values (100+) higher than our Dialog's z-50,
+     which makes the sticky week/day header float above modals. Scope them down. */
+  --sx-z-index-week-header: 1;
+  --sx-calendar-header-popup-z-index: 2;
+  --sx-z-index-event-modal: 3;
 }
 
-/* Garante que as linhas verticais apareçam em todo o grid e se estendam até o fim */
-.rbc-day-bg {
-  border-right-color: #ccc;
-  border-right-width: 1px;
-  height: 100%; /* Esta linha força a altura total do contêiner pai */
+.sx-react-calendar-wrapper .sx__calendar {
+  border: none;
+  border-radius: 0.5rem;
+  height: 100%;
 }
 
-/* Adiciona a linha vertical na primeira coluna */
-.rbc-day-bg:first-child {
-  border-left-color: #ccc;
-  border-left-width: 1px;
-}
-
-/* Ajusta a cor de fundo do dia atual para combinar */
-.rbc-today {
-  background-color: #f3f9ff;
-}
-
-/* O card define sua própria legenda; o wrapper padrão não deve pintá-lo de azul. */
-.rbc-event.calendar-event-wrapper {
+.sx-react-calendar-wrapper .sx__time-grid-event,
+.sx-react-calendar-wrapper .sx__date-grid-event {
   background: transparent;
-  border: 0;
+  box-shadow: none;
   padding: 0;
-  width: 100%;
-}
-
-.rbc-event.calendar-event-wrapper:focus,
-.rbc-event.calendar-event-wrapper:hover {
-  background: transparent;
-}
-
-.calendar-event-card {
-  width: 100%;
-  height: 100%;
   box-sizing: border-box;
-}
-
-.rbc-event.calendar-event-wrapper .rbc-event-content {
-  width: 100%;
-  height: 100%;
 }

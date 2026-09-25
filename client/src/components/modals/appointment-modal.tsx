@@ -176,6 +176,21 @@ export default function AppointmentModal({
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Split the combined "YYYY-MM-DDTHH:mm" into separate date/time parts for display
+  const [datePart, timePart] = formData.scheduledDate.split("T");
+
+  const handleDateChange = (value: string) => {
+    handleInputChange("scheduledDate", `${value}T${timePart || "00:00"}`);
+  };
+
+  // Free-text time field: keeps only digits, auto-inserts the ":" so the user
+  // can type "0900" and get "09:00" without opening any native picker widget.
+  const handleTimeChange = (rawValue: string) => {
+    const digits = rawValue.replace(/\D/g, "").slice(0, 4);
+    const formatted = digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+    handleInputChange("scheduledDate", `${datePart || ""}T${formatted}`);
+  };
+
   const handleDentistChange = (dentistId: string) => {
     const selectedDentist = dentists.find(d => d.id === dentistId);
     const defaultDuration = (selectedDentist as any)?.defaultAppointmentDuration || 60;
@@ -242,20 +257,6 @@ export default function AppointmentModal({
                   </div>
                   {patientsLoading && (
                       <div className="flex items-center justify-center p-2 text-sm text-gray-500">
-                      {appointment && (
-                        <div>
-                          <Label>Status da confirmação</Label>
-                          <Select value={formData.status} onValueChange={value => handleInputChange("status", value)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">Aguardando confirmação</SelectItem>
-                              <SelectItem value="confirmed">Confirmado</SelectItem>
-                              <SelectItem value="cancelled">Cancelado / desmarcado</SelectItem>
-                              <SelectItem value="scheduled">Agendado</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           Buscando...
                       </div>
@@ -287,14 +288,29 @@ export default function AppointmentModal({
             {/* --- CAMPOS RESTAURADOS --- */}
             <div className="space-y-2">
               <Label htmlFor="scheduledDate">Data e Hora *</Label>
-              <Input
-                id="scheduledDate"
-                type="datetime-local"
-                value={formData.scheduledDate}
-                onChange={(e) => handleInputChange("scheduledDate", e.target.value)}
-                required
-                data-testid="input-appointment-datetime"
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="scheduledDate"
+                  type="date"
+                  className="flex-1"
+                  value={datePart || ""}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  required
+                  data-testid="input-appointment-date"
+                />
+                <Input
+                  id="scheduledTime"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="HH:MM"
+                  maxLength={5}
+                  className="w-24"
+                  value={timePart || ""}
+                  onChange={(e) => handleTimeChange(e.target.value)}
+                  required
+                  data-testid="input-appointment-time"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -309,6 +325,19 @@ export default function AppointmentModal({
                 onChange={(e) => handleInputChange("duration", parseInt(e.target.value))}
                 data-testid="input-appointment-duration"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select value={formData.status} onValueChange={(value) => handleInputChange("status", value)}>
+                <SelectTrigger id="status" data-testid="select-appointment-status"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Aguardando confirmação</SelectItem>
+                  <SelectItem value="confirmed">Confirmado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado / desmarcado</SelectItem>
+                  <SelectItem value="scheduled">Agendado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="md:col-span-2 space-y-2">

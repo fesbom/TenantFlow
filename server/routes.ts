@@ -72,6 +72,28 @@ import multer from "multer";
 const ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN || "";
 const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN || "";
 
+// O front envia horário local "de fachada" (ex: "2026-09-24T08:14", sem timezone) que deve
+// ser gravado tal como está nos campos UTC do banco (convenção "fake UTC" do app). `new
+// Date(string)` sem timezone interpreta a string usando o fuso horário do PROCESSO Node, o que
+// causa deslocamento (ex: +3h) se o servidor não estiver rodando com TZ=UTC. Esta função ignora
+// o fuso do processo e monta o Date diretamente a partir dos números informados.
+function parseWallClockAsFakeUTC(value: Date | string): Date {
+  if (value instanceof Date) return value;
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  if (!match) return new Date(value);
+  const [, year, month, day, hour, minute, second] = match;
+  return new Date(
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      second ? Number(second) : 0,
+    ),
+  );
+}
+
 // Resolve a config de envio correta: prioriza a instância do webhook (se informada),
 // depois qualquer instância conectada da clínica (whatsapp_instances),
 // e por último a config legada da clínica.
@@ -1280,7 +1302,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         let requestData = { ...req.body, clinicId: req.user!.clinicId };
         if (requestData.scheduledDate) {
-          requestData.scheduledDate = new Date(requestData.scheduledDate);
+          requestData.scheduledDate = parseWallClockAsFakeUTC(requestData.scheduledDate);
         }
 
         if (requestData.duration) {
@@ -1351,7 +1373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         let updateData = { ...req.body };
         if (updateData.scheduledDate) {
-          updateData.scheduledDate = new Date(updateData.scheduledDate);
+          updateData.scheduledDate = parseWallClockAsFakeUTC(updateData.scheduledDate);
           updateData.confirmationSentAt = null;
         }
 
