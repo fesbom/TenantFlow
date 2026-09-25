@@ -337,6 +337,32 @@ export const clinicHolidays = pgTable("clinic_holidays", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Contas a Receber - títulos/parcelas financeiras vinculadas a um paciente e ao dentista executor
+export const receivables = pgTable("receivables", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+  patientId: varchar("patient_id").notNull().references(() => patients.id),
+  dentistId: varchar("dentist_id").notNull().references(() => users.id),
+  treatmentId: varchar("treatment_id").references(() => treatments.id),
+  descricao: text("descricao").notNull(),
+  valor: decimal("valor", { precision: 10, scale: 2 }).notNull(),
+  dataVencimento: date("data_vencimento").notNull(),
+  dataPagamento: date("data_pagamento"),
+  status: text("status").default("Pendente").notNull(), // 'Pendente' | 'Pago' | 'Vencido' | 'Acordo'
+  numeroParcela: integer("numero_parcela").default(1).notNull(),
+  totalParcelas: integer("total_parcelas").default(1).notNull(),
+  observacoes: text("observacoes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("receivables_clinic_idx").on(t.clinicId),
+  index("receivables_dentist_idx").on(t.dentistId),
+  index("receivables_patient_idx").on(t.patientId),
+  index("receivables_vencimento_idx").on(t.dataVencimento),
+  index("receivables_treatment_idx").on(t.treatmentId),
+  check("receivables_status_check", sql`${t.status} IN ('Pendente', 'Pago', 'Vencido', 'Acordo')`),
+]);
+
 // Relations
 export const clinicsRelations = relations(clinics, ({ many }) => ({
   users: many(users),
@@ -484,6 +510,25 @@ export const budgetsRelations = relations(budgets, ({ one }) => ({
   }),
 }));
 
+export const receivablesRelations = relations(receivables, ({ one }) => ({
+  clinic: one(clinics, {
+    fields: [receivables.clinicId],
+    references: [clinics.id],
+  }),
+  patient: one(patients, {
+    fields: [receivables.patientId],
+    references: [patients.id],
+  }),
+  dentist: one(users, {
+    fields: [receivables.dentistId],
+    references: [users.id],
+  }),
+  treatment: one(treatments, {
+    fields: [receivables.treatmentId],
+    references: [treatments.id],
+  }),
+}));
+
 export const whatsappInstancesRelations = relations(whatsappInstances, ({ one, many }) => ({
   clinic: one(clinics, {
     fields: [whatsappInstances.clinicId],
@@ -627,6 +672,12 @@ export const insertClinicHolidaySchema = createInsertSchema(clinicHolidays).omit
   createdAt: true,
 });
 
+export const insertReceivableSchema = createInsertSchema(receivables).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type Clinic = typeof clinics.$inferSelect;
 export type InsertClinic = z.infer<typeof insertClinicSchema>;
@@ -694,3 +745,9 @@ export type InsertDentistSchedule = z.infer<typeof insertDentistScheduleSchema>;
 
 export type ClinicHoliday = typeof clinicHolidays.$inferSelect;
 export type InsertClinicHoliday = z.infer<typeof insertClinicHolidaySchema>;
+
+// Contas a Receber types
+export type Receivable = typeof receivables.$inferSelect;
+export type InsertReceivable = z.infer<typeof insertReceivableSchema>;
+export const RECEIVABLE_STATUSES = ["Pendente", "Pago", "Vencido", "Acordo"] as const;
+export type ReceivableStatus = (typeof RECEIVABLE_STATUSES)[number];

@@ -129,6 +129,32 @@ async function resolveSendConfig(
 export async function registerRoutes(app: Express): Promise<Server> {
   // Mantém instalações existentes compatíveis antes de consultar o novo campo.
   await db.execute(sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS confirmation_sent_at timestamp`);
+  // Contas a Receber — criação defensiva para instalações existentes (ver migrations/0004_receivables.sql).
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS receivables (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      clinic_id varchar NOT NULL REFERENCES clinics(id),
+      patient_id varchar NOT NULL REFERENCES patients(id),
+      dentist_id varchar NOT NULL REFERENCES users(id),
+      treatment_id varchar REFERENCES treatments(id),
+      descricao text NOT NULL,
+      valor decimal(10, 2) NOT NULL,
+      data_vencimento date NOT NULL,
+      data_pagamento date,
+      status text NOT NULL DEFAULT 'Pendente',
+      numero_parcela integer NOT NULL DEFAULT 1,
+      total_parcelas integer NOT NULL DEFAULT 1,
+      observacoes text,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now(),
+      CONSTRAINT receivables_status_check CHECK (status IN ('Pendente', 'Pago', 'Vencido', 'Acordo'))
+    )
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_clinic_idx ON receivables (clinic_id)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_dentist_idx ON receivables (dentist_id)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_patient_idx ON receivables (patient_id)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_vencimento_idx ON receivables (data_vencimento)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_treatment_idx ON receivables (treatment_id)`);
   // Local uploads are private and scoped to the authenticated user's clinic.
   mountLocalUploads(app);
   registerAdminRoutes(app);

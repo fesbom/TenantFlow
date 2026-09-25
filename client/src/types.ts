@@ -24,6 +24,9 @@ export type {
   InsertBudgetSummary,
   TreatmentMovement,
   InsertTreatmentMovement,
+  Receivable,
+  InsertReceivable,
+  ReceivableStatus,
 } from "@/../../shared/schema";
 
 // Import specific types for internal use
