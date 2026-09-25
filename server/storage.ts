@@ -18,6 +18,7 @@ import {
   whatsappInstanceDentists,
   dentistSchedules,
   clinicHolidays,
+  receivables,
   type Clinic,
   type User,
   type Patient,
@@ -54,10 +55,13 @@ import {
   type InsertDentistSchedule,
   type ClinicHoliday,
   type InsertClinicHoliday,
+  type Receivable,
+  type InsertReceivable,
+  type ReceivableStatus,
 } from "@shared/schema";
 
 import { db, pool } from "./db";
-import { eq, and, desc, gte, lte, count, sql, isNotNull, isNull, or, ilike } from "drizzle-orm";
+import { eq, and, desc, asc, gte, lte, count, sum, sql, isNotNull, isNull, or, ilike, inArray } from "drizzle-orm";
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -67,6 +71,52 @@ export interface PaginatedResponse<T> {
     totalCount: number;
     totalPages: number;
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// CONTAS A RECEBER (Receivables) — tipos de suporte à camada de serviço
+// ─────────────────────────────────────────────────────────────────────
+
+// Identidade do usuário autenticado, usada para aplicar a trava de RBAC
+// diretamente na query (nunca confiar em filtros vindos do front-end).
+export interface ReceivableRequester {
+  id: string;
+  role: string; // 'admin' | 'dentist' | 'secretary' | 'superadmin'
+}
+
+export interface ReceivableFilters {
+  startDate?: string; // YYYY-MM-DD — vencimento inicial
+  endDate?: string; // YYYY-MM-DD — vencimento final
+  patientId?: string;
+  patientSearch?: string;
+  status?: ReceivableStatus | "Todos";
+  dentistId?: string; // só é respeitado quando o requester é admin/secretary
+}
+
+export interface ReceivableWithNames extends Receivable {
+  patientName: string;
+  dentistName: string;
+}
+
+export interface ReceivableListResult {
+  data: ReceivableWithNames[];
+  kpis: {
+    totalAReceber: number; // Pendente + Vencido + Acordo
+    totalRecebido: number; // Pago
+    totalInadimplente: number; // Vencido
+  };
+}
+
+export interface GenerateReceivablesParams {
+  clinicId: string;
+  patientId: string;
+  dentistId: string;
+  treatmentId?: string;
+  descricao: string;
+  valorTotal: number;
+  totalParcelas: number;
+  primeiraDataVencimento: string; // YYYY-MM-DD
+  observacoes?: string;
 }
 
 export interface IStorage {
@@ -217,6 +267,12 @@ export interface IStorage {
 
   // Availability check (used by AI)
   getAvailableSlotsForDate(clinicId: string, dentistId: string, date: Date): Promise<string[]>;
+
+  // Contas a Receber (Receivables) methods
+  generateReceivablesForTreatment(params: GenerateReceivablesParams): Promise<Receivable[]>;
+  listReceivables(clinicId: string, requester: ReceivableRequester, filters: ReceivableFilters): Promise<ReceivableListResult>;
+  getReceivableById(id: string, clinicId: string): Promise<Receivable | undefined>;
+  updateReceivableStatus(id: string, clinicId: string, updates: { status: ReceivableStatus; dataPagamento?: string | null; observacoes?: string }): Promise<Receivable | undefined>;
 }
 
 // Emails must be compared/stored case-insensitively to avoid login failures from autocapitalized mobile keyboards
@@ -1346,6 +1402,194 @@ export class DatabaseStorage implements IStorage {
       const slotMs = slotDate.getTime();
       return !bookedRanges.some(({ startMs, endMs }) => slotMs >= startMs && slotMs < endMs);
     });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // CONTAS A RECEBER (Receivables)
+  // ─────────────────────────────────────────────────────────────────────
+
+  // Pendências vencidas são refletidas no campo `status` sob demanda (nenhum job/cron
+  // é necessário): qualquer leitura/atualização primeiro promove Pendente -> Vencido.
+  private async markOverdueReceivables(clinicId: string): Promise<void> {
+    await db
+      .update(receivables)
+      .set({ status: "Vencido", updatedAt: new Date() })
+      .where(
+        and(
+          eq(receivables.clinicId, clinicId),
+          eq(receivables.status, "Pendente"),
+          sql`${receivables.dataVencimento} < CURRENT_DATE`,
+        ),
+      );
+  }
+
+  // Gera as parcelas de um tratamento/orçamento aprovado, sempre amarradas à
+  // clínica, paciente e dentista executor informados pelo chamador (nunca pelo cliente).
+  async generateReceivablesForTreatment(params: GenerateReceivablesParams): Promise<Receivable[]> {
+    const {
+      clinicId,
+      patientId,
+      dentistId,
+      treatmentId,
+      descricao,
+      valorTotal,
+      totalParcelas,
+      primeiraDataVencimento,
+      observacoes,
+    } = params;
+
+    if (totalParcelas < 1 || totalParcelas > 12) {
+      throw new Error("O número de parcelas deve estar entre 1 e 12.");
+    }
+    if (!(valorTotal > 0)) {
+      throw new Error("O valor total do título deve ser maior que zero.");
+    }
+
+    // Divide em centavos para evitar erros de arredondamento; a diferença residual
+    // fica na última parcela.
+    const totalCents = Math.round(valorTotal * 100);
+    const baseCents = Math.floor(totalCents / totalParcelas);
+    const remainderCents = totalCents - baseCents * totalParcelas;
+
+    const [year, month, day] = primeiraDataVencimento.split("-").map(Number);
+    const rows: InsertReceivable[] = Array.from({ length: totalParcelas }, (_, index) => {
+      const dueDate = new Date(Date.UTC(year, month - 1 + index, day));
+      const cents = baseCents + (index === totalParcelas - 1 ? remainderCents : 0);
+      return {
+        clinicId,
+        patientId,
+        dentistId,
+        treatmentId: treatmentId ?? null,
+        descricao,
+        valor: (cents / 100).toFixed(2),
+        dataVencimento: dueDate.toISOString().slice(0, 10),
+        status: "Pendente",
+        numeroParcela: index + 1,
+        totalParcelas,
+        observacoes: observacoes ?? null,
+      } satisfies InsertReceivable;
+    });
+
+    return await db.insert(receivables).values(rows).returning();
+  }
+
+  // Listagem + KPIs com a trava de RBAC aplicada diretamente na query: um dentista
+  // jamais recebe linhas ou totais de outro profissional, independente do que o
+  // front-end enviar como filtro.
+  async listReceivables(
+    clinicId: string,
+    requester: ReceivableRequester,
+    filters: ReceivableFilters,
+  ): Promise<ReceivableListResult> {
+    await this.markOverdueReceivables(clinicId);
+
+    const isPrivileged = requester.role === "admin" || requester.role === "secretary";
+    const conditions = [eq(receivables.clinicId, clinicId)];
+
+    if (!isPrivileged) {
+      // Trava automática: dentista só enxerga títulos onde ele é o executor.
+      conditions.push(eq(receivables.dentistId, requester.id));
+    } else if (filters.dentistId) {
+      conditions.push(eq(receivables.dentistId, filters.dentistId));
+    }
+
+    if (filters.patientId) {
+      conditions.push(eq(receivables.patientId, filters.patientId));
+    }
+    if (filters.startDate) {
+      conditions.push(gte(receivables.dataVencimento, filters.startDate));
+    }
+    if (filters.endDate) {
+      conditions.push(lte(receivables.dataVencimento, filters.endDate));
+    }
+    if (filters.status && filters.status !== "Todos") {
+      conditions.push(eq(receivables.status, filters.status));
+    }
+    if (filters.patientSearch) {
+      conditions.push(ilike(patients.fullName, `%${filters.patientSearch}%`));
+    }
+
+    const rows = await db
+      .select({
+        id: receivables.id,
+        clinicId: receivables.clinicId,
+        patientId: receivables.patientId,
+        dentistId: receivables.dentistId,
+        treatmentId: receivables.treatmentId,
+        descricao: receivables.descricao,
+        valor: receivables.valor,
+        dataVencimento: receivables.dataVencimento,
+        dataPagamento: receivables.dataPagamento,
+        status: receivables.status,
+        numeroParcela: receivables.numeroParcela,
+        totalParcelas: receivables.totalParcelas,
+        observacoes: receivables.observacoes,
+        createdAt: receivables.createdAt,
+        updatedAt: receivables.updatedAt,
+        patientName: patients.fullName,
+        dentistName: users.fullName,
+      })
+      .from(receivables)
+      .innerJoin(patients, eq(patients.id, receivables.patientId))
+      .innerJoin(users, eq(users.id, receivables.dentistId))
+      .where(and(...conditions))
+      .orderBy(asc(receivables.dataVencimento));
+
+    // KPIs sempre recalculados sobre o mesmo escopo de visibilidade (nunca sobre a clínica inteira
+    // quando o requester é um dentista), garantindo que os cards batam com a tabela exibida.
+    const kpis = rows.reduce(
+      (acc, row) => {
+        const valor = parseFloat(row.valor);
+        if (row.status === "Pago") {
+          acc.totalRecebido += valor;
+        } else {
+          acc.totalAReceber += valor;
+          if (row.status === "Vencido") acc.totalInadimplente += valor;
+        }
+        return acc;
+      },
+      { totalAReceber: 0, totalRecebido: 0, totalInadimplente: 0 },
+    );
+
+    return { data: rows as ReceivableWithNames[], kpis };
+  }
+
+  async getReceivableById(id: string, clinicId: string): Promise<Receivable | undefined> {
+    const [receivable] = await db
+      .select()
+      .from(receivables)
+      .where(and(eq(receivables.id, id), eq(receivables.clinicId, clinicId)));
+    return receivable || undefined;
+  }
+
+  // Baixa/atualização de status. A validação de clínica é feita no WHERE (nunca
+  // confiamos apenas no id), e a validação de papel (quem pode dar baixa) é
+  // responsabilidade da rota via `requireRole`.
+  async updateReceivableStatus(
+    id: string,
+    clinicId: string,
+    updates: { status: ReceivableStatus; dataPagamento?: string | null; observacoes?: string },
+  ): Promise<Receivable | undefined> {
+    const values: Partial<InsertReceivable> & { updatedAt: Date } = {
+      status: updates.status,
+      updatedAt: new Date(),
+    };
+
+    if (updates.status === "Pago") {
+      values.dataPagamento = updates.dataPagamento || new Date().toISOString().slice(0, 10);
+    } else {
+      values.dataPagamento = null;
+    }
+    if (typeof updates.observacoes === "string") {
+      values.observacoes = updates.observacoes;
+    }
+
+    const [updated] = await db
+      .update(receivables)
+      .set(values)
+      .where(and(eq(receivables.id, id), eq(receivables.clinicId, clinicId)))
+      .returning();
+    return updated || undefined;
   }
 }
 

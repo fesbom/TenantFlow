@@ -27,6 +27,7 @@ const navigation = [
   { name: "Disponibilidade", href: "/availability", icon: Clock, roles: ["admin", "dentist"] },
   { name: "Prontuários", href: "/medical-records", icon: FileText, roles: ["admin", "dentist"] },
   { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"] },
+  { name: "Contas a Receber", href: "/receivables", icon: DollarSign, roles: ["admin", "dentist", "secretary"] },
   { name: "Atendimento", href: "/support", icon: MessageSquare, roles: ["admin", "secretary"], badge: true },
   { name: "Importar Dados", href: "/import-data", icon: Upload, roles: ["admin"] },
   { name: "Upload Fotos", href: "/batch-upload", icon: Images, roles: ["admin", "secretary"] },

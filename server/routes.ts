@@ -1750,6 +1750,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  // ─────────────────────────────────────────────────────────────────────
+  // CONTAS A RECEBER (Receivables) routes
+  // ─────────────────────────────────────────────────────────────────────
+
+  const RECEIVABLE_STATUS_FILTERS = ["Pendente", "Pago", "Vencido", "Acordo", "Todos"] as const;
+
+  // Painel financeiro: listagem + KPIs. A trava de visibilidade (admin/secretary
+  // veem tudo da clínica; dentist só enxerga os próprios títulos) é aplicada
+  // dentro de storage.listReceivables com base em req.user, nunca em query params.
+  app.get(
+    "/api/receivables",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { startDate, endDate, patientId, patientSearch, status, dentistId } = req.query;
+
+        if (typeof status === "string" && !RECEIVABLE_STATUS_FILTERS.includes(status as any)) {
+          return res.status(400).json({ message: "Status de filtro inválido." });
+        }
+
+        const result = await storage.listReceivables(
+          req.user!.clinicId,
+          { id: req.user!.id, role: req.user!.role },
+          {
+            startDate: typeof startDate === "string" && startDate ? startDate : undefined,
+            endDate: typeof endDate === "string" && endDate ? endDate : undefined,
+            patientId: typeof patientId === "string" && patientId ? patientId : undefined,
+            patientSearch: typeof patientSearch === "string" && patientSearch ? patientSearch : undefined,
+            status: typeof status === "string" && status ? (status as any) : undefined,
+            // O filtro de dentista só tem efeito para admin/secretary (aplicado no storage);
+            // para um dentista, qualquer valor aqui é ignorado em favor do próprio id.
+            dentistId: typeof dentistId === "string" && dentistId ? dentistId : undefined,
+          },
+        );
+        res.json(result);
+      } catch (error) {
+        console.error("List receivables error:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // Gera os títulos/parcelas de um tratamento aprovado/concluído. Paciente e dentista
+  // executor vêm sempre do tratamento persistido (nunca do corpo da requisição), e um
+  // dentista só pode gerar títulos para os próprios tratamentos.
+  app.post(
+    "/api/treatments/:id/receivables",
+    authenticateToken,
+    requireRole(["admin", "dentist", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const treatment = await storage.getTreatmentById(req.params.id, req.user!.clinicId);
+        if (!treatment) {
+          return res.status(404).json({ message: "Tratamento não encontrado." });
+        }
+        if (req.user!.role === "dentist" && treatment.dentistId !== req.user!.id) {
+          return res.status(403).json({ code: "PERMISSAO_INSUFICIENTE", message: "Você só pode gerar títulos para os seus próprios tratamentos." });
+        }
+
+        const { totalParcelas, primeiraDataVencimento, descricao, observacoes } = req.body;
+        let valorTotal = Number(req.body.valorTotal);
+
+        if (!valorTotal || valorTotal <= 0) {
+          const summary = await storage.getBudgetSummaryByTreatment(treatment.id);
+          if (!summary) {
+            return res.status(400).json({ message: "Informe valorTotal ou cadastre o resumo do orçamento do tratamento." });
+          }
+          valorTotal = parseFloat(summary.totalOrcamento);
+        }
+
+        const parsedInstallments = Number(totalParcelas) || 1;
+        if (!primeiraDataVencimento || typeof primeiraDataVencimento !== "string") {
+          return res.status(400).json({ message: "primeiraDataVencimento é obrigatório (YYYY-MM-DD)." });
+        }
+
+        const created = await storage.generateReceivablesForTreatment({
+          clinicId: req.user!.clinicId,
+          patientId: treatment.patientId,
+          dentistId: treatment.dentistId,
+          treatmentId: treatment.id,
+          descricao: typeof descricao === "string" && descricao ? descricao : treatment.tituloTratamento,
+          valorTotal,
+          totalParcelas: parsedInstallments,
+          primeiraDataVencimento,
+          observacoes: typeof observacoes === "string" ? observacoes : undefined,
+        });
+        res.status(201).json(created);
+      } catch (error: any) {
+        console.error("Generate receivables error:", error);
+        res.status(400).json({ message: error?.message || "Não foi possível gerar os títulos." });
+      }
+    },
+  );
+
+  // Baixa (marcar como pago) ou alteração de status (ex.: Acordo). Restrito a
+  // admin/secretary — dentistas nunca podem alterar cobrança, mesmo as próprias.
+  app.patch(
+    "/api/receivables/:id/status",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { status, dataPagamento, observacoes } = req.body;
+        if (!["Pendente", "Pago", "Vencido", "Acordo"].includes(status)) {
+          return res.status(400).json({ message: "Status inválido." });
+        }
+        const existing = await storage.getReceivableById(req.params.id, req.user!.clinicId);
+        if (!existing) {
+          return res.status(404).json({ message: "Título não encontrado." });
+        }
+        const updated = await storage.updateReceivableStatus(req.params.id, req.user!.clinicId, {
+          status,
+          dataPagamento: typeof dataPagamento === "string" ? dataPagamento : undefined,
+          observacoes: typeof observacoes === "string" ? observacoes : undefined,
+        });
+        res.json(updated);
+      } catch (error) {
+        console.error("Update receivable status error:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
   // WhatsApp simulation route (Maintain for legacy/test reasons)
   app.post(
     "/api/whatsapp/send",

@@ -15,6 +15,7 @@ import Appointments from "@/pages/appointments";
 import MedicalRecords from "@/pages/medical-records";
 import Anamnesis from "@/pages/anamnesis";
 import Budgets from "@/pages/budgets";
+import Receivables from "@/pages/receivables";
 import Settings from "@/pages/settings";
 import ImportData from "@/pages/import-data";
 import BatchUpload from "@/pages/batch-upload";
@@ -72,6 +73,7 @@ function Router() {
           <Route path="/medical-records" component={() => <ProtectedRoute component={MedicalRecords} />} />
           <Route path="/anamnesis" component={() => <ProtectedRoute component={Anamnesis} />} />
           <Route path="/budgets" component={() => <ProtectedRoute component={Budgets} />} />
+          <Route path="/receivables" component={() => <ProtectedRoute component={Receivables} />} />
           <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
           <Route path="/import-data" component={() => <ProtectedRoute component={ImportData} />} />
           <Route path="/batch-upload" component={() => <ProtectedRoute component={BatchUpload} />} />

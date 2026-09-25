@@ -16,8 +16,9 @@ import BudgetItemModal from "@/components/modals/budget-item-modal";
 import TreatmentMovementModal from "@/components/modals/treatment-movement-modal";
 import AnamnesisModal from "@/components/modals/anamnesis-modal";
 import BudgetDiscountModal from "@/components/modals/budget-discount-modal";
+import ReceivableGenerateModal from "@/components/modals/receivable-generate-modal";
 import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement } from "@/types";
-import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
+import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon, HandCoins } from "lucide-react";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { ProtectedImage } from "@/components/ui/protected-image";
 
@@ -54,6 +55,7 @@ export default function MedicalRecords() {
   const [isTreatmentMovementModalOpen, setIsTreatmentMovementModalOpen] = useState(false);
   const [isAnamnesisModalOpen, setIsAnamnesisModalOpen] = useState(false);
   const [isBudgetDiscountModalOpen, setIsBudgetDiscountModalOpen] = useState(false);
+  const [isReceivableModalOpen, setIsReceivableModalOpen] = useState(false);
   const [selectedBudgetItem, setSelectedBudgetItem] = useState<BudgetItem | null>(null);
   const [selectedMovement, setSelectedMovement] = useState<TreatmentMovement | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -316,7 +318,12 @@ export default function MedicalRecords() {
                       <TabsContent value="budget" className="mt-4">
                           <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-medium">Itens do Orçamento</h3>
-                            <Button size="sm" onClick={handleCreateBudgetItem}><Plus className="h-4 w-4 mr-1" /> Adicionar Item</Button>
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="outline" onClick={() => setIsReceivableModalOpen(true)} data-testid="button-generate-receivable-open">
+                                <HandCoins className="h-4 w-4 mr-1" /> Gerar Cobrança
+                              </Button>
+                              <Button size="sm" onClick={handleCreateBudgetItem}><Plus className="h-4 w-4 mr-1" /> Adicionar Item</Button>
+                            </div>
                           </div>
                           {budgetItems.length > 0 ? (<>
                             <Table>
@@ -407,6 +414,7 @@ export default function MedicalRecords() {
       <TreatmentMovementModal isOpen={isTreatmentMovementModalOpen} onClose={() => setIsTreatmentMovementModalOpen(false)} treatment={selectedTreatment} movement={selectedMovement} />
       <AnamnesisModal isOpen={isAnamnesisModalOpen} onClose={() => setIsAnamnesisModalOpen(false)} treatment={selectedTreatment} />
       <BudgetDiscountModal isOpen={isBudgetDiscountModalOpen} onClose={() => setIsBudgetDiscountModalOpen(false)} treatment={selectedTreatment} budgetSummary={budgetSummary || null} />
+      <ReceivableGenerateModal isOpen={isReceivableModalOpen} onClose={() => setIsReceivableModalOpen(false)} treatment={selectedTreatment} budgetSummary={budgetSummary || null} />
       
       <ImageLightbox
         isOpen={lightboxOpen}
