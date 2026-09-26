@@ -14,7 +14,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/api";
 import { formatDateBR } from "@/lib/date-formatter";
 import { ReceivableStatus } from "@/types";
-import { DollarSign, TrendingUp, AlertTriangle, CheckCircle2, HandCoins } from "lucide-react";
+import ReceivableEditModal from "@/components/modals/receivable-edit-modal";
+import { DollarSign, TrendingUp, AlertTriangle, CheckCircle2, HandCoins, Pencil, Layers3, Trash2 } from "lucide-react";
 
 interface ReceivableRow {
   id: string;
@@ -86,6 +87,8 @@ export default function Receivables() {
   const [patientSearch, setPatientSearch] = useState("");
   const [status, setStatus] = useState<ReceivableStatus | "Todos">("Todos");
   const [dentistId, setDentistId] = useState<string>("Todos");
+  const [editingReceivable, setEditingReceivable] = useState<ReceivableRow | null>(null);
+  const [editMode, setEditMode] = useState<"edit" | "installments">("edit");
 
   const params = new URLSearchParams();
   if (startDate) params.set("startDate", startDate);
@@ -128,8 +131,34 @@ export default function Receivables() {
     },
   });
 
+  const deleteReceivableMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/receivables/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [url] });
+      toast({ title: "Título excluído", description: "A conta a receber foi removida." });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Erro ao excluir título",
+        description: error instanceof Error ? error.message : "Não foi possível excluir a conta a receber.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const rows = data?.data ?? [];
   const kpis = data?.kpis ?? { totalAReceber: 0, totalRecebido: 0, totalInadimplente: 0 };
+  const openReceivableModal = (row: ReceivableRow, mode: "edit" | "installments") => {
+    setEditingReceivable(row);
+    setEditMode(mode);
+  };
+  const handleDeleteReceivable = (row: ReceivableRow) => {
+    if (window.confirm(`Excluir a conta a receber de ${row.patientName}? Esta ação não pode ser desfeita.`)) {
+      deleteReceivableMutation.mutate(row.id);
+    }
+  };
 
   return (
     <div className="app-container bg-slate-50">
@@ -301,7 +330,7 @@ export default function Receivables() {
                                     size="sm"
                                     className="text-green-600 hover:text-green-700"
                                     onClick={() => updateStatusMutation.mutate({ id: row.id, status: "Pago" })}
-                                    disabled={updateStatusMutation.isPending}
+                                    disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
                                     data-testid={`button-pay-${row.id}`}
                                   >
                                     <TrendingUp className="h-4 w-4 mr-1" />
@@ -314,12 +343,46 @@ export default function Receivables() {
                                     size="sm"
                                     className="text-blue-600 hover:text-blue-700"
                                     onClick={() => updateStatusMutation.mutate({ id: row.id, status: "Acordo" })}
-                                    disabled={updateStatusMutation.isPending}
+                                    disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
                                     data-testid={`button-agreement-${row.id}`}
                                   >
                                     Acordo
                                   </Button>
                                 )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openReceivableModal(row, "edit")}
+                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
+                                  title="Editar título"
+                                  data-testid={`button-edit-receivable-${row.id}`}
+                                >
+                                  <Pencil className="h-4 w-4 mr-1" />
+                                  Editar
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openReceivableModal(row, "installments")}
+                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
+                                  title="Gerar novas parcelas"
+                                  data-testid={`button-new-installments-${row.id}`}
+                                >
+                                  <Layers3 className="h-4 w-4 mr-1" />
+                                  Novas parcelas
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700"
+                                  onClick={() => handleDeleteReceivable(row)}
+                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
+                                  title="Excluir título"
+                                  data-testid={`button-delete-receivable-${row.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Excluir
+                                </Button>
                               </div>
                             </TableCell>
                           )}
@@ -333,6 +396,13 @@ export default function Receivables() {
           </Card>
         </main>
       </div>
+      <ReceivableEditModal
+        isOpen={!!editingReceivable}
+        mode={editMode}
+        receivable={editingReceivable}
+        onClose={() => setEditingReceivable(null)}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: [url] })}
+      />
     </div>
   );
 }

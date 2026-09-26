@@ -119,6 +119,14 @@ export interface GenerateReceivablesParams {
   observacoes?: string;
 }
 
+export interface GenerateReceivablesFromExistingParams {
+  receivableId: string;
+  clinicId: string;
+  valorTotal: number;
+  totalParcelas: number;
+  primeiraDataVencimento: string;
+}
+
 export interface IStorage {
   // Clinic methods
   createClinic(clinic: InsertClinic): Promise<Clinic>;
@@ -272,6 +280,21 @@ export interface IStorage {
   generateReceivablesForTreatment(params: GenerateReceivablesParams): Promise<Receivable[]>;
   listReceivables(clinicId: string, requester: ReceivableRequester, filters: ReceivableFilters): Promise<ReceivableListResult>;
   getReceivableById(id: string, clinicId: string): Promise<Receivable | undefined>;
+  updateReceivable(id: string, clinicId: string, updates: {
+    patientId: string;
+    dentistId: string;
+    treatmentId: string | null;
+    descricao: string;
+    valor: number;
+    dataVencimento: string;
+    dataPagamento: string | null;
+    status: ReceivableStatus;
+    numeroParcela: number;
+    totalParcelas: number;
+    observacoes: string | null;
+  }): Promise<Receivable | undefined>;
+  deleteReceivable(id: string, clinicId: string): Promise<boolean>;
+  generateReceivablesFromExisting(params: GenerateReceivablesFromExistingParams): Promise<Receivable[]>;
   updateReceivableStatus(id: string, clinicId: string, updates: { status: ReceivableStatus; dataPagamento?: string | null; observacoes?: string }): Promise<Receivable | undefined>;
 }
 
@@ -1560,6 +1583,111 @@ export class DatabaseStorage implements IStorage {
       .from(receivables)
       .where(and(eq(receivables.id, id), eq(receivables.clinicId, clinicId)));
     return receivable || undefined;
+  }
+
+  async updateReceivable(
+    id: string,
+    clinicId: string,
+    updates: {
+      patientId: string;
+      dentistId: string;
+      treatmentId: string | null;
+      descricao: string;
+      valor: number;
+      dataVencimento: string;
+      dataPagamento: string | null;
+      status: ReceivableStatus;
+      numeroParcela: number;
+      totalParcelas: number;
+      observacoes: string | null;
+    },
+  ): Promise<Receivable | undefined> {
+    const [patient] = await db
+      .select({ id: patients.id })
+      .from(patients)
+      .where(and(eq(patients.id, updates.patientId), eq(patients.clinicId, clinicId)));
+    if (!patient) throw new Error("Paciente não encontrado nesta clínica.");
+
+    const [dentist] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, updates.dentistId), eq(users.clinicId, clinicId), eq(users.role, "dentist")));
+    if (!dentist) throw new Error("Dentista não encontrado nesta clínica.");
+
+    if (updates.treatmentId) {
+      const treatment = await this.getTreatmentById(updates.treatmentId, clinicId);
+      if (!treatment || treatment.patientId !== updates.patientId) {
+        throw new Error("Tratamento inválido para o paciente selecionado.");
+      }
+    }
+
+    const [updated] = await db
+      .update(receivables)
+      .set({
+        patientId: updates.patientId,
+        dentistId: updates.dentistId,
+        treatmentId: updates.treatmentId,
+        descricao: updates.descricao,
+        status: updates.status,
+        valor: updates.valor.toFixed(2),
+        dataVencimento: updates.dataVencimento,
+        dataPagamento: updates.status === "Pago" ? updates.dataPagamento : null,
+        numeroParcela: updates.numeroParcela,
+        totalParcelas: updates.totalParcelas,
+        observacoes: updates.observacoes,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(receivables.id, id), eq(receivables.clinicId, clinicId)))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteReceivable(id: string, clinicId: string): Promise<boolean> {
+    const result = await db
+      .delete(receivables)
+      .where(and(eq(receivables.id, id), eq(receivables.clinicId, clinicId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async generateReceivablesFromExisting({
+    receivableId,
+    clinicId,
+    valorTotal,
+    totalParcelas,
+    primeiraDataVencimento,
+  }: GenerateReceivablesFromExistingParams): Promise<Receivable[]> {
+    const existing = await this.getReceivableById(receivableId, clinicId);
+    if (!existing) return [];
+    if (totalParcelas < 1 || totalParcelas > 12) {
+      throw new Error("O número de parcelas deve estar entre 1 e 12.");
+    }
+    if (!(valorTotal > 0)) {
+      throw new Error("O valor total deve ser maior que zero.");
+    }
+
+    const totalCents = Math.round(valorTotal * 100);
+    const baseCents = Math.floor(totalCents / totalParcelas);
+    const remainderCents = totalCents - baseCents * totalParcelas;
+    const [year, month, day] = primeiraDataVencimento.split("-").map(Number);
+    const rows: InsertReceivable[] = Array.from({ length: totalParcelas }, (_, index) => {
+      const dueDate = new Date(Date.UTC(year, month - 1 + index, day));
+      const cents = baseCents + (index === totalParcelas - 1 ? remainderCents : 0);
+      return {
+        clinicId,
+        patientId: existing.patientId,
+        dentistId: existing.dentistId,
+        treatmentId: existing.treatmentId,
+        descricao: existing.descricao,
+        valor: (cents / 100).toFixed(2),
+        dataVencimento: dueDate.toISOString().slice(0, 10),
+        status: "Pendente",
+        numeroParcela: index + 1,
+        totalParcelas,
+        observacoes: existing.observacoes,
+      } satisfies InsertReceivable;
+    });
+
+    return await db.insert(receivables).values(rows).returning();
   }
 
   // Baixa/atualização de status. A validação de clínica é feita no WHERE (nunca

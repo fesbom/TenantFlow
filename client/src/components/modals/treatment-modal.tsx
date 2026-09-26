@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Patient, Treatment } from "@/types";
+import { Patient, Treatment, User } from "@/types";
+import { useAuth } from "@/hooks/use-auth";
 
 interface TreatmentModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface TreatmentModalProps {
 
 interface TreatmentFormData {
   patientId: string;
+  dentistId: string;
   dataInicio: string;
   situacaoTratamento: "Em andamento" | "Concluído" | "Cancelado";
   tituloTratamento: string;
@@ -26,9 +28,19 @@ interface TreatmentFormData {
 export default function TreatmentModal({ isOpen, onClose, patient, treatment }: TreatmentModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const { data: dentistOptionsResponse } = useQuery<{ dentists: User[] }>({
+    queryKey: ["/api/receivables/options"],
+    enabled: isOpen && user?.role !== "dentist",
+  });
+  const dentists = user?.role === "dentist"
+    ? [user]
+    : dentistOptionsResponse?.dentists ?? [];
 
   const [formData, setFormData] = useState<TreatmentFormData>({
     patientId: "",
+    dentistId: "",
     dataInicio: "",
     situacaoTratamento: "Em andamento",
     tituloTratamento: "",
@@ -38,6 +50,7 @@ export default function TreatmentModal({ isOpen, onClose, patient, treatment }: 
     if (treatment) {
       setFormData({
         patientId: treatment.patientId,
+        dentistId: treatment.dentistId,
         dataInicio: treatment.dataInicio,
         situacaoTratamento: treatment.situacaoTratamento,
         tituloTratamento: treatment.tituloTratamento,
@@ -45,12 +58,19 @@ export default function TreatmentModal({ isOpen, onClose, patient, treatment }: 
     } else if (patient) {
       setFormData({
         patientId: patient.id,
+        dentistId: user?.role === "dentist" ? user.id : "",
         dataInicio: new Date().toISOString().split('T')[0],
         situacaoTratamento: "Em andamento",
         tituloTratamento: "",
       });
     }
-  }, [treatment, patient]);
+  }, [treatment, patient, user]);
+
+  useEffect(() => {
+    if (!treatment && user?.role !== "dentist" && !formData.dentistId && dentists.length > 0) {
+      setFormData((previous) => ({ ...previous, dentistId: dentists[0].id }));
+    }
+  }, [dentists, formData.dentistId, treatment, user]);
 
   const createTreatmentMutation = useMutation({
     mutationFn: async (data: TreatmentFormData) => {
@@ -107,6 +127,14 @@ export default function TreatmentModal({ isOpen, onClose, patient, treatment }: 
       });
       return;
     }
+    if (!formData.dentistId) {
+      toast({
+        title: "Dentista obrigatório",
+        description: "Selecione o dentista responsável pelo tratamento.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (treatment) {
       updateTreatmentMutation.mutate(formData);
@@ -141,6 +169,26 @@ export default function TreatmentModal({ isOpen, onClose, patient, treatment }: 
               data-testid="input-treatment-title"
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="dentist">Dentista responsável</Label>
+            <Select
+              value={formData.dentistId}
+              onValueChange={(value) => handleInputChange("dentistId", value)}
+              disabled={user?.role === "dentist"}
+            >
+              <SelectTrigger id="dentist" data-testid="select-treatment-dentist">
+                <SelectValue placeholder="Selecione o dentista" />
+              </SelectTrigger>
+              <SelectContent>
+                {dentists.map((dentist) => (
+                  <SelectItem key={dentist.id} value={dentist.id}>
+                    {dentist.fullName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

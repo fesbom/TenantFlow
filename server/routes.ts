@@ -1756,6 +1756,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const RECEIVABLE_STATUS_FILTERS = ["Pendente", "Pago", "Vencido", "Acordo", "Todos"] as const;
 
+  app.get(
+    "/api/receivables/options",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const [clinicPatients, clinicUsers] = await Promise.all([
+          storage.getPatientsByClinic(req.user!.clinicId),
+          storage.getUsersByClinic(req.user!.clinicId),
+        ]);
+        res.json({
+          patients: clinicPatients,
+          dentists: clinicUsers
+            .filter((user) => user.role === "dentist")
+            .map(({ password, ...user }) => user),
+        });
+      } catch (error) {
+        console.error("Get receivable options error:", error);
+        res.status(500).json({ message: "Não foi possível carregar pacientes e dentistas." });
+      }
+    },
+  );
+
   // Painel financeiro: listagem + KPIs. A trava de visibilidade (admin/secretary
   // veem tudo da clínica; dentist só enxerga os próprios títulos) é aplicada
   // dentro de storage.listReceivables com base em req.user, nunca em query params.
@@ -1873,6 +1896,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  app.patch(
+    "/api/receivables/:id",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const {
+          patientId,
+          dentistId,
+          treatmentId,
+          descricao,
+          valor,
+          dataVencimento,
+          dataPagamento,
+          status,
+          numeroParcela,
+          totalParcelas,
+          observacoes,
+        } = req.body;
+        if (!["Pendente", "Pago", "Vencido", "Acordo"].includes(status)) {
+          return res.status(400).json({ message: "Status inválido." });
+        }
+        const parsedInstallment = Number(numeroParcela);
+        const parsedTotalInstallments = Number(totalParcelas);
+        if (!Number.isInteger(parsedInstallment) || !Number.isInteger(parsedTotalInstallments) || parsedInstallment < 1 || parsedTotalInstallments < 1 || parsedInstallment > parsedTotalInstallments || parsedTotalInstallments > 12) {
+          return res.status(400).json({ message: "Informe parcelas válidas (de 1 a 12)." });
+        }
+        const parsedValue = Number(valor);
+        if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+          return res.status(400).json({ message: "O valor deve ser maior que zero." });
+        }
+        if (typeof patientId !== "string" || typeof dentistId !== "string" || typeof descricao !== "string" || !descricao.trim()) {
+          return res.status(400).json({ message: "Paciente, dentista e descrição são obrigatórios." });
+        }
+        if (typeof dataVencimento !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dataVencimento)) {
+          return res.status(400).json({ message: "Informe um vencimento válido." });
+        }
+        if (status === "Pago" && (typeof dataPagamento !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dataPagamento))) {
+          return res.status(400).json({ message: "Informe a data de pagamento para um título pago." });
+        }
+        const existing = await storage.getReceivableById(req.params.id, req.user!.clinicId);
+        if (!existing) {
+          return res.status(404).json({ message: "Título não encontrado." });
+        }
+        const updated = await storage.updateReceivable(req.params.id, req.user!.clinicId, {
+          patientId,
+          dentistId,
+          treatmentId: typeof treatmentId === "string" && treatmentId ? treatmentId : null,
+          descricao: descricao.trim(),
+          status,
+          valor: parsedValue,
+          dataVencimento,
+          dataPagamento: typeof dataPagamento === "string" ? dataPagamento : null,
+          numeroParcela: parsedInstallment,
+          totalParcelas: parsedTotalInstallments,
+          observacoes: typeof observacoes === "string" && observacoes ? observacoes : null,
+        });
+        res.json(updated);
+      } catch (error) {
+        console.error("Update receivable error:", error);
+        res.status(500).json({ message: "Não foi possível atualizar o título." });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/receivables/:id",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const deleted = await storage.deleteReceivable(req.params.id, req.user!.clinicId);
+        if (!deleted) {
+          return res.status(404).json({ message: "Título não encontrado." });
+        }
+        res.status(204).send();
+      } catch (error) {
+        console.error("Delete receivable error:", error);
+        res.status(500).json({ message: "Não foi possível excluir o título." });
+      }
+    },
+  );
+
+  app.post(
+    "/api/receivables/:id/installments",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const valorTotal = Number(req.body.valorTotal);
+        const totalParcelas = Number(req.body.totalParcelas);
+        const primeiraDataVencimento = req.body.primeiraDataVencimento;
+        if (!Number.isFinite(valorTotal) || valorTotal <= 0 || !Number.isInteger(totalParcelas) || totalParcelas < 1 || totalParcelas > 12) {
+          return res.status(400).json({ message: "Informe valor e de 1 a 12 parcelas válidos." });
+        }
+        if (typeof primeiraDataVencimento !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(primeiraDataVencimento)) {
+          return res.status(400).json({ message: "Informe um vencimento válido." });
+        }
+        const existing = await storage.getReceivableById(req.params.id, req.user!.clinicId);
+        if (!existing) {
+          return res.status(404).json({ message: "Título não encontrado." });
+        }
+        const created = await storage.generateReceivablesFromExisting({
+          receivableId: req.params.id,
+          clinicId: req.user!.clinicId,
+          valorTotal,
+          totalParcelas,
+          primeiraDataVencimento,
+        });
+        res.status(201).json(created);
+      } catch (error: any) {
+        console.error("Generate receivable installments error:", error);
+        res.status(400).json({ message: error?.message || "Não foi possível gerar as parcelas." });
+      }
+    },
+  );
+
   // WhatsApp simulation route (Maintain for legacy/test reasons)
   app.post(
     "/api/whatsapp/send",
@@ -1897,18 +2037,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Treatment routes
   app.post("/api/treatments", authenticateToken, async (req, res) => {
     try {
-      const result = insertTreatmentSchema.safeParse(req.body);
+      const authReq = req as AuthenticatedRequest;
+      const requestedDentistId = typeof req.body?.dentistId === "string" ? req.body.dentistId : undefined;
+      const dentistId = authReq.user!.role === "dentist" ? authReq.user!.id : requestedDentistId;
+      if (!dentistId) {
+        return res.status(400).json({ message: "Selecione o dentista responsável pelo tratamento." });
+      }
+      const dentist = await storage.getUserById(dentistId);
+      if (!dentist || dentist.clinicId !== authReq.user!.clinicId || dentist.role !== "dentist") {
+        return res.status(400).json({ message: "Dentista inválido para esta clínica." });
+      }
+
+      const result = insertTreatmentSchema.safeParse({ ...req.body, dentistId });
       if (!result.success) {
         return res.status(400).json({
           message: "Invalid treatment data",
           errors: result.error.errors,
         });
       }
-      const authReq = req as AuthenticatedRequest;
       const treatmentData = {
         ...result.data,
         clinicId: authReq.user!.clinicId,
-        dentistId: authReq.user!.id,
       };
       const treatment = await storage.createTreatment(treatmentData);
       res.status(201).json(treatment);
@@ -1959,7 +2108,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const authReq = req as AuthenticatedRequest;
-      const result = insertTreatmentSchema.partial().safeParse(req.body);
+      const existingTreatment = await storage.getTreatmentById(id, authReq.user!.clinicId);
+      if (!existingTreatment) {
+        return res.status(404).json({ message: "Treatment not found" });
+      }
+      if (authReq.user!.role === "dentist" && existingTreatment.dentistId !== authReq.user!.id) {
+        return res.status(403).json({ message: "Você só pode editar tratamentos atribuídos a você." });
+      }
+      const requestedDentistId = typeof req.body?.dentistId === "string" ? req.body.dentistId : existingTreatment.dentistId;
+      const dentistId = authReq.user!.role === "dentist" ? authReq.user!.id : requestedDentistId;
+      const dentist = await storage.getUserById(dentistId);
+      if (!dentist || dentist.clinicId !== authReq.user!.clinicId || dentist.role !== "dentist") {
+        return res.status(400).json({ message: "Dentista inválido para esta clínica." });
+      }
+
+      const result = insertTreatmentSchema.partial().safeParse({ ...req.body, dentistId });
       if (!result.success) {
         return res.status(400).json({
           message: "Invalid treatment data",
