@@ -3,6 +3,7 @@ import {
   users,
   patients,
   appointments,
+  appointmentConfirmationLogs,
   medicalRecords,
   anamnesisQuestions,
   anamnesisResponses,
@@ -23,6 +24,8 @@ import {
   type User,
   type Patient,
   type Appointment,
+  type AppointmentConfirmationLog,
+  type InsertAppointmentConfirmationLog,
   type MedicalRecord,
   type AnamnesisQuestion,
   type AnamnesisResponse,
@@ -168,6 +171,11 @@ export interface IStorage {
   getAppointmentById(id: string, clinicId: string): Promise<Appointment | undefined>;
   updateAppointment(id: string, updates: Partial<InsertAppointment>, clinicId: string): Promise<Appointment | undefined>;
   deleteAppointment(id: string, clinicId: string): Promise<boolean>;
+  createAppointmentConfirmationLog(log: InsertAppointmentConfirmationLog): Promise<AppointmentConfirmationLog>;
+  listAppointmentConfirmationLogs(appointmentId: string, clinicId: string): Promise<AppointmentConfirmationLog[]>;
+  updateAppointmentConfirmationDelivery(providerMessageId: string, clinicId: string, deliveryStatus: string): Promise<number>;
+  getPendingPatientRefusalLog(patientId: string, clinicId: string): Promise<AppointmentConfirmationLog | undefined>;
+  updateAppointmentConfirmationLogReason(id: string, clinicId: string, reason: string): Promise<AppointmentConfirmationLog | undefined>;
 
   // Medical record methods
   createMedicalRecord(record: InsertMedicalRecord): Promise<MedicalRecord>;
@@ -202,7 +210,7 @@ export interface IStorage {
   createTreatment(treatment: InsertTreatment & { clinicId: string; dentistId: string }): Promise<Treatment>;
   getTreatmentsByPatient(patientId: string, clinicId: string): Promise<Treatment[]>;
   getTreatmentById(id: string, clinicId: string): Promise<Treatment | undefined>;
-  updateTreatment(id: string, updates: Partial<InsertTreatment>, clinicId: string): Promise<Treatment | undefined>;
+  updateTreatment(id: string, updates: Partial<InsertTreatment> & { dentistId?: string }, clinicId: string): Promise<Treatment | undefined>;
   deleteTreatment(id: string, clinicId: string): Promise<boolean>;
 
   // Budget Item methods
@@ -593,6 +601,63 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
+  async createAppointmentConfirmationLog(log: InsertAppointmentConfirmationLog): Promise<AppointmentConfirmationLog> {
+    const [created] = await db.insert(appointmentConfirmationLogs).values(log).returning();
+    return created;
+  }
+
+  async listAppointmentConfirmationLogs(appointmentId: string, clinicId: string): Promise<AppointmentConfirmationLog[]> {
+    return db
+      .select()
+      .from(appointmentConfirmationLogs)
+      .where(and(
+        eq(appointmentConfirmationLogs.appointmentId, appointmentId),
+        eq(appointmentConfirmationLogs.clinicId, clinicId),
+      ))
+      .orderBy(desc(appointmentConfirmationLogs.createdAt));
+  }
+
+  async updateAppointmentConfirmationDelivery(providerMessageId: string, clinicId: string, deliveryStatus: string): Promise<number> {
+    const updated = await db
+      .update(appointmentConfirmationLogs)
+      .set({ deliveryStatus })
+      .where(and(
+        eq(appointmentConfirmationLogs.providerMessageId, providerMessageId),
+        eq(appointmentConfirmationLogs.clinicId, clinicId),
+      ))
+      .returning({ id: appointmentConfirmationLogs.id });
+    return updated.length;
+  }
+
+  async getPendingPatientRefusalLog(patientId: string, clinicId: string): Promise<AppointmentConfirmationLog | undefined> {
+    const [log] = await db
+      .select()
+      .from(appointmentConfirmationLogs)
+      .where(and(
+        eq(appointmentConfirmationLogs.patientId, patientId),
+        eq(appointmentConfirmationLogs.clinicId, clinicId),
+        eq(appointmentConfirmationLogs.action, "refused"),
+        eq(appointmentConfirmationLogs.origin, "patient"),
+        isNull(appointmentConfirmationLogs.reason),
+        gte(appointmentConfirmationLogs.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+      ))
+      .orderBy(desc(appointmentConfirmationLogs.createdAt))
+      .limit(1);
+    return log || undefined;
+  }
+
+  async updateAppointmentConfirmationLogReason(id: string, clinicId: string, reason: string): Promise<AppointmentConfirmationLog | undefined> {
+    const [updated] = await db
+      .update(appointmentConfirmationLogs)
+      .set({ reason })
+      .where(and(
+        eq(appointmentConfirmationLogs.id, id),
+        eq(appointmentConfirmationLogs.clinicId, clinicId),
+      ))
+      .returning();
+    return updated || undefined;
+  }
+
   // Medical record methods
   async createMedicalRecord(insertRecord: InsertMedicalRecord): Promise<MedicalRecord> {
     const [record] = await db.insert(medicalRecords).values(insertRecord).returning();
@@ -841,7 +906,7 @@ export class DatabaseStorage implements IStorage {
     return treatment || undefined;
   }
 
-  async updateTreatment(id: string, updates: Partial<InsertTreatment>, clinicId: string): Promise<Treatment | undefined> {
+  async updateTreatment(id: string, updates: Partial<InsertTreatment> & { dentistId?: string }, clinicId: string): Promise<Treatment | undefined> {
     const [treatment] = await db
       .update(treatments)
       .set({ ...updates, updatedAt: new Date() })

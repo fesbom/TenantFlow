@@ -24,8 +24,8 @@ const WEBHOOK_GLOBAL_URL = sanitizeUrl(
 export function getWebhookUrl(): string {
   const isDev = process.env.NODE_ENV !== "production";
   const devDomain = (process.env.REPLIT_DEV_DOMAIN || "").trim();
-  if (isDev && devDomain) {
-    return `https://${devDomain}/webhook/evolution`;
+  if (isDev) {
+    return devDomain ? `https://${devDomain}/webhook/evolution` : "";
   }
   if (!WEBHOOK_GLOBAL_URL) return "";
   return WEBHOOK_GLOBAL_URL.endsWith("/webhook/evolution")
@@ -87,6 +87,35 @@ export interface EvolutionStatusResult {
   status?: string;
 }
 
+export interface EvolutionReplyButton {
+  id: string;
+  displayText: string;
+}
+
+function normalizePhoneForEvolution(phone: string): string {
+  let digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("0") && (digits.length === 11 || digits.length === 12)) {
+    digits = digits.slice(1);
+  }
+  if (!digits.startsWith("55") && (digits.length === 10 || digits.length === 11)) {
+    digits = `55${digits}`;
+  }
+  return digits;
+}
+
+function getEvolutionSendError(error: any): string {
+  const status = error.response?.status;
+  const data = error.response?.data;
+  const responseMessage = data?.response?.message ?? data?.message ?? data?.error;
+  const details = Array.isArray(responseMessage)
+    ? responseMessage.filter((item) => typeof item === "string").join("; ")
+    : typeof responseMessage === "string"
+      ? responseMessage
+      : "";
+  return details ? `HTTP ${status}: ${details}` : error.message;
+}
+
 // ─── Per-clinic: send message ──────────────────────────────────────────────
 export async function sendEvolutionMessageForClinic(
   config: ClinicEvolutionConfig,
@@ -97,7 +126,10 @@ export async function sendEvolutionMessageForClinic(
     return { success: false, error: "Evolution API não configurada para esta clínica" };
   }
   try {
-    const normalizedPhone = phone.replace(/\D/g, "");
+    const normalizedPhone = normalizePhoneForEvolution(phone);
+    if (normalizedPhone.length < 12 || normalizedPhone.length > 15) {
+      return { success: false, error: "Telefone inválido. Informe DDD e número com código do país quando aplicável." };
+    }
     const sendUrl = `${config.evoUrl}/message/sendText/${config.instanceName}`;
     const response = await axios.post(
       sendUrl,
@@ -109,8 +141,49 @@ export async function sendEvolutionMessageForClinic(
     );
     return { success: true, messageId: response.data?.key?.id };
   } catch (error: any) {
-    console.error(`❌ [Evolution] Erro ao enviar para ${config.instanceName}:`, error.message);
-    return { success: false, error: error.message };
+    const detail = getEvolutionSendError(error);
+    console.error(`❌ [Evolution] Erro ao enviar para ${config.instanceName}:`, detail);
+    return { success: false, error: detail };
+  }
+}
+
+export async function sendEvolutionButtonsForClinic(
+  config: ClinicEvolutionConfig,
+  phone: string,
+  content: { title: string; description: string; footer?: string; buttons: EvolutionReplyButton[] },
+): Promise<EvolutionSendResult> {
+  if (!config.evoUrl || !config.evoKey || !config.instanceName) {
+    return { success: false, error: "Evolution API não configurada para esta clínica" };
+  }
+  try {
+    const normalizedPhone = normalizePhoneForEvolution(phone);
+    if (normalizedPhone.length < 12 || normalizedPhone.length > 15) {
+      return { success: false, error: "Telefone inválido. Informe DDD e número com código do país quando aplicável." };
+    }
+    const response = await axios.post(
+      `${config.evoUrl}/message/sendButtons/${config.instanceName}`,
+      {
+        number: normalizedPhone,
+        title: content.title,
+        description: content.description,
+        footer: content.footer,
+        buttons: content.buttons.map((button) => ({
+          type: "reply",
+          displayText: button.displayText,
+          id: button.id,
+        })),
+        delay: 1200,
+      },
+      {
+        headers: { apikey: config.evoKey, "Content-Type": "application/json" },
+        timeout: 30000,
+      },
+    );
+    return { success: true, messageId: response.data?.key?.id };
+  } catch (error: any) {
+    const detail = getEvolutionSendError(error);
+    console.error(`❌ [Evolution] Erro ao enviar botões para ${config.instanceName}:`, detail);
+    return { success: false, error: detail };
   }
 }
 
@@ -242,7 +315,7 @@ export async function generateQRCodeForClinic(
       url: webhookUrl,
       byEvents: false,
       base64: true,
-      events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+      events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "SEND_MESSAGE", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
     };
     console.log(`[Evolution] Webhook configurado: ${webhookUrl}`);
   }
@@ -301,9 +374,9 @@ export async function generateQRCodeForClinic(
   }
 }
 
-async function configureWebhookForInstance(config: ClinicEvolutionConfig): Promise<void> {
+async function configureWebhookForInstance(config: ClinicEvolutionConfig): Promise<boolean> {
   const webhookUrl = getWebhookUrl();
-  if (!webhookUrl) return;
+  if (!webhookUrl) return false;
   try {
     await axios.post(
       `${config.evoUrl}/webhook/set/${config.instanceName}`,
@@ -313,15 +386,21 @@ async function configureWebhookForInstance(config: ClinicEvolutionConfig): Promi
           url: webhookUrl,
           byEvents: false,
           base64: true,
-          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+          events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "SEND_MESSAGE", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
         },
       },
       { headers: { apikey: config.evoKey, "Content-Type": "application/json" }, timeout: 10000 },
     );
     console.log(`[Evolution] Webhook configurado em instância existente: ${config.instanceName}`);
+    return true;
   } catch (e: any) {
     console.warn(`[Evolution] Aviso: falha ao configurar webhook — ${e.message}`);
+    return false;
   }
+}
+
+export async function ensureEvolutionWebhookForClinic(config: ClinicEvolutionConfig): Promise<boolean> {
+  return configureWebhookForInstance(config);
 }
 
 // Garante que instâncias já existentes atualizem as opções para não sincronizar histórico

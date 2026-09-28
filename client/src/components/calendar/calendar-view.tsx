@@ -108,6 +108,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   const [selectedDentist, setSelectedDentist] = useState<string>("all");
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedAppointmentPatientName, setSelectedAppointmentPatientName] = useState<string | null>(null);
   const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null);
   const [newAppointmentSlot, setNewAppointmentSlot] = useState<{ start: Date; end: Date } | null>(null);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -204,11 +205,13 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   const handleSelectSlot = (start: Date, end: Date) => {
     setNewAppointmentSlot({ start, end });
     setSelectedAppointment(null);
+    setSelectedAppointmentPatientName(null);
     setIsAppointmentModalOpen(true);
   };
 
   const handleSelectEvent = (event: ScheduleXAppointmentEvent) => {
     setSelectedAppointment(event.appointment);
+    setSelectedAppointmentPatientName(event.patientName);
     setNewAppointmentSlot(null);
     setIsAppointmentModalOpen(true);
   };
@@ -317,9 +320,11 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
         onClose={() => {
           setIsAppointmentModalOpen(false);
           setSelectedAppointment(null);
+          setSelectedAppointmentPatientName(null);
           setNewAppointmentSlot(null);
         }}
         appointment={selectedAppointment}
+        patientName={selectedAppointmentPatientName ?? undefined}
         initialDateTime={newAppointmentSlot?.start}
         onDelete={handleDeleteAppointment}
         dentists={dentists}

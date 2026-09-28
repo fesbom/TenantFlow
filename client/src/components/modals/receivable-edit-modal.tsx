@@ -23,6 +23,8 @@ interface ReceivableEditRow {
   numeroParcela: number;
   totalParcelas: number;
   observacoes: string | null;
+  patientName: string;
+  dentistName: string;
 }
 
 interface ReceivableOptionsResponse {
@@ -62,6 +64,12 @@ export default function ReceivableEditModal({ isOpen, mode, receivable, onClose,
   });
   const patients = options?.patients ?? [];
   const dentists = options?.dentists ?? [];
+  const patientSelectOptions = receivable && !patients.some((option) => option.id === receivable.patientId)
+    ? [{ id: receivable.patientId, fullName: receivable.patientName } as Patient, ...patients]
+    : patients;
+  const dentistSelectOptions = receivable && !dentists.some((option) => option.id === receivable.dentistId)
+    ? [{ id: receivable.dentistId, fullName: receivable.dentistName } as User, ...dentists]
+    : dentists;
 
   useEffect(() => {
     if (!isOpen || !receivable) return;
@@ -154,14 +162,14 @@ export default function ReceivableEditModal({ isOpen, mode, receivable, onClose,
                   <Label>Paciente</Label>
                   <Select value={patientId} onValueChange={(value) => { setPatientId(value); setTreatmentId("none"); }}>
                     <SelectTrigger><SelectValue placeholder="Selecione o paciente" /></SelectTrigger>
-                    <SelectContent>{patients.map((patient) => <SelectItem key={patient.id} value={patient.id}>{patient.fullName}</SelectItem>)}</SelectContent>
+                    <SelectContent>{patientSelectOptions.map((patient) => <SelectItem key={patient.id} value={patient.id}>{patient.fullName}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Dentista</Label>
                   <Select value={dentistId} onValueChange={setDentistId}>
                     <SelectTrigger><SelectValue placeholder="Selecione o dentista" /></SelectTrigger>
-                    <SelectContent>{dentists.map((dentist) => <SelectItem key={dentist.id} value={dentist.id}>{dentist.fullName}</SelectItem>)}</SelectContent>
+                    <SelectContent>{dentistSelectOptions.map((dentist) => <SelectItem key={dentist.id} value={dentist.id}>{dentist.fullName}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>

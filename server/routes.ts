@@ -53,8 +53,10 @@ import {
   createOrGetInstance,
   sendEvolutionMessage,
   sendEvolutionMessageForClinic,
+  sendEvolutionButtonsForClinic,
   isEvolutionConfigured,
   isClinicEvolutionConfigured,
+  ensureEvolutionWebhookForClinic,
   getEvolutionInstanceName,
   buildClinicConfig,
   globalConfig,
@@ -126,9 +128,57 @@ async function resolveSendConfig(
   return clinic ? buildClinicConfig(clinic) : globalConfig();
 }
 
+async function resolveConnectedSendConfig(clinicId: string): Promise<ClinicEvolutionConfig | null> {
+  const evoUrl = sanitizeUrl(process.env.EVO_URL || "");
+  const instances = await storage.getWhatsappInstancesByClinic(clinicId);
+  const orderedInstances = [
+    ...instances.filter((instance) => instance.connectedPhone),
+    ...instances.filter((instance) => !instance.connectedPhone),
+  ];
+  const candidates: ClinicEvolutionConfig[] = orderedInstances.map((instance) => ({
+    evoUrl,
+    evoKey: (instance.apiKey || process.env.EVO_KEY || "").trim(),
+    instanceName: instance.instanceName,
+  }));
+  const clinic = await storage.getClinicById(clinicId);
+  candidates.push(clinic ? buildClinicConfig(clinic) : globalConfig());
+
+  const uniqueCandidates = candidates.filter((candidate, index, all) =>
+    isClinicEvolutionConfigured(candidate) &&
+    all.findIndex((item) => item.instanceName === candidate.instanceName && item.evoUrl === candidate.evoUrl) === index,
+  );
+  const connectionResults = await Promise.all(uniqueCandidates.map(async (config) => ({
+    config,
+    status: await getEvolutionInstanceStatus(config),
+  })));
+  const connected = connectionResults.find((result) => result.status.connected)?.config;
+  return connected ?? null;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Mantém instalações existentes compatíveis antes de consultar o novo campo.
   await db.execute(sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS confirmation_sent_at timestamp`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS appointment_confirmation_logs (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      clinic_id varchar NOT NULL REFERENCES clinics(id),
+      appointment_id varchar NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+      patient_id varchar NOT NULL REFERENCES patients(id),
+      action text NOT NULL,
+      origin text NOT NULL,
+      reason text,
+      message text,
+      provider_message_id text,
+      delivery_status text,
+      actor_user_id varchar REFERENCES users(id) ON DELETE SET NULL,
+      actor_name text,
+      created_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS appointment_confirmation_logs_appointment_idx ON appointment_confirmation_logs (appointment_id, created_at DESC)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS appointment_confirmation_logs_patient_idx ON appointment_confirmation_logs (clinic_id, patient_id, created_at DESC)`);
+  await db.execute(sql`ALTER TABLE appointment_confirmation_logs ADD COLUMN IF NOT EXISTS provider_message_id text`);
+  await db.execute(sql`ALTER TABLE appointment_confirmation_logs ADD COLUMN IF NOT EXISTS delivery_status text`);
   // Contas a Receber — criação defensiva para instalações existentes (ver migrations/0004_receivables.sql).
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS receivables (
@@ -1320,6 +1370,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  app.get(
+    "/api/appointments/:id/confirmation-history",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const appointment = await storage.getAppointmentById(req.params.id, req.user!.clinicId);
+        if (!appointment) return res.status(404).json({ message: "Agendamento não encontrado." });
+        const history = await storage.listAppointmentConfirmationLogs(appointment.id, req.user!.clinicId);
+        if (appointment.confirmationSentAt && !history.some((entry) => entry.action === "confirmation_sent")) {
+          history.push({
+            id: `legacy-${appointment.id}`,
+            clinicId: appointment.clinicId,
+            appointmentId: appointment.id,
+            patientId: appointment.patientId,
+            action: "confirmation_sent",
+            origin: "automatic",
+            reason: null,
+            message: "Confirmação enviada antes do início do histórico detalhado; conteúdo indisponível.",
+            actorUserId: null,
+            actorName: null,
+            createdAt: appointment.confirmationSentAt,
+          });
+          history.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+        }
+        res.json(history);
+      } catch (error) {
+        console.error("Get appointment confirmation history error:", error);
+        res.status(500).json({ message: "Não foi possível carregar o histórico de confirmação." });
+      }
+    },
+  );
+
+  app.post(
+    "/api/appointments/:id/confirmation-actions",
+    authenticateToken,
+    requireRole(["admin", "dentist", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const appointment = await storage.getAppointmentById(req.params.id, req.user!.clinicId);
+        if (!appointment) return res.status(404).json({ message: "Agendamento não encontrado." });
+        const patient = await storage.getPatientById(appointment.patientId, req.user!.clinicId);
+        if (!patient) return res.status(404).json({ message: "Paciente do agendamento não encontrado." });
+        if (req.user!.role === "dentist" && appointment.dentistId !== req.user!.id) {
+          return res.status(403).json({ message: "Você só pode registrar ações nos seus próprios agendamentos." });
+        }
+
+        const action = req.body?.action;
+        const actor = {
+          clinicId: req.user!.clinicId,
+          appointmentId: appointment.id,
+          patientId: appointment.patientId,
+          origin: "manual",
+          actorUserId: req.user!.id,
+          actorName: req.user!.fullName,
+        } as const;
+
+        if (action === "accept") {
+          await storage.updateAppointment(appointment.id, { status: "confirmed" }, req.user!.clinicId);
+          await storage.createAppointmentConfirmationLog({
+            ...actor,
+            action: "accepted",
+            message: "Aceite registrado manualmente pela equipe.",
+          });
+          return res.json({ success: true, status: "confirmed" });
+        }
+
+        if (action === "refuse") {
+          const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+          if (!reason) return res.status(400).json({ message: "Informe o motivo da recusa." });
+          await storage.updateAppointment(appointment.id, { status: "cancelled" }, req.user!.clinicId);
+          await storage.createAppointmentConfirmationLog({
+            ...actor,
+            action: "refused",
+            reason,
+            message: "Recusa registrada manualmente pela equipe.",
+          });
+          return res.json({ success: true, status: "cancelled" });
+        }
+
+        if (action === "send_confirmation") {
+          const phone = patient.phone?.replace(/\D/g, "") || "";
+          if (phone.length < 10) return res.status(400).json({ message: "O paciente não possui um telefone válido para WhatsApp." });
+          const dentist = await storage.getUserById(appointment.dentistId);
+          const appointmentDate = new Date(appointment.scheduledDate);
+          const dateText = appointmentDate.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+          const timeText = appointmentDate.toLocaleTimeString("pt-BR", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" });
+          const message = `Olá, ${patient.fullName.split(" ")[0]}. Confirmação de consulta em ${dateText} às ${timeText} com ${dentist?.fullName || "o dentista"}. O paciente pode tocar em Confirmar ou Desmarcar.`;
+          const sendConfig = await resolveConnectedSendConfig(req.user!.clinicId);
+          if (!sendConfig) {
+            return res.status(503).json({ message: "Nenhuma instância WhatsApp da clínica está conectada à Evolution." });
+          }
+          if (!(await ensureEvolutionWebhookForClinic(sendConfig))) {
+            return res.status(503).json({
+              message: "O envio foi bloqueado porque este ambiente local não tem URL pública para receber confirmação de entrega. Configure REPLIT_DEV_DOMAIN ou use o ambiente publicado.",
+            });
+          }
+          const result = await sendEvolutionButtonsForClinic(sendConfig, phone, {
+            title: "Confirmação de consulta",
+            description: `${dateText} às ${timeText} com ${dentist?.fullName || "o dentista"}. Se desmarcar, pediremos o motivo.`,
+            footer: "Toque em uma opção para responder.",
+            buttons: [
+              { id: "appointment_confirm", displayText: "Confirmar" },
+              { id: "appointment_cancel", displayText: "Desmarcar" },
+            ],
+          });
+          if (!result.success) {
+            const sendError = `Falha ao enviar pela instância ${sendConfig.instanceName}: ${result.error || "erro não informado pela Evolution API"}`;
+            await storage.createAppointmentConfirmationLog({
+              ...actor,
+              action: "confirmation_failed",
+              deliveryStatus: "failed",
+              reason: sendError,
+              message,
+            });
+            return res.status(502).json({ message: sendError });
+          }
+          await storage.updateAppointment(appointment.id, { confirmationSentAt: new Date() }, req.user!.clinicId);
+          await storage.createAppointmentConfirmationLog({
+            ...actor,
+            action: "confirmation_sent",
+            providerMessageId: result.messageId ?? null,
+            deliveryStatus: "accepted",
+            message,
+          });
+          return res.json({ success: true, deliveryStatus: "accepted" });
+        }
+
+        return res.status(400).json({ message: "Ação de confirmação inválida." });
+      } catch (error) {
+        console.error("Appointment confirmation action error:", error);
+        res.status(500).json({ message: "Não foi possível executar a ação de confirmação." });
+      }
+    },
+  );
+
   app.post(
     "/api/appointments",
     authenticateToken,
@@ -1759,7 +1944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(
     "/api/receivables/options",
     authenticateToken,
-    requireRole(["admin", "secretary"]),
+    requireRole(["admin", "secretary", "dentist"]),
     async (req: AuthenticatedRequest, res) => {
       try {
         const [clinicPatients, clinicUsers] = await Promise.all([
@@ -2038,8 +2223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/treatments", authenticateToken, async (req, res) => {
     try {
       const authReq = req as AuthenticatedRequest;
-      const requestedDentistId = typeof req.body?.dentistId === "string" ? req.body.dentistId : undefined;
-      const dentistId = authReq.user!.role === "dentist" ? authReq.user!.id : requestedDentistId;
+      const dentistId = typeof req.body?.dentistId === "string" ? req.body.dentistId : undefined;
       if (!dentistId) {
         return res.status(400).json({ message: "Selecione o dentista responsável pelo tratamento." });
       }
@@ -2058,6 +2242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const treatmentData = {
         ...result.data,
         clinicId: authReq.user!.clinicId,
+        dentistId,
       };
       const treatment = await storage.createTreatment(treatmentData);
       res.status(201).json(treatment);
@@ -2115,8 +2300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (authReq.user!.role === "dentist" && existingTreatment.dentistId !== authReq.user!.id) {
         return res.status(403).json({ message: "Você só pode editar tratamentos atribuídos a você." });
       }
-      const requestedDentistId = typeof req.body?.dentistId === "string" ? req.body.dentistId : existingTreatment.dentistId;
-      const dentistId = authReq.user!.role === "dentist" ? authReq.user!.id : requestedDentistId;
+      const dentistId = typeof req.body?.dentistId === "string" ? req.body.dentistId : existingTreatment.dentistId;
       const dentist = await storage.getUserById(dentistId);
       if (!dentist || dentist.clinicId !== authReq.user!.clinicId || dentist.role !== "dentist") {
         return res.status(400).json({ message: "Dentista inválido para esta clínica." });
@@ -2131,7 +2315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const treatment = await storage.updateTreatment(
         id,
-        result.data,
+        { ...result.data, dentistId },
         authReq.user!.clinicId,
       );
       if (!treatment) {
@@ -3363,6 +3547,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return;
         }
 
+        if (["messages.update", "send.message.update", "send.message"].includes(data.event)) {
+          const instanceName: string = data.instance || data.sender || "";
+          const instance = instanceName ? await storage.getWhatsappInstanceByName(instanceName) : undefined;
+          const clinic = instance
+            ? await storage.getClinicById(instance.clinicId)
+            : instanceName
+              ? await storage.getClinicByEvolutionInstance(instanceName)
+              : undefined;
+          if (!clinic) return;
+
+          const eventData = data.data || {};
+          const providerMessageId = eventData.keyId || eventData.key?.id || eventData.messageId || eventData.id;
+          const rawStatus = eventData.status ?? eventData.update?.status;
+          if (typeof providerMessageId !== "string" || rawStatus === undefined || rawStatus === null) return;
+
+          const deliveryStatusByAck: Record<string, string> = {
+            "0": "failed",
+            ERROR: "failed",
+            "1": "pending",
+            PENDING: "pending",
+            "2": "server_ack",
+            SERVER_ACK: "server_ack",
+            "3": "delivered",
+            DELIVERY_ACK: "delivered",
+            "4": "read",
+            READ: "read",
+            "5": "read",
+            PLAYED: "read",
+          };
+          const deliveryStatus = deliveryStatusByAck[String(rawStatus).toUpperCase()];
+          if (!deliveryStatus) return;
+
+          const updatedCount = await storage.updateAppointmentConfirmationDelivery(
+            providerMessageId,
+            clinic.id,
+            deliveryStatus,
+          );
+          if (updatedCount > 0) {
+            console.log(`[CONFIRMAÇÃO] Mensagem ${providerMessageId}: ${deliveryStatus}`);
+          }
+          return;
+        }
+
         // FILTRO DE EVENTOS: Só processa messages.upsert
         if (data.event !== "messages.upsert") {
           return;
@@ -3391,12 +3618,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const phone = remoteJid.replace("@s.whatsapp.net", "");
 
-        // Extrair texto de vários formatos
+        const selectedButtonId =
+          messageData.message?.buttonsResponseMessage?.selectedButtonId ||
+          messageData.message?.templateButtonReplyMessage?.selectedId ||
+          messageData.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+          "";
+        const selectedButtonText =
+          messageData.message?.buttonsResponseMessage?.selectedDisplayText ||
+          messageData.message?.templateButtonReplyMessage?.selectedDisplayText ||
+          messageData.message?.listResponseMessage?.title ||
+          "";
+
+        // Extrair texto, resposta de botão e seleção de lista de vários formatos.
         const messageText =
           messageData.message?.conversation ||
           messageData.message?.extendedTextMessage?.text ||
           messageData.data?.message?.conversation ||
           messageData.data?.message?.extendedTextMessage?.text ||
+          selectedButtonId ||
+          selectedButtonText ||
           "";
 
         const evolutionMessageId = messageData.key?.id;
@@ -3564,14 +3804,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw err;
         }
 
-        // Resposta curta da confirmação D-1: 1 confirma, 2 desmarca.
-        const confirmationChoice = messageText.trim().toLowerCase();
+        const normalizedConfirmationText = messageText.trim().toLowerCase();
+        const confirmationMatch = /^(1|2)(?:\s*[-:]\s*(.*))?$/.exec(normalizedConfirmationText);
+        const confirmationChoice = selectedButtonId === "appointment_confirm" || /^(confirmar|confirm|aceitar|sim)$/.test(normalizedConfirmationText)
+          ? "1"
+          : selectedButtonId === "appointment_cancel" || /^(desmarcar|cancelar|recusar|não|nao)$/.test(normalizedConfirmationText)
+            ? "2"
+            : confirmationMatch?.[1];
+        const inlineRefusalReason = confirmationMatch?.[2]?.trim() || null;
+
+        if (patient && !confirmationChoice) {
+          const pendingRefusal = await storage.getPendingPatientRefusalLog(patient.id, clinicId);
+          if (pendingRefusal) {
+            const reason = messageText.trim();
+            await storage.updateAppointmentConfirmationLogReason(pendingRefusal.id, clinicId, reason);
+            await storage.createAppointmentConfirmationLog({
+              clinicId,
+              appointmentId: pendingRefusal.appointmentId,
+              patientId: patient.id,
+              action: "refusal_reason_provided",
+              origin: "patient",
+              reason,
+              message: messageText,
+            });
+            const reply = "Obrigado por informar o motivo. A equipe da clínica foi avisada.";
+            await storage.createWhatsappMessage({
+              conversationId: conversation.id,
+              sender: "ai",
+              direction: "outbound",
+              text: reply,
+            });
+            const sendConfig = await resolveSendConfig(clinicId, webhookInstanceName);
+            if (isClinicEvolutionConfigured(sendConfig)) {
+              await sendEvolutionMessageForClinic(sendConfig, normalizedPhone, reply);
+            }
+            return;
+          }
+        }
+
+        // Resposta curta da confirmação: 1 confirma, 2 desmarca.
         if (patient && (confirmationChoice === "1" || confirmationChoice === "2")) {
           const futureAppointments = (await storage.getAppointmentsByClinic(clinicId))
             .filter((appointment) => {
               const appointmentDate = new Date(appointment.scheduledDate).getTime();
               return appointment.patientId === patient.id &&
                 appointmentDate >= Date.now() &&
+                !!appointment.confirmationSentAt &&
                 ["pending", "scheduled"].includes(appointment.status);
             })
             .sort((left, right) => new Date(left.scheduledDate).getTime() - new Date(right.scheduledDate).getTime());
@@ -3580,9 +3858,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (appointment) {
             const status = confirmationChoice === "1" ? "confirmed" : "cancelled";
             await storage.updateAppointment(appointment.id, { status }, clinicId);
+            await storage.createAppointmentConfirmationLog({
+              clinicId,
+              appointmentId: appointment.id,
+              patientId: patient.id,
+              action: confirmationChoice === "1" ? "accepted" : "refused",
+              origin: "patient",
+              reason: confirmationChoice === "2" ? inlineRefusalReason : null,
+              message: messageText,
+            });
             const reply = confirmationChoice === "1"
               ? "Presença confirmada! Aguardamos você na clínica."
-              : "Tudo bem, sua consulta foi desmarcada. Se precisar, podemos ajudar a encontrar um novo horário.";
+              : inlineRefusalReason
+                ? "Tudo bem, sua consulta foi desmarcada. A equipe da clínica foi avisada do motivo informado."
+                : "Tudo bem, sua consulta foi desmarcada. Se puder, responda com o motivo para avisarmos a clínica.";
+            if (confirmationChoice === "2" && !inlineRefusalReason) {
+              await storage.createAppointmentConfirmationLog({
+                clinicId,
+                appointmentId: appointment.id,
+                patientId: patient.id,
+                action: "refusal_reason_requested",
+                origin: "automatic",
+                message: reply,
+              });
+            }
             await storage.createWhatsappMessage({
               conversationId: conversation.id,
               sender: "ai",
@@ -4665,7 +4964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           url: webhookUrl,
           webhookByEvents: false,
           webhookBase64: false,
-          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+          events: ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "SEND_MESSAGE", "CONNECTION_UPDATE"],
         },
       };
 
@@ -5117,6 +5416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const runAppointmentConfirmationJob = async () => {
     try {
+      const escalationDelayMs = 2 * 60 * 60 * 1000;
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const clinicRows = await db.select({ id: clinics.id }).from(clinics);
@@ -5126,7 +5426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const dentistsForClinic = await storage.getUsersByClinic(clinicRow.id);
 
         for (const appointment of appointmentsForTomorrow) {
-          if (appointment.confirmationSentAt || !["pending", "scheduled"].includes(appointment.status)) continue;
+          if (!["pending", "scheduled"].includes(appointment.status)) continue;
 
           const patient = await storage.getPatientById(appointment.patientId, clinicRow.id);
           const phone = patient?.phone?.replace(/\D/g, "") || "";
@@ -5140,14 +5440,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hour: "2-digit",
             minute: "2-digit",
           });
-          const message = `Olá, ${patient.fullName.split(" ")[0]}. Você confirma sua consulta amanhã, ${dateText} às ${timeText}, com o ${dentist?.fullName || "dentista"}? Responda 1 para Confirmar ou 2 para Desmarcar.`;
-          const sendConfig = await resolveSendConfig(clinicRow.id);
-          if (!isClinicEvolutionConfigured(sendConfig)) continue;
+          const dentistName = dentist?.fullName || "dentista";
+          const history = await storage.listAppointmentConfirmationLogs(appointment.id, clinicRow.id);
+          const firstConfirmation = history.find((entry) => entry.action === "confirmation_sent");
+          const warning = history.find((entry) => entry.action === "confirmation_warning_sent");
 
-          const result = await sendEvolutionMessageForClinic(sendConfig, phone, message);
-          if (result.success) {
-            await storage.updateAppointment(appointment.id, { confirmationSentAt: new Date() }, clinicRow.id);
-            console.log(`[CONFIRMAÇÃO D-1] Enviada para ${patient.fullName} (${appointment.id})`);
+          if (!firstConfirmation) {
+            const sendConfig = await resolveConnectedSendConfig(clinicRow.id);
+            if (!sendConfig) continue;
+            if (!(await ensureEvolutionWebhookForClinic(sendConfig))) {
+              console.warn("[CONFIRMAÇÃO D-1] Envio automático ignorado: ambiente sem webhook público para receber ACKs.");
+              continue;
+            }
+            const message = `Confirmação de consulta para ${dateText} às ${timeText} com ${dentistName}.`;
+            const result = await sendEvolutionButtonsForClinic(sendConfig, phone, {
+              title: "Confirmação de consulta",
+              description: `Olá, ${patient.fullName.split(" ")[0]}. Você confirma este horário?`,
+              footer: "Toque em uma opção para responder.",
+              buttons: [
+                { id: "appointment_confirm", displayText: "Confirmar" },
+                { id: "appointment_cancel", displayText: "Desmarcar" },
+              ],
+            });
+            if (result.success) {
+              const sentAt = new Date();
+              await storage.updateAppointment(appointment.id, { confirmationSentAt: sentAt }, clinicRow.id);
+              await storage.createAppointmentConfirmationLog({
+                clinicId: clinicRow.id,
+                appointmentId: appointment.id,
+                patientId: appointment.patientId,
+                action: "confirmation_sent",
+                origin: "automatic",
+                providerMessageId: result.messageId ?? null,
+                deliveryStatus: "accepted",
+                message,
+              });
+              console.log(`[CONFIRMAÇÃO D-1] Opções enviadas para ${patient.fullName} (${appointment.id})`);
+            } else {
+              console.error(`[CONFIRMAÇÃO D-1] Falha ao enviar para ${appointment.id}: ${result.error}`);
+            }
+            continue;
+          }
+
+          const firstSentAt = firstConfirmation.createdAt.getTime();
+          const firstMessageDelivered = ["delivered", "read"].includes(firstConfirmation.deliveryStatus || "");
+          if (!firstMessageDelivered) continue;
+
+          if (!warning && Date.now() - firstSentAt >= escalationDelayMs) {
+            const sendConfig = await resolveConnectedSendConfig(clinicRow.id);
+            if (!sendConfig) continue;
+            if (!(await ensureEvolutionWebhookForClinic(sendConfig))) continue;
+            const message = `Último aviso: sua consulta de ${dateText} às ${timeText} com ${dentistName} será cancelada se não houver resposta nas próximas 2 horas.`;
+            const result = await sendEvolutionButtonsForClinic(sendConfig, phone, {
+              title: "Último aviso de confirmação",
+              description: `A consulta de amanhã às ${timeText} será cancelada em 2 horas se você não escolher uma opção.`,
+              footer: "Toque em Confirmar ou Desmarcar.",
+              buttons: [
+                { id: "appointment_confirm", displayText: "Confirmar" },
+                { id: "appointment_cancel", displayText: "Desmarcar" },
+              ],
+            });
+            if (result.success) {
+              await storage.createAppointmentConfirmationLog({
+                clinicId: clinicRow.id,
+                appointmentId: appointment.id,
+                patientId: appointment.patientId,
+                action: "confirmation_warning_sent",
+                origin: "automatic",
+                message,
+              });
+              console.log(`[CONFIRMAÇÃO D-1] Último aviso enviado para ${patient.fullName} (${appointment.id})`);
+            } else {
+              console.error(`[CONFIRMAÇÃO D-1] Falha ao enviar último aviso para ${appointment.id}: ${result.error}`);
+            }
+            continue;
+          }
+
+          const warningDelivered = ["delivered", "read"].includes(warning?.deliveryStatus || "");
+          if (warning && warningDelivered && Date.now() - warning.createdAt.getTime() >= escalationDelayMs) {
+            const reason = "Cancelado automaticamente por falta de resposta às duas solicitações de confirmação.";
+            const cancellationMessage = `Sua consulta de ${dateText} às ${timeText} foi cancelada porque não recebemos uma resposta. Entre em contato com a clínica para escolher outro horário.`;
+            await storage.updateAppointment(appointment.id, { status: "cancelled" }, clinicRow.id);
+            await storage.createAppointmentConfirmationLog({
+              clinicId: clinicRow.id,
+              appointmentId: appointment.id,
+              patientId: appointment.patientId,
+              action: "cancelled_no_response",
+              origin: "automatic",
+              reason,
+              message: cancellationMessage,
+            });
+            const sendConfig = await resolveConnectedSendConfig(clinicRow.id);
+            if (sendConfig) {
+              await sendEvolutionMessageForClinic(sendConfig, phone, cancellationMessage);
+            }
+            console.log(`[CONFIRMAÇÃO D-1] Agendamento ${appointment.id} cancelado por falta de resposta.`);
           }
         }
       }

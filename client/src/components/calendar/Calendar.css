@@ -5,11 +5,10 @@
   height: 100%;
   min-height: 0;
 
-  /* Schedule-X sets these on :root with values (100+) higher than our Dialog's z-50,
-     which makes the sticky week/day header float above modals. Scope them down. */
-  --sx-z-index-week-header: 1;
-  --sx-calendar-header-popup-z-index: 2;
-  --sx-z-index-event-modal: 3;
+  /* Keep the sticky header above concurrent events but below app-level dialogs (z-50). */
+  --sx-z-index-week-header: 20;
+  --sx-calendar-header-popup-z-index: 21;
+  --sx-z-index-event-modal: 22;
 }
 
 .sx-react-calendar-wrapper .sx__calendar {

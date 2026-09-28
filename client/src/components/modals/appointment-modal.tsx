@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient"; // Supondo que você ainda use isso para mutações
 import { Appointment, Patient, User } from "@/types";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, MessageSquareText, CheckCircle2, XCircle, History } from "lucide-react";
 
 // Função de busca genérica
 const fetchData = async (url: string) => {
@@ -19,6 +19,17 @@ const fetchData = async (url: string) => {
     if (!response.ok) throw new Error('A resposta da rede não foi bem-sucedida');
     return response.json();
 };
+
+function getRequestErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Verifique os dados e tente novamente.";
+  const responseBody = error.message.replace(/^\d{3}:\s*/, "");
+  try {
+    const parsed = JSON.parse(responseBody);
+    return typeof parsed.message === "string" ? parsed.message : responseBody;
+  } catch {
+    return responseBody;
+  }
+}
 
 interface PaginatedPatientsResponse {
     data: Patient[];
@@ -31,6 +42,7 @@ interface AppointmentModalProps {
   initialDateTime?: Date;
   onDelete?: (appointment: Appointment) => void;
   dentists: User[];
+  patientName?: string;
 }
 
 interface AppointmentFormData {
@@ -43,19 +55,33 @@ interface AppointmentFormData {
   status: string;
 }
 
+interface ConfirmationHistoryEntry {
+  id: string;
+  action: string;
+  origin: "automatic" | "patient" | "manual";
+  reason: string | null;
+  message: string | null;
+  providerMessageId: string | null;
+  deliveryStatus: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
 export default function AppointmentModal({ 
     isOpen, 
     onClose, 
     appointment, 
     initialDateTime, 
     onDelete,
-    dentists
+    dentists,
+    patientName,
 }: AppointmentModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [patientSearchTerm, setPatientSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [refusalReason, setRefusalReason] = useState("");
 
   const [formData, setFormData] = useState<AppointmentFormData>({
     patientId: "", dentistId: "", scheduledDate: "", duration: 60, procedure: "", notes: "", status: "scheduled",
@@ -87,15 +113,29 @@ export default function AppointmentModal({
       queryFn: () => fetchData(`/api/patients/${appointment?.patientId}`),
       enabled: isOpen && !!appointment?.patientId,
   });
+
+  const historyUrl = appointment ? `/api/appointments/${appointment.id}/confirmation-history` : "";
+  const { data: confirmationHistory = [], isLoading: historyLoading } = useQuery<ConfirmationHistoryEntry[]>({
+    queryKey: [historyUrl],
+    enabled: isOpen && !!appointment,
+  });
   
   // Combine current patient with search results, avoiding duplicates
   const foundPatients = (() => {
       const searchResults = patientsResponse?.data || [];
-      if (currentPatientResponse && !searchResults.find(p => p.id === currentPatientResponse.id)) {
-          return [currentPatientResponse, ...searchResults];
+      const currentPatientOption = currentPatientResponse ?? (
+      appointment?.patientId && patientName
+        ? { id: appointment.patientId, fullName: patientName }
+        : undefined
+      );
+      if (currentPatientOption && !searchResults.find(p => p.id === currentPatientOption.id)) {
+        return [currentPatientOption, ...searchResults];
       }
       return searchResults;
   })();
+  const selectedPatientId = formData.patientId || appointment?.patientId || "";
+  const selectedPatientLabel = foundPatients.find((patient) => patient.id === selectedPatientId)?.fullName
+    ?? (selectedPatientId ? patientName || "Carregando paciente..." : undefined);
 
   useEffect(() => {
     if (isOpen) {
@@ -163,6 +203,66 @@ export default function AppointmentModal({
     }
   });
 
+  const confirmationActionMutation = useMutation({
+    mutationFn: async (payload: { action: "send_confirmation" | "accept" | "refuse"; reason?: string }) => {
+      if (!appointment) throw new Error("Agendamento não selecionado.");
+      const response = await apiRequest("POST", `/api/appointments/${appointment.id}/confirmation-actions`, payload);
+      return response.json();
+    },
+    onSuccess: (result, variables) => {
+      queryClient.invalidateQueries({ queryKey: [historyUrl] });
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      if (result.status) setFormData((previous) => ({ ...previous, status: result.status }));
+      setRefusalReason("");
+      const message = variables.action === "send_confirmation"
+        ? "Solicitação aceita pela Evolution; aguardando confirmação de entrega."
+        : variables.action === "accept"
+          ? "Aceite registrado manualmente."
+          : "Recusa e motivo registrados manualmente.";
+      toast({ title: "Ação registrada", description: message });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: "Não foi possível executar a ação",
+        description: getRequestErrorMessage(error),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleManualRefusal = () => {
+    const reason = refusalReason.trim();
+    if (!reason) {
+      toast({ title: "Motivo obrigatório", description: "Informe o motivo da recusa.", variant: "destructive" });
+      return;
+    }
+    confirmationActionMutation.mutate({ action: "refuse", reason });
+  };
+
+  const historyActionLabel: Record<string, string> = {
+    confirmation_sent: "Solicitação enviada à Evolution",
+    confirmation_warning_sent: "Último aviso enviado",
+    confirmation_failed: "Falha no envio da confirmação",
+    accepted: "Agendamento aceito",
+    refused: "Agendamento recusado",
+    cancelled_no_response: "Cancelado por falta de resposta",
+    refusal_reason_requested: "Motivo da recusa solicitado",
+    refusal_reason_provided: "Motivo da recusa informado",
+  };
+  const historyOriginLabel: Record<ConfirmationHistoryEntry["origin"], string> = {
+    automatic: "Automático",
+    patient: "Paciente",
+    manual: "Manual",
+  };
+  const deliveryStatusLabel: Record<string, string> = {
+    accepted: "Aceita pela Evolution; aguardando ACK de entrega",
+    pending: "Pendente de entrega",
+    server_ack: "Recebida pelo servidor WhatsApp",
+    delivered: "Entregue no WhatsApp",
+    read: "Lida pelo paciente",
+    failed: "Falha na entrega",
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (appointment) {
@@ -228,12 +328,14 @@ export default function AppointmentModal({
             <div className="space-y-2">
               <Label htmlFor="patientId">Paciente *</Label>
               <Select
-                value={formData.patientId}
+                value={selectedPatientId}
                 onValueChange={(value) => handleInputChange("patientId", value)}
                 required
               >
                 <SelectTrigger data-testid="select-appointment-patient">
-                  <SelectValue placeholder="Selecione um paciente" />
+                  <SelectValue placeholder="Selecione um paciente">
+                    {selectedPatientLabel}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent
                   onPointerDownOutside={(e) => {
@@ -362,6 +464,80 @@ export default function AppointmentModal({
                 data-testid="textarea-appointment-notes"
               />
             </div>
+
+            {appointment && (
+              <section className="md:col-span-2 space-y-3 border-t pt-4" aria-label="Confirmações do agendamento">
+                <div className="flex items-center gap-2 font-medium">
+                  <History className="h-4 w-4" />
+                  Histórico de confirmação
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => confirmationActionMutation.mutate({ action: "send_confirmation" })}
+                    disabled={confirmationActionMutation.isPending}
+                  >
+                    <MessageSquareText className="mr-1.5 h-4 w-4" /> Enviar confirmação
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => confirmationActionMutation.mutate({ action: "accept" })}
+                    disabled={confirmationActionMutation.isPending}
+                  >
+                    <CheckCircle2 className="mr-1.5 h-4 w-4 text-green-700" /> Aceitar manualmente
+                  </Button>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Textarea
+                    value={refusalReason}
+                    onChange={(event) => setRefusalReason(event.target.value)}
+                    placeholder="Motivo da recusa"
+                    rows={2}
+                    aria-label="Motivo da recusa manual"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="shrink-0 sm:self-end"
+                    onClick={handleManualRefusal}
+                    disabled={confirmationActionMutation.isPending}
+                  >
+                    <XCircle className="mr-1.5 h-4 w-4" /> Recusar manualmente
+                  </Button>
+                </div>
+
+                <div className="max-h-44 space-y-2 overflow-y-auto rounded-md border p-3" data-testid="appointment-confirmation-history">
+                  {historyLoading ? (
+                    <p className="text-sm text-muted-foreground">Carregando histórico...</p>
+                  ) : confirmationHistory.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nenhuma mensagem ou ação de confirmação registrada.</p>
+                  ) : confirmationHistory.map((entry) => (
+                    <div key={entry.id} className="border-b pb-2 last:border-0 last:pb-0">
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+                        <span className="font-medium">{historyActionLabel[entry.action] || entry.action}</span>
+                        <time className="text-xs text-muted-foreground">{new Date(entry.createdAt).toLocaleString("pt-BR")}</time>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {historyOriginLabel[entry.origin]}{entry.origin === "manual" && entry.actorName ? `: ${entry.actorName}` : ""}
+                      </p>
+                      {entry.deliveryStatus && (
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Entrega: {deliveryStatusLabel[entry.deliveryStatus] || entry.deliveryStatus}
+                        </p>
+                      )}
+                      {entry.reason && <p className="mt-1 text-sm">Motivo: {entry.reason}</p>}
+                      {entry.message && <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{entry.message}</p>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
 
           {/* --- BOTÕES RESTAURADOS --- */}

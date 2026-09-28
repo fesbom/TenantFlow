@@ -32,11 +32,9 @@ export default function TreatmentModal({ isOpen, onClose, patient, treatment }: 
 
   const { data: dentistOptionsResponse } = useQuery<{ dentists: User[] }>({
     queryKey: ["/api/receivables/options"],
-    enabled: isOpen && user?.role !== "dentist",
+    enabled: isOpen,
   });
-  const dentists = user?.role === "dentist"
-    ? [user]
-    : dentistOptionsResponse?.dentists ?? [];
+  const dentists = dentistOptionsResponse?.dentists ?? (user?.role === "dentist" ? [user] : []);
 
   const [formData, setFormData] = useState<TreatmentFormData>({
     patientId: "",
@@ -67,10 +65,10 @@ export default function TreatmentModal({ isOpen, onClose, patient, treatment }: 
   }, [treatment, patient, user]);
 
   useEffect(() => {
-    if (!treatment && user?.role !== "dentist" && !formData.dentistId && dentists.length > 0) {
-      setFormData((previous) => ({ ...previous, dentistId: dentists[0].id }));
+    if (isOpen && treatment && dentistOptionsResponse && !dentists.some((dentist) => dentist.id === formData.dentistId)) {
+      setFormData((previous) => ({ ...previous, dentistId: "" }));
     }
-  }, [dentists, formData.dentistId, treatment, user]);
+  }, [dentists, dentistOptionsResponse, formData.dentistId, isOpen, treatment]);
 
   const createTreatmentMutation = useMutation({
     mutationFn: async (data: TreatmentFormData) => {
@@ -176,10 +174,9 @@ export default function TreatmentModal({ isOpen, onClose, patient, treatment }: 
             <Select
               value={formData.dentistId}
               onValueChange={(value) => handleInputChange("dentistId", value)}
-              disabled={user?.role === "dentist"}
             >
               <SelectTrigger id="dentist" data-testid="select-treatment-dentist">
-                <SelectValue placeholder="Selecione o dentista" />
+                <SelectValue placeholder={dentistOptionsResponse ? "Selecione o dentista" : "Carregando dentistas..."} />
               </SelectTrigger>
               <SelectContent>
                 {dentists.map((dentist) => (

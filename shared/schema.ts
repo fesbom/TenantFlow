@@ -174,6 +174,25 @@ export const appointments = pgTable("appointments", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const appointmentConfirmationLogs = pgTable("appointment_confirmation_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id),
+  appointmentId: varchar("appointment_id").notNull().references(() => appointments.id, { onDelete: "cascade" }),
+  patientId: varchar("patient_id").notNull().references(() => patients.id),
+  action: text("action").notNull(),
+  origin: text("origin").notNull(),
+  reason: text("reason"),
+  message: text("message"),
+  providerMessageId: text("provider_message_id"),
+  deliveryStatus: text("delivery_status"),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  actorName: text("actor_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("appointment_confirmation_logs_appointment_idx").on(t.appointmentId, t.createdAt),
+  index("appointment_confirmation_logs_patient_idx").on(t.clinicId, t.patientId, t.createdAt),
+]);
+
 // Medical records (prontuários)
 export const medicalRecords = pgTable("medical_records", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -694,6 +713,8 @@ export type InsertPatient = z.infer<typeof insertPatientSchema>;
 
 export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
+export type AppointmentConfirmationLog = typeof appointmentConfirmationLogs.$inferSelect;
+export type InsertAppointmentConfirmationLog = typeof appointmentConfirmationLogs.$inferInsert;
 
 export type MedicalRecord = typeof medicalRecords.$inferSelect;
 export type InsertMedicalRecord = z.infer<typeof insertMedicalRecordSchema>;
