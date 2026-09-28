@@ -1630,7 +1630,7 @@ export class DatabaseStorage implements IStorage {
         const valor = parseFloat(row.valor);
         if (row.status === "Pago") {
           acc.totalRecebido += valor;
-        } else {
+        } else if (row.status !== "Cancelado") {
           acc.totalAReceber += valor;
           if (row.status === "Vencido") acc.totalInadimplente += valor;
         }

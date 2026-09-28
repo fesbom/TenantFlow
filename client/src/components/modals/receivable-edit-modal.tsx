@@ -196,6 +196,7 @@ export default function ReceivableEditModal({ isOpen, mode, receivable, onClose,
                     <SelectItem value="Pago">Pago</SelectItem>
                     <SelectItem value="Vencido">Vencido</SelectItem>
                     <SelectItem value="Acordo">Acordo</SelectItem>
+                    <SelectItem value="Cancelado">Cancelado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

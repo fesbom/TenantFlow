@@ -197,8 +197,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       observacoes text,
       created_at timestamp NOT NULL DEFAULT now(),
       updated_at timestamp NOT NULL DEFAULT now(),
-      CONSTRAINT receivables_status_check CHECK (status IN ('Pendente', 'Pago', 'Vencido', 'Acordo'))
+      CONSTRAINT receivables_status_check CHECK (status IN ('Pendente', 'Pago', 'Vencido', 'Acordo', 'Cancelado'))
     )
+  `);
+  await db.execute(sql`ALTER TABLE receivables DROP CONSTRAINT IF EXISTS receivables_status_check`);
+  await db.execute(sql`
+    ALTER TABLE receivables
+    ADD CONSTRAINT receivables_status_check CHECK (status IN ('Pendente', 'Pago', 'Vencido', 'Acordo', 'Cancelado'))
   `);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_clinic_idx ON receivables (clinic_id)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_dentist_idx ON receivables (dentist_id)`);
@@ -1939,7 +1944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // CONTAS A RECEBER (Receivables) routes
   // ─────────────────────────────────────────────────────────────────────
 
-  const RECEIVABLE_STATUS_FILTERS = ["Pendente", "Pago", "Vencido", "Acordo", "Todos"] as const;
+  const RECEIVABLE_STATUS_FILTERS = ["Pendente", "Pago", "Vencido", "Acordo", "Cancelado", "Todos"] as const;
 
   app.get(
     "/api/receivables/options",
@@ -2052,7 +2057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  // Baixa (marcar como pago) ou alteração de status (ex.: Acordo). Restrito a
+  // Baixa, cancelamento ou alteração de status. Restrito a
   // admin/secretary — dentistas nunca podem alterar cobrança, mesmo as próprias.
   app.patch(
     "/api/receivables/:id/status",
@@ -2061,7 +2066,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: AuthenticatedRequest, res) => {
       try {
         const { status, dataPagamento, observacoes } = req.body;
-        if (!["Pendente", "Pago", "Vencido", "Acordo"].includes(status)) {
+        if (!["Pendente", "Pago", "Vencido", "Acordo", "Cancelado"].includes(status)) {
           return res.status(400).json({ message: "Status inválido." });
         }
         const existing = await storage.getReceivableById(req.params.id, req.user!.clinicId);

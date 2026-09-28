@@ -367,7 +367,7 @@ export const receivables = pgTable("receivables", {
   valor: decimal("valor", { precision: 10, scale: 2 }).notNull(),
   dataVencimento: date("data_vencimento").notNull(),
   dataPagamento: date("data_pagamento"),
-  status: text("status").default("Pendente").notNull(), // 'Pendente' | 'Pago' | 'Vencido' | 'Acordo'
+  status: text("status").default("Pendente").notNull(), // 'Pendente' | 'Pago' | 'Vencido' | 'Acordo' | 'Cancelado'
   numeroParcela: integer("numero_parcela").default(1).notNull(),
   totalParcelas: integer("total_parcelas").default(1).notNull(),
   observacoes: text("observacoes"),
@@ -379,7 +379,7 @@ export const receivables = pgTable("receivables", {
   index("receivables_patient_idx").on(t.patientId),
   index("receivables_vencimento_idx").on(t.dataVencimento),
   index("receivables_treatment_idx").on(t.treatmentId),
-  check("receivables_status_check", sql`${t.status} IN ('Pendente', 'Pago', 'Vencido', 'Acordo')`),
+  check("receivables_status_check", sql`${t.status} IN ('Pendente', 'Pago', 'Vencido', 'Acordo', 'Cancelado')`),
 ]);
 
 // Relations
@@ -770,5 +770,5 @@ export type InsertClinicHoliday = z.infer<typeof insertClinicHolidaySchema>;
 // Contas a Receber types
 export type Receivable = typeof receivables.$inferSelect;
 export type InsertReceivable = z.infer<typeof insertReceivableSchema>;
-export const RECEIVABLE_STATUSES = ["Pendente", "Pago", "Vencido", "Acordo"] as const;
+export const RECEIVABLE_STATUSES = ["Pendente", "Pago", "Vencido", "Acordo", "Cancelado"] as const;
 export type ReceivableStatus = (typeof RECEIVABLE_STATUSES)[number];

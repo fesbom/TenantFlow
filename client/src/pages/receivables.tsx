@@ -15,7 +15,8 @@ import { apiRequest } from "@/lib/api";
 import { formatDateBR } from "@/lib/date-formatter";
 import { ReceivableStatus } from "@/types";
 import ReceivableEditModal from "@/components/modals/receivable-edit-modal";
-import { DollarSign, TrendingUp, AlertTriangle, CheckCircle2, HandCoins, Pencil, Layers3, Trash2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DollarSign, AlertTriangle, CheckCircle2, HandCoins, Pencil, Layers3, Trash2, Ban, ChevronDown, SlidersHorizontal } from "lucide-react";
 
 interface ReceivableRow {
   id: string;
@@ -55,6 +56,7 @@ const STATUS_OPTIONS: { value: ReceivableStatus | "Todos"; label: string }[] = [
   { value: "Pago", label: "Pago" },
   { value: "Vencido", label: "Vencido" },
   { value: "Acordo", label: "Acordo" },
+  { value: "Cancelado", label: "Cancelado" },
 ];
 
 function formatCurrency(value: number): string {
@@ -67,6 +69,7 @@ function StatusBadge({ status }: { status: ReceivableStatus }) {
     Pago: { label: "Pago", className: "bg-green-100 text-green-800 hover:bg-green-100" },
     Vencido: { label: "Vencido", className: "bg-red-100 text-red-800 hover:bg-red-100" },
     Acordo: { label: "Acordo", className: "bg-blue-100 text-blue-800 hover:bg-blue-100" },
+    Cancelado: { label: "Cancelado", className: "bg-gray-100 text-gray-700 hover:bg-gray-100" },
   };
   const { label, className } = config[status] ?? config.Pendente;
   return <Badge className={className}>{label}</Badge>;
@@ -87,6 +90,8 @@ export default function Receivables() {
   const [patientSearch, setPatientSearch] = useState("");
   const [status, setStatus] = useState<ReceivableStatus | "Todos">("Todos");
   const [dentistId, setDentistId] = useState<string>("Todos");
+  const [indicatorsOpen, setIndicatorsOpen] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [editingReceivable, setEditingReceivable] = useState<ReceivableRow | null>(null);
   const [editMode, setEditMode] = useState<"edit" | "installments">("edit");
 
@@ -159,6 +164,11 @@ export default function Receivables() {
       deleteReceivableMutation.mutate(row.id);
     }
   };
+  const handleCancelReceivable = (row: ReceivableRow) => {
+    if (window.confirm(`Cancelar a conta a receber de ${row.patientName}? O título permanecerá no histórico.`)) {
+      updateStatusMutation.mutate({ id: row.id, status: "Cancelado" });
+    }
+  };
 
   return (
     <div className="app-container bg-slate-50">
@@ -172,42 +182,63 @@ export default function Receivables() {
       <div className="main-content">
         <Header title="Contas a Receber" onMenuClick={() => setSidebarOpen(true)} />
 
-        <main className="p-4 lg:p-6 flex-grow space-y-6">
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card data-testid="card-kpi-total-a-receber">
-              <CardContent className="pt-6 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Total a Receber</p>
-                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(kpis.totalAReceber)}</p>
-                </div>
-                <DollarSign className="h-8 w-8 text-primary/60" />
-              </CardContent>
-            </Card>
-            <Card data-testid="card-kpi-total-recebido">
-              <CardContent className="pt-6 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Total Recebido</p>
-                  <p className="text-2xl font-bold text-green-700">{formatCurrency(kpis.totalRecebido)}</p>
-                </div>
-                <CheckCircle2 className="h-8 w-8 text-green-600/60" />
-              </CardContent>
-            </Card>
-            <Card data-testid="card-kpi-inadimplente">
-              <CardContent className="pt-6 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Total Inadimplente</p>
-                  <p className="text-2xl font-bold text-red-700">{formatCurrency(kpis.totalInadimplente)}</p>
-                </div>
-                <AlertTriangle className="h-8 w-8 text-red-600/60" />
-              </CardContent>
-            </Card>
-          </div>
+        <main className="p-4 lg:p-6 flex-grow space-y-4">
+          <Collapsible open={indicatorsOpen} onOpenChange={setIndicatorsOpen}>
+            <div className="rounded-md border bg-white">
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" className="h-10 w-full justify-between px-3" data-testid="toggle-receivables-indicators">
+                  <span className="flex items-center gap-2"><DollarSign className="h-4 w-4" />Indicadores</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${indicatorsOpen ? "rotate-180" : ""}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Card data-testid="card-kpi-total-a-receber">
+                <CardContent className="p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Total a Receber</p>
+                    <p className="text-base font-semibold text-gray-900">{formatCurrency(kpis.totalAReceber)}</p>
+                  </div>
+                  <DollarSign className="h-5 w-5 text-primary/60" />
+                </CardContent>
+              </Card>
+              <Card data-testid="card-kpi-total-recebido">
+                <CardContent className="p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Total Recebido</p>
+                    <p className="text-base font-semibold text-green-700">{formatCurrency(kpis.totalRecebido)}</p>
+                  </div>
+                  <CheckCircle2 className="h-5 w-5 text-green-600/60" />
+                </CardContent>
+              </Card>
+              <Card data-testid="card-kpi-inadimplente">
+                <CardContent className="p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Total Inadimplente</p>
+                    <p className="text-base font-semibold text-red-700">{formatCurrency(kpis.totalInadimplente)}</p>
+                  </div>
+                  <AlertTriangle className="h-5 w-5 text-red-600/60" />
+                </CardContent>
+              </Card>
+            </div>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
 
           {/* Filters */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <Card>
+              <CardHeader className="p-0">
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="h-10 w-full justify-between px-3" data-testid="toggle-receivables-filters">
+                    <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" />Filtros</span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+                  </Button>
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent className="p-4 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="startDate">Vencimento de</Label>
                   <Input
@@ -272,9 +303,11 @@ export default function Receivables() {
                     </Select>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
           {/* Table */}
           <Card>
@@ -299,6 +332,7 @@ export default function Receivables() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        {canManage && <TableHead className="w-[180px]">Ações</TableHead>}
                         <TableHead>Paciente</TableHead>
                         {isAdmin && <TableHead>Dentista</TableHead>}
                         <TableHead>Descrição</TableHead>
@@ -307,12 +341,81 @@ export default function Receivables() {
                         <TableHead>Vencimento</TableHead>
                         <TableHead>Pagamento</TableHead>
                         <TableHead>Status</TableHead>
-                        {canManage && <TableHead>Ações</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rows.map((row) => (
                         <TableRow key={row.id} data-testid={`receivable-${row.id}`}>
+                          {canManage && (
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {row.status !== "Pago" && row.status !== "Cancelado" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-green-600 hover:text-green-700"
+                                    onClick={() => updateStatusMutation.mutate({ id: row.id, status: "Pago" })}
+                                    disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
+                                    title="Dar baixa"
+                                    aria-label="Dar baixa"
+                                    data-testid={`button-pay-${row.id}`}
+                                  >
+                                    <CheckCircle2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {row.status !== "Pago" && row.status !== "Cancelado" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-red-600 hover:text-red-700"
+                                    onClick={() => handleCancelReceivable(row)}
+                                    disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
+                                    title="Cancelar título"
+                                    aria-label="Cancelar título"
+                                    data-testid={`button-cancel-receivable-${row.id}`}
+                                  >
+                                    <Ban className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => openReceivableModal(row, "edit")}
+                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
+                                  title="Editar título"
+                                  aria-label="Editar título"
+                                  data-testid={`button-edit-receivable-${row.id}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => openReceivableModal(row, "installments")}
+                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
+                                  title="Gerar novas parcelas"
+                                  aria-label="Gerar novas parcelas"
+                                  data-testid={`button-new-installments-${row.id}`}
+                                >
+                                  <Layers3 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-red-600 hover:text-red-700"
+                                  onClick={() => handleDeleteReceivable(row)}
+                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
+                                  title="Excluir título"
+                                  aria-label="Excluir título"
+                                  data-testid={`button-delete-receivable-${row.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          )}
                           <TableCell className="font-medium">{row.patientName}</TableCell>
                           {isAdmin && <TableCell>{row.dentistName}</TableCell>}
                           <TableCell>{row.descricao}</TableCell>
@@ -321,71 +424,6 @@ export default function Receivables() {
                           <TableCell>{formatDateBR(row.dataVencimento)}</TableCell>
                           <TableCell>{row.dataPagamento ? formatDateBR(row.dataPagamento) : "-"}</TableCell>
                           <TableCell><StatusBadge status={row.status} /></TableCell>
-                          {canManage && (
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                {row.status !== "Pago" && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-green-600 hover:text-green-700"
-                                    onClick={() => updateStatusMutation.mutate({ id: row.id, status: "Pago" })}
-                                    disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
-                                    data-testid={`button-pay-${row.id}`}
-                                  >
-                                    <TrendingUp className="h-4 w-4 mr-1" />
-                                    Dar baixa
-                                  </Button>
-                                )}
-                                {row.status !== "Acordo" && row.status !== "Pago" && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-blue-600 hover:text-blue-700"
-                                    onClick={() => updateStatusMutation.mutate({ id: row.id, status: "Acordo" })}
-                                    disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
-                                    data-testid={`button-agreement-${row.id}`}
-                                  >
-                                    Acordo
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openReceivableModal(row, "edit")}
-                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
-                                  title="Editar título"
-                                  data-testid={`button-edit-receivable-${row.id}`}
-                                >
-                                  <Pencil className="h-4 w-4 mr-1" />
-                                  Editar
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openReceivableModal(row, "installments")}
-                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
-                                  title="Gerar novas parcelas"
-                                  data-testid={`button-new-installments-${row.id}`}
-                                >
-                                  <Layers3 className="h-4 w-4 mr-1" />
-                                  Novas parcelas
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600 hover:text-red-700"
-                                  onClick={() => handleDeleteReceivable(row)}
-                                  disabled={updateStatusMutation.isPending || deleteReceivableMutation.isPending}
-                                  title="Excluir título"
-                                  data-testid={`button-delete-receivable-${row.id}`}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-1" />
-                                  Excluir
-                                </Button>
-                              </div>
-                            </TableCell>
-                          )}
                         </TableRow>
                       ))}
                     </TableBody>
