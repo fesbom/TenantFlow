@@ -77,14 +77,14 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
       {/* Sidebar */}
       <div
         className={cn(
-          "sidebar bg-white shadow-lg border-r border-gray-200",
+          "sidebar flex flex-col overflow-hidden bg-white shadow-lg border-r border-gray-200",
           "fixed inset-y-0 left-0 z-50 transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
           isExpanded ? "sidebar-expanded" : ""
         )}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between h-16 border-b border-gray-200 px-4">
+        <div className="flex shrink-0 items-center justify-between h-16 border-b border-gray-200 px-4">
           <div className="flex items-center space-x-2">
             <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center">
               <Stethoscope className="h-4 w-4 text-white" />
@@ -112,7 +112,7 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
         </div>
 
         {/* User info */}
-        <div className="p-4 border-b border-gray-200">
+        <div className="shrink-0 p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
               <span className="text-primary font-medium text-sm">
@@ -129,7 +129,7 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
         </div>
 
         {/* Navigation */}
-        <nav className="mt-4 px-4 space-y-2 flex-1">
+        <nav className="scrollbar-visible mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 space-y-2">
           {filteredNavigation.map((item) => {
             const isActive = location === item.href;
             const showBadge = item.badge && unreadCount > 0;
@@ -182,7 +182,7 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-gray-200">
+        <div className="shrink-0 p-4 border-t border-gray-200">
           <button
             onClick={logout}
             className={cn(

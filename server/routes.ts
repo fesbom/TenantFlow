@@ -4277,8 +4277,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/whatsapp/instances", authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const instances = await storage.getWhatsappInstancesWithDentists(req.user!.clinicId);
-      return res.json(instances);
+      const instancesWithStatus = await Promise.all(instances.map(async (instance) => {
+        const status = await getEvolutionInstanceStatus({
+          evoUrl: sanitizeUrl(process.env.EVO_URL || ""),
+          evoKey: (instance.apiKey || process.env.EVO_KEY || "").trim(),
+          instanceName: instance.instanceName,
+        });
+
+        if (status.connected) {
+          const connectedPhone = status.phone || instance.connectedPhone;
+          if (connectedPhone && connectedPhone !== instance.connectedPhone) {
+            await storage.updateWhatsappInstance(instance.id, { connectedPhone });
+          }
+          return { ...instance, connectedPhone, connectionStatus: "connected" as const };
+        }
+
+        if (status.status === "error" || status.status === "not_configured") {
+          return { ...instance, connectionStatus: "unknown" as const };
+        }
+
+        if (instance.connectedPhone) {
+          await storage.updateWhatsappInstance(instance.id, { connectedPhone: null });
+        }
+        return { ...instance, connectedPhone: null, connectionStatus: "disconnected" as const };
+      }));
+
+      return res.json(instancesWithStatus);
     } catch (err: any) {
+      console.error("Erro ao verificar status das instâncias WhatsApp:", err);
       res.status(500).json({ message: "Erro ao listar instâncias" });
     }
   });

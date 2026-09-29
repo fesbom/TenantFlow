@@ -39,7 +39,9 @@ interface AppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   appointment?: Appointment | null;
+  appointments?: Appointment[];
   initialDateTime?: Date;
+  initialDentistId?: string;
   onDelete?: (appointment: Appointment) => void;
   dentists: User[];
   patientName?: string;
@@ -67,11 +69,60 @@ interface ConfirmationHistoryEntry {
   createdAt: string;
 }
 
+function snapToPreviousAppointmentEnd(
+  appointments: Appointment[],
+  dentistId: string,
+  scheduledDate: string,
+): string {
+  const [datePart, timePart] = scheduledDate.split("T");
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = (timePart || "").split(":").map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return scheduledDate;
+
+  const selectedMinute = hour * 60 + minute;
+  let nearestEndMinute: number | null = null;
+  let nearestDistance = 31;
+
+  for (const existing of appointments) {
+    if (
+      existing.dentistId !== dentistId ||
+      existing.status === "cancelled" ||
+      existing.status === "cancelled_no_response"
+    ) continue;
+
+    const existingStart = new Date(existing.scheduledDate);
+    if (Number.isNaN(existingStart.getTime())) continue;
+    const existingDate = [
+      existingStart.getUTCFullYear(),
+      String(existingStart.getUTCMonth() + 1).padStart(2, "0"),
+      String(existingStart.getUTCDate()).padStart(2, "0"),
+    ].join("-");
+    if (existingDate !== datePart) continue;
+
+    const startMinute = existingStart.getUTCHours() * 60 + existingStart.getUTCMinutes();
+    if (startMinute > selectedMinute) continue;
+
+    const endMinute = startMinute + (existing.duration || 60);
+    const distance = Math.abs(endMinute - selectedMinute);
+    if (endMinute < 24 * 60 && distance <= 30 && distance < nearestDistance) {
+      nearestEndMinute = endMinute;
+      nearestDistance = distance;
+    }
+  }
+
+  if (nearestEndMinute === null) return scheduledDate;
+  const endHour = String(Math.floor(nearestEndMinute / 60)).padStart(2, "0");
+  const endMinute = String(nearestEndMinute % 60).padStart(2, "0");
+  return `${datePart}T${endHour}:${endMinute}`;
+}
+
 export default function AppointmentModal({ 
     isOpen, 
     onClose, 
     appointment, 
+  appointments = [],
     initialDateTime, 
+  initialDentistId,
     onDelete,
     dentists,
     patientName,
@@ -161,14 +212,18 @@ export default function AppointmentModal({
                 const d = initialDateTime;
                 formattedDateTime = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
             }
+            if (initialDentistId && formattedDateTime) {
+              formattedDateTime = snapToPreviousAppointmentEnd(appointments, initialDentistId, formattedDateTime);
+            }
+            const initialDentist = dentists.find((dentist) => dentist.id === initialDentistId) as any;
             setFormData({
-                patientId: "", dentistId: "", scheduledDate: formattedDateTime, duration: 60, procedure: "", notes: "", status: "scheduled",
+              patientId: "", dentistId: initialDentistId || "", scheduledDate: formattedDateTime, duration: initialDentist?.defaultAppointmentDuration || 60, procedure: "", notes: "", status: "scheduled",
             });
         }
         setPatientSearchTerm("");
         setDebouncedSearchTerm("");
     }
-  }, [appointment, initialDateTime, isOpen]);
+  }, [appointment, dentists, initialDateTime, initialDentistId, isOpen]);
 
   const mutationOptions = {
     onSuccess: () => {
@@ -298,7 +353,10 @@ export default function AppointmentModal({
     setFormData(prev => ({ 
       ...prev, 
       dentistId,
-      duration: defaultDuration
+      duration: defaultDuration,
+      scheduledDate: appointment
+        ? prev.scheduledDate
+        : snapToPreviousAppointmentEnd(appointments, dentistId, prev.scheduledDate),
     }));
   };
 

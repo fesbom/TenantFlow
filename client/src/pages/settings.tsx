@@ -28,7 +28,7 @@ export default function SettingsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, updateCurrentUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -40,6 +40,7 @@ export default function SettingsPage() {
     role: "secretary" as "admin" | "dentist" | "secretary",
     defaultAppointmentDuration: undefined as number | undefined,
   });
+  const isEditingCurrentUser = selectedUser?.id === currentUser?.id;
 
   const [clinicFormData, setClinicFormData] = useState({
     name: "",
@@ -53,7 +54,7 @@ export default function SettingsPage() {
   const [invoiceFields, setInvoiceFields] = useState<string[]>(DEFAULT_INVOICE_FIELDS);
 
   // WhatsApp multi-instance state
-  type WppInstance = { id: string; label: string; instanceName: string; apiKey: string | null; connectedPhone: string | null; dentistIds: string[]; createdAt: string };
+  type WppInstance = { id: string; label: string; instanceName: string; apiKey: string | null; connectedPhone: string | null; connectionStatus?: "connected" | "disconnected" | "unknown"; dentistIds: string[]; createdAt: string };
   const [showInstanceDialog, setShowInstanceDialog] = useState(false);
   const [editingInstance, setEditingInstance] = useState<WppInstance | null>(null);
   const [instanceForm, setInstanceForm] = useState({ label: "", instanceName: "", apiKey: "", dentistIds: [] as string[] });
@@ -92,8 +93,11 @@ export default function SettingsPage() {
       const response = await apiRequest("POST", "/api/users", data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (updatedUser) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      if (selectedUser?.id === currentUser?.id) {
+        updateCurrentUser({ fullName: updatedUser.fullName, email: updatedUser.email });
+      }
       toast({
         title: "Usuário criado",
         description: "Usuário criado com sucesso",
@@ -570,6 +574,7 @@ export default function SettingsPage() {
                                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                                 placeholder="nome.usuario"
                                 required
+                                disabled={isEditingCurrentUser}
                                 data-testid="input-user-username"
                               />
                             </div>
@@ -585,6 +590,7 @@ export default function SettingsPage() {
                                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                 placeholder={selectedUser ? "Deixe em branco para não alterar" : "••••••••"}
                                 required={!selectedUser}
+                                disabled={isEditingCurrentUser}
                                 data-testid="input-user-password"
                               />
                             </div>
@@ -598,7 +604,7 @@ export default function SettingsPage() {
                                 }
                                 required
                               >
-                                <SelectTrigger data-testid="select-user-role">
+                                <SelectTrigger disabled={isEditingCurrentUser} data-testid="select-user-role">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -627,6 +633,7 @@ export default function SettingsPage() {
                                     })
                                   }
                                   placeholder="60"
+                                  disabled={isEditingCurrentUser}
                                   data-testid="input-default-duration"
                                 />
                               </div>
@@ -697,7 +704,7 @@ export default function SettingsPage() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    disabled={user.id === currentUser?.id}
+                                    title={user.id === currentUser?.id ? "Editar nome e email" : "Editar usuário"}
                                     onClick={() => handleEditUser(user)}
                                     data-testid={`button-edit-user-${user.id}`}
                                   >
@@ -930,15 +937,16 @@ export default function SettingsPage() {
                         const linkedDentists = (users as User[]).filter(
                           (u) => u.role === "dentist" && inst.dentistIds?.includes(u.id),
                         );
-                        const isConnected = !!inst.connectedPhone;
+                        const connectionStatus = inst.connectionStatus ?? (inst.connectedPhone ? "connected" : "disconnected");
+                        const isConnected = connectionStatus === "connected";
                         return (
                           <div key={inst.id} className="border rounded-lg p-4 space-y-3">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium text-sm">{inst.label}</span>
-                                  <Badge variant={isConnected ? "default" : "secondary"} className="text-xs">
-                                    {isConnected ? `✓ ${inst.connectedPhone}` : "Desconectado"}
+                                  <Badge variant={isConnected ? "default" : connectionStatus === "unknown" ? "outline" : "secondary"} className="text-xs">
+                                    {isConnected ? (inst.connectedPhone ? `✓ ${inst.connectedPhone}` : "Conectado") : connectionStatus === "unknown" ? "Status indisponível" : "Desconectado"}
                                   </Badge>
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1 font-mono">{inst.instanceName}</p>

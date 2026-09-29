@@ -324,8 +324,10 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
           setNewAppointmentSlot(null);
         }}
         appointment={selectedAppointment}
+        appointments={appointments}
         patientName={selectedAppointmentPatientName ?? undefined}
         initialDateTime={newAppointmentSlot?.start}
+        initialDentistId={selectedDentist !== "all" ? selectedDentist : undefined}
         onDelete={handleDeleteAppointment}
         dentists={dentists}
       />

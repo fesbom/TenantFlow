@@ -6,6 +6,7 @@ import { apiRequest } from '@/lib/api';
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  updateCurrentUser: (updates: Pick<User, 'fullName' | 'email'>) => void;
   registerClinic: (data: {
     clinicName: string;
     clinicEmail: string;
@@ -86,11 +87,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const updateCurrentUser = (updates: Pick<User, 'fullName' | 'email'>) => {
+    setAuthState((current) => {
+      if (!current.user) return current;
+      const user = { ...current.user, ...updates };
+      localStorage.setItem('dental_user', JSON.stringify(user));
+      return { ...current, user };
+    });
+  };
+
   return React.createElement(AuthContext.Provider, {
     value: {
       ...authState,
       login,
       logout,
+      updateCurrentUser,
       registerClinic
     }
   }, children);
