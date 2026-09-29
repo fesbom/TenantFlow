@@ -20,6 +20,7 @@ import {
   dentistSchedules,
   clinicHolidays,
   receivables,
+  receivableReminderLogs,
   type Clinic,
   type User,
   type Patient,
@@ -98,6 +99,7 @@ export interface ReceivableFilters {
 
 export interface ReceivableWithNames extends Receivable {
   patientName: string;
+  patientPhone: string;
   dentistName: string;
 }
 
@@ -288,6 +290,14 @@ export interface IStorage {
   generateReceivablesForTreatment(params: GenerateReceivablesParams): Promise<Receivable[]>;
   listReceivables(clinicId: string, requester: ReceivableRequester, filters: ReceivableFilters): Promise<ReceivableListResult>;
   getReceivableById(id: string, clinicId: string): Promise<Receivable | undefined>;
+  createReceivableReminderLog(data: {
+    clinicId: string;
+    receivableId: string;
+    patientId: string;
+    actorUserId: string;
+    phone: string;
+    message: string;
+  }): Promise<void>;
   updateReceivable(id: string, clinicId: string, updates: {
     patientId: string;
     dentistId: string;
@@ -1615,6 +1625,7 @@ export class DatabaseStorage implements IStorage {
         createdAt: receivables.createdAt,
         updatedAt: receivables.updatedAt,
         patientName: patients.fullName,
+        patientPhone: patients.phone,
         dentistName: users.fullName,
       })
       .from(receivables)
@@ -1648,6 +1659,17 @@ export class DatabaseStorage implements IStorage {
       .from(receivables)
       .where(and(eq(receivables.id, id), eq(receivables.clinicId, clinicId)));
     return receivable || undefined;
+  }
+
+  async createReceivableReminderLog(data: {
+    clinicId: string;
+    receivableId: string;
+    patientId: string;
+    actorUserId: string;
+    phone: string;
+    message: string;
+  }): Promise<void> {
+    await db.insert(receivableReminderLogs).values(data);
   }
 
   async updateReceivable(

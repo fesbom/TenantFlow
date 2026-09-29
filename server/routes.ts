@@ -68,6 +68,7 @@ import {
 import type { InstanceContext } from "./whatsappAI";
 import { registerAdminRoutes } from "./admin/adminRoutes";
 import { recordAccessAudit } from "./admin/adminRepository";
+import { buildReceivableReminderMessage, normalizeBrazilianWhatsAppPhone } from "@shared/whatsapp-reminder";
 
 import multer from "multer";
 
@@ -210,6 +211,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_patient_idx ON receivables (patient_id)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_vencimento_idx ON receivables (data_vencimento)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS receivables_treatment_idx ON receivables (treatment_id)`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS receivable_reminder_logs (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      clinic_id varchar NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+      receivable_id varchar NOT NULL REFERENCES receivables(id) ON DELETE CASCADE,
+      patient_id varchar NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+      actor_user_id varchar REFERENCES users(id) ON DELETE SET NULL,
+      phone text NOT NULL,
+      message text NOT NULL,
+      created_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS receivable_reminder_logs_receivable_idx ON receivable_reminder_logs (receivable_id, created_at DESC)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS receivable_reminder_logs_clinic_idx ON receivable_reminder_logs (clinic_id, created_at DESC)`);
   // Local uploads are private and scoped to the authenticated user's clinic.
   mountLocalUploads(app);
   registerAdminRoutes(app);
@@ -2001,6 +2016,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("List receivables error:", error);
         res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/receivables/:id/reminder",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const receivable = await storage.getReceivableById(req.params.id, req.user!.clinicId);
+        if (!receivable) {
+          return res.status(404).json({ message: "Título não encontrado nesta clínica." });
+        }
+        if (receivable.status !== "Pendente" && receivable.status !== "Vencido") {
+          return res.status(409).json({ message: "Só é possível enviar lembretes para títulos pendentes ou vencidos." });
+        }
+
+        const patient = await storage.getPatientById(receivable.patientId, req.user!.clinicId);
+        if (!patient) {
+          return res.status(404).json({ message: "Paciente não encontrado nesta clínica." });
+        }
+
+        const phone = normalizeBrazilianWhatsAppPhone(patient.phone);
+        if (!phone) {
+          return res.status(400).json({ message: "O paciente não possui um celular brasileiro válido para WhatsApp." });
+        }
+        if (normalizeBrazilianWhatsAppPhone(req.body?.phone) !== phone) {
+          return res.status(409).json({ message: "O telefone do paciente foi alterado. Atualize a listagem antes de enviar o lembrete." });
+        }
+
+        const message = buildReceivableReminderMessage({
+          patientName: patient.fullName,
+          value: receivable.valor,
+          dueDate: receivable.dataVencimento,
+          description: receivable.descricao,
+          installmentNumber: receivable.numeroParcela,
+          totalInstallments: receivable.totalParcelas,
+        });
+        await storage.createReceivableReminderLog({
+          clinicId: req.user!.clinicId,
+          receivableId: receivable.id,
+          patientId: patient.id,
+          actorUserId: req.user!.id,
+          phone,
+          message,
+        });
+
+        return res.status(201).json({ success: true });
+      } catch (error) {
+        console.error("Register receivable reminder error:", error);
+        return res.status(500).json({ message: "Não foi possível registrar o lembrete." });
       }
     },
   );

@@ -382,6 +382,20 @@ export const receivables = pgTable("receivables", {
   check("receivables_status_check", sql`${t.status} IN ('Pendente', 'Pago', 'Vencido', 'Acordo', 'Cancelado')`),
 ]);
 
+export const receivableReminderLogs = pgTable("receivable_reminder_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id, { onDelete: "cascade" }),
+  receivableId: varchar("receivable_id").notNull().references(() => receivables.id, { onDelete: "cascade" }),
+  patientId: varchar("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  phone: text("phone").notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("receivable_reminder_logs_receivable_idx").on(t.receivableId, t.createdAt),
+  index("receivable_reminder_logs_clinic_idx").on(t.clinicId, t.createdAt),
+]);
+
 // Relations
 export const clinicsRelations = relations(clinics, ({ many }) => ({
   users: many(users),
@@ -770,5 +784,6 @@ export type InsertClinicHoliday = z.infer<typeof insertClinicHolidaySchema>;
 // Contas a Receber types
 export type Receivable = typeof receivables.$inferSelect;
 export type InsertReceivable = z.infer<typeof insertReceivableSchema>;
+export type ReceivableReminderLog = typeof receivableReminderLogs.$inferSelect;
 export const RECEIVABLE_STATUSES = ["Pendente", "Pago", "Vencido", "Acordo", "Cancelado"] as const;
 export type ReceivableStatus = (typeof RECEIVABLE_STATUSES)[number];
