@@ -1,0 +1,1 @@
+ALTER TABLE clinics ADD COLUMN IF NOT EXISTS payment_instructions text;

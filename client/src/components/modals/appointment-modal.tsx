@@ -276,9 +276,14 @@ export default function AppointmentModal({
           : "Recusa e motivo registrados manualmente.";
       toast({ title: "Ação registrada", description: message });
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, variables: { action: "send_confirmation" | "accept" | "refuse"; reason?: string }) => {
+      const actionTitle = variables.action === "send_confirmation"
+        ? "Não foi possível enviar a confirmação"
+        : variables.action === "accept"
+          ? "Não foi possível registrar o aceite"
+          : "Não foi possível registrar a recusa";
       toast({
-        title: "Não foi possível executar a ação",
+        title: actionTitle,
         description: getRequestErrorMessage(error),
         variant: "destructive",
       });

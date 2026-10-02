@@ -20,6 +20,9 @@ export interface Patient {
   phone: string;
   birthDate?: string;
   address?: string;
+  responsibleDentistId?: string | null;
+  lastContactDate?: string | null;
+  lastVisitDate?: string | null;
   medicalNotes?: string;
   photoUrl?: string;
   clinicId: string;

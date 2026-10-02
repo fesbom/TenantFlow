@@ -11,10 +11,11 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
 import PatientModal from "@/components/modals/patient-modal";
 import InvoiceCopyModal, { DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
-import { Patient } from "@/types";
-import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User, FileText } from "lucide-react";
+import { Patient, User as AppUser } from "@/types";
+import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User, FileText, SlidersHorizontal, ChevronDown, X } from "lucide-react";
 import { formatDateBR } from "@/lib/date-formatter";
 import { ProtectedImage } from "@/components/ui/protected-image";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface PaginatedResponse {
   data: Patient[];
@@ -32,6 +33,9 @@ export default function Patients() {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedDentistId, setSelectedDentistId] = useState("all");
+  const [monthsWithoutContact, setMonthsWithoutContact] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [prefillData, setPrefillData] = useState<{ phone?: string; fullName?: string } | undefined>();
@@ -49,17 +53,47 @@ export default function Patients() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Fetch patients with pagination and search --- CÓDIGO CORRIGIDO AQUI ---
+  const { data: users = [] } = useQuery<AppUser[]>({
+    queryKey: ["/api/users"],
+    queryFn: async () => {
+      const response = await fetch("/api/users", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
+      });
+      if (!response.ok) throw new Error("Não foi possível carregar os dentistas");
+      return response.json();
+    },
+  });
+  const dentists = users.filter((user) => user.role === "dentist");
+
+  // Fetch patients with pagination, search and filters.
   const { data, isLoading } = useQuery<PaginatedResponse>({
-    queryKey: ["/api/patients", { page: currentPage, pageSize: 10, search: debouncedSearch }],
+    queryKey: ["/api/patients", {
+      page: currentPage,
+      pageSize: 10,
+      search: debouncedSearch,
+      dentistId: selectedDentistId,
+      monthsWithoutContact,
+    }],
     queryFn: async ({ queryKey }) => {
-      const [_key, params] = queryKey as [string, { page: number; pageSize: number; search: string }];
+      const [_key, params] = queryKey as [string, {
+        page: number;
+        pageSize: number;
+        search: string;
+        dentistId: string;
+        monthsWithoutContact: string;
+      }];
 
       const searchParams = new URLSearchParams();
       searchParams.append('page', params.page.toString());
       searchParams.append('pageSize', params.pageSize.toString());
       if (params.search) {
         searchParams.append('search', params.search);
+      }
+      if (params.dentistId !== "all") {
+        searchParams.append("dentistId", params.dentistId);
+      }
+      if (params.monthsWithoutContact) {
+        searchParams.append("monthsWithoutContact", params.monthsWithoutContact);
       }
 
       const response = await fetch(`${_key}?${searchParams.toString()}`, {
@@ -78,6 +112,7 @@ export default function Patients() {
 
   const patients = data?.data || [];
   const pagination = data?.pagination;
+  const hasActiveFilters = selectedDentistId !== "all" || monthsWithoutContact !== "";
 
   // Fetch invoice fields config
   const { data: invoiceFieldsData } = useQuery<{ fields: string[] }>({
@@ -176,6 +211,81 @@ export default function Patients() {
             </Button>
           </div>
 
+          <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen} className="mb-6">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {hasActiveFilters ? "Filtros aplicados" : "Filtros opcionais"}
+              </span>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" aria-expanded={filtersOpen} data-testid="button-toggle-patient-filters">
+                  <SlidersHorizontal className="mr-2 h-4 w-4" />
+                  Filtros
+                  <ChevronDown className={`ml-2 h-4 w-4 transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+              <div className="mt-3 grid grid-cols-1 gap-4 rounded-md border bg-white p-4 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_minmax(200px,1fr)_auto] lg:items-end">
+                <div className="space-y-2">
+                  <label htmlFor="patient-filter-dentist" className="text-sm font-medium">Dentista responsável</label>
+                  <select
+                    id="patient-filter-dentist"
+                    value={selectedDentistId}
+                    onChange={(event) => {
+                      setSelectedDentistId(event.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    data-testid="select-filter-patient-dentist"
+                  >
+                    <option value="all">Todos os dentistas</option>
+                    {dentists.map((dentist) => (
+                      <option key={dentist.id} value={dentist.id}>{dentist.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="patient-filter-months" className="text-sm font-medium">Sem contato há pelo menos</label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="patient-filter-months"
+                      type="number"
+                      min="1"
+                      max="120"
+                      step="1"
+                      inputMode="numeric"
+                      placeholder="Ex.: 6"
+                      value={monthsWithoutContact}
+                      onChange={(event) => {
+                        setMonthsWithoutContact(event.target.value);
+                        setCurrentPage(1);
+                      }}
+                      data-testid="input-filter-patient-months"
+                    />
+                    <span className="text-sm text-muted-foreground">meses</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Inclui quem ainda não tem data de último contato registrada.</p>
+                </div>
+                {hasActiveFilters && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedDentistId("all");
+                      setMonthsWithoutContact("");
+                      setCurrentPage(1);
+                    }}
+                    data-testid="button-clear-patient-filters"
+                  >
+                    <X className="mr-2 h-4 w-4" />
+                    Limpar filtros
+                  </Button>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
           {/* Patients Table */}
           <Card>
             <CardHeader>
@@ -186,7 +296,7 @@ export default function Patients() {
                 <div className="text-center py-8 text-gray-500">Carregando pacientes...</div>
               ) : patients.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  {debouncedSearch ? "Nenhum paciente encontrado" : "Nenhum paciente cadastrado"}
+                  {debouncedSearch || hasActiveFilters ? "Nenhum paciente encontrado para os critérios informados" : "Nenhum paciente cadastrado"}
                 </div>
               ) : (
                 <>

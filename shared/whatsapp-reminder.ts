@@ -13,12 +13,12 @@ const BRAZILIAN_DDDS = new Set([
 export function normalizeBrazilianWhatsAppPhone(phone: unknown): string | null {
   if (typeof phone !== "string") return null;
 
-  const digits = phone.replace(/\D/g, "");
-  const nationalNumber = digits.length === 13 && digits.startsWith("55")
-    ? digits.slice(2)
-    : digits.length === 11
-      ? digits
-      : null;
+  let digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
+  if (digits.startsWith("0") && digits.length === 14) digits = digits.slice(3);
+  if (digits.startsWith("0") && digits.length === 12) digits = digits.slice(1);
+  const nationalNumber = digits.length === 11 ? digits : null;
   if (!nationalNumber) return null;
 
   const areaCode = nationalNumber.slice(0, 2);
@@ -55,41 +55,74 @@ function getBrazilianTodayUtcDay(): number {
   return Date.UTC(part("year"), part("month") - 1, part("day"));
 }
 
-export interface ReceivableReminderMessageInput {
-  patientName: string;
+export interface ReceivableReminderBillInput {
+  id: string;
   value: string | number;
   dueDate: string;
   description: string;
   installmentNumber: number;
   totalInstallments: number;
+  status: string;
 }
 
-export function buildReceivableReminderMessage(input: ReceivableReminderMessageInput): string {
-  const value = Number(input.value);
-  const formattedValue = value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  const dueDate = parseDateOnly(input.dueDate);
-  const formattedDueDate = dueDate
-    ? `${String(dueDate.day).padStart(2, "0")}/${String(dueDate.month).padStart(2, "0")}/${dueDate.year}`
-    : input.dueDate;
-  const dueDay = dueDate ? Date.UTC(dueDate.year, dueDate.month - 1, dueDate.day) : null;
-  const daysLate = dueDay === null ? 0 : Math.max(0, Math.floor((getBrazilianTodayUtcDay() - dueDay) / 86_400_000));
-  const installment = `${input.installmentNumber}/${input.totalInstallments}`;
-  const reference = input.description.trim()
-    ? `${input.description.trim()} - parcela ${installment}`
-    : `parcela ${installment}`;
+export function formatReceivableDateBR(value: string): string {
+  const date = parseDateOnly(value);
+  return date
+    ? `${String(date.day).padStart(2, "0")}/${String(date.month).padStart(2, "0")}/${date.year}`
+    : value;
+}
+
+export function getBrazilianDaysLate(value: string): number {
+  const date = parseDateOnly(value);
+  if (!date) return 0;
+  const dueDay = Date.UTC(date.year, date.month - 1, date.day);
+  return Math.max(0, Math.floor((getBrazilianTodayUtcDay() - dueDay) / 86_400_000));
+}
+
+function formatCurrency(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export function buildReceivableBatchReminderMessage(
+  clinicName: string,
+  patientName: string,
+  bills: ReceivableReminderBillInput[],
+  paymentInstructions?: string | null,
+): string {
+  const totalCents = bills.reduce((sum, bill) => sum + Math.round(Number(bill.value) * 100), 0);
+  const clinicIdentifier = clinicName.trim() || "nossa clínica";
+  const paymentInfo = paymentInstructions?.trim()
+    || "Para obter a chave PIX ou instruções de pagamento, responda a esta mensagem.";
+
+  if (bills.length === 1) {
+    const bill = bills[0];
+    const value = formatCurrency(Number(bill.value));
+    const dueDate = formatReceivableDateBR(bill.dueDate);
+    const daysLate = getBrazilianDaysLate(bill.dueDate);
+    const installment = `${bill.installmentNumber}/${bill.totalInstallments}`;
+    return [
+      `Olá, ${patientName}. Aqui é da ${clinicIdentifier}.`,
+      `Consta em nosso sistema uma parcela vencida no valor de ${value}, com vencimento em ${dueDate} (parcela ${installment}).`,
+      daysLate > 0 ? `Esta parcela está com ${daysLate} dia(s) de atraso.` : "",
+      paymentInfo,
+      "Caso já tenha efetuado o pagamento, por favor desconsidere esta mensagem. Para dúvidas ou envio do comprovante, estamos à disposição.",
+    ].filter(Boolean).join("\n\n");
+  }
+
+  const items = bills.map((bill) => {
+    const daysLate = getBrazilianDaysLate(bill.dueDate);
+    const installment = `${bill.installmentNumber}/${bill.totalInstallments}`;
+    const description = bill.description.trim() ? ` - ${bill.description.trim()}` : "";
+    const delay = daysLate > 0 ? ` (${daysLate} dia(s) de atraso)` : "";
+    return `• Vencimento: ${formatReceivableDateBR(bill.dueDate)} - ${formatCurrency(Number(bill.value))}${delay} - parcela ${installment}${description}`;
+  });
 
   return [
-    `Olá, ${input.patientName}. Tudo bem?`,
-    `Consta em nosso sistema uma pendência no valor de ${formattedValue}, com vencimento em ${formattedDueDate}.`,
-    daysLate > 0 ? `Este título está com ${daysLate} dia(s) de atraso.` : "",
-    `Identificação: ${reference}.`,
-    "Caso já tenha efetuado o pagamento, por favor desconsidere esta mensagem. Para maiores dúvidas ou envio do comprovante, estamos à disposição.",
-  ].filter(Boolean).join("\n\n");
-}
-
-export function buildWhatsAppReminderUrl(phone: string, message: string): string {
-  const normalizedPhone = normalizeBrazilianWhatsAppPhone(phone);
-  if (!normalizedPhone) throw new Error("O telefone não é um celular brasileiro válido para WhatsApp.");
-
-  return `https://api.whatsapp.com/send?phone=${normalizedPhone}&text=${encodeURIComponent(message)}`;
+    `Olá, ${patientName}. Aqui é da ${clinicIdentifier}.`,
+    "Identificamos as seguintes parcelas vencidas em nosso sistema:",
+    ...items,
+    `Valor total vencido: ${formatCurrency(totalCents / 100)}.`,
+    paymentInfo,
+    "Caso já tenha efetuado algum pagamento, por favor desconsidere o respectivo título. Para dúvidas ou envio do comprovante, estamos à disposição.",
+  ].join("\n\n");
 }

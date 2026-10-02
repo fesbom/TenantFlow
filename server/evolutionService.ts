@@ -69,6 +69,7 @@ export function globalConfig(): ClinicEvolutionConfig {
 export interface EvolutionSendResult {
   success: boolean;
   messageId?: string;
+  status?: string;
   error?: string;
 }
 
@@ -139,7 +140,11 @@ export async function sendEvolutionMessageForClinic(
         timeout: 30000,
       },
     );
-    return { success: true, messageId: response.data?.key?.id };
+    return {
+      success: true,
+      messageId: response.data?.key?.id,
+      status: String(response.data?.status ?? response.data?.messageStatus ?? response.status),
+    };
   } catch (error: any) {
     const detail = getEvolutionSendError(error);
     console.error(`❌ [Evolution] Erro ao enviar para ${config.instanceName}:`, detail);

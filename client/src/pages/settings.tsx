@@ -47,6 +47,7 @@ export default function SettingsPage() {
     email: "",
     phone: "",
     address: "",
+    paymentInstructions: "",
     logoUrl: "",
   });
 
@@ -82,6 +83,7 @@ export default function SettingsPage() {
         email: clinic.email || "",
         phone: clinic.phone || "",
         address: clinic.address || "",
+        paymentInstructions: clinic.paymentInstructions || "",
         logoUrl: clinic.logoUrl || "",
       });
     }
@@ -821,6 +823,17 @@ export default function SettingsPage() {
                               placeholder="Endereço completo da clínica"
                               rows={3}
                               data-testid="input-clinic-address"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="clinic-payment-instructions">Instruções de pagamento / chave PIX</Label>
+                            <Textarea
+                              id="clinic-payment-instructions"
+                              value={clinicFormData.paymentInstructions}
+                              onChange={(e) => setClinicFormData({ ...clinicFormData, paymentInstructions: e.target.value })}
+                              placeholder="Informe a chave PIX ou instruções para pagamento"
+                              rows={3}
+                              data-testid="input-clinic-payment-instructions"
                             />
                           </div>
                         </div>

@@ -49,6 +49,7 @@ import {
   insertWhatsappMessageSchema,
 } from "@shared/schema";
 import { processPatientMessage } from "./whatsappAI";
+import { messageGuardrailService } from "./messageGuardrailService";
 import {
   createOrGetInstance,
   sendEvolutionMessage,
@@ -68,7 +69,12 @@ import {
 import type { InstanceContext } from "./whatsappAI";
 import { registerAdminRoutes } from "./admin/adminRoutes";
 import { recordAccessAudit } from "./admin/adminRepository";
-import { buildReceivableReminderMessage, normalizeBrazilianWhatsAppPhone } from "@shared/whatsapp-reminder";
+import {
+  buildReceivableBatchReminderMessage,
+  getBrazilianDaysLate,
+  formatReceivableDateBR,
+  normalizeBrazilianWhatsAppPhone,
+} from "@shared/whatsapp-reminder";
 
 import multer from "multer";
 
@@ -158,6 +164,12 @@ async function resolveConnectedSendConfig(clinicId: string): Promise<ClinicEvolu
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Mantém instalações existentes compatíveis antes de consultar o novo campo.
+  await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS payment_instructions text`);
+  await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS guardrail_alert boolean NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS guardrail_reason text`);
+  await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS guardrail_motive text`);
+  await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS guardrail_blocked_at timestamp`);
+  await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS context_data jsonb NOT NULL DEFAULT '{}'::jsonb`);
   await db.execute(sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS confirmation_sent_at timestamp`);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS appointment_confirmation_logs (
@@ -220,9 +232,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       actor_user_id varchar REFERENCES users(id) ON DELETE SET NULL,
       phone text NOT NULL,
       message text NOT NULL,
+      status text NOT NULL DEFAULT 'sent',
+      provider_message_id text,
       created_at timestamp NOT NULL DEFAULT now()
     )
   `);
+  await db.execute(sql`ALTER TABLE receivable_reminder_logs ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'sent'`);
+  await db.execute(sql`ALTER TABLE receivable_reminder_logs ADD COLUMN IF NOT EXISTS provider_message_id text`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS receivable_reminder_logs_receivable_idx ON receivable_reminder_logs (receivable_id, created_at DESC)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS receivable_reminder_logs_clinic_idx ON receivable_reminder_logs (clinic_id, created_at DESC)`);
   // Local uploads are private and scoped to the authenticated user's clinic.
@@ -1031,21 +1047,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const page = parseInt(req.query.page as string) || 1;
         const pageSize = parseInt(req.query.pageSize as string) || 50;
         const search = (req.query.search as string)?.trim() || "";
+        const dentistId = (req.query.dentistId as string)?.trim() || "";
+        const monthsWithoutContact = req.query.monthsWithoutContact === undefined
+          ? undefined
+          : Number(req.query.monthsWithoutContact);
+
+        if (
+          monthsWithoutContact !== undefined &&
+          (!Number.isInteger(monthsWithoutContact) || monthsWithoutContact < 1 || monthsWithoutContact > 120)
+        ) {
+          return res.status(400).json({ message: "Informe um período entre 1 e 120 meses." });
+        }
 
         const validPage = Math.max(1, page);
         const validPageSize = Math.min(Math.max(1, pageSize), 100);
         const offset = (validPage - 1) * validPageSize;
 
-        const whereConditions = search
-          ? and(
-              eq(patients.clinicId, req.user!.clinicId),
-              or(
-                sql`LOWER(${patients.fullName}) LIKE LOWER(${"%" + search + "%"})`,
-                sql`${patients.cpf} LIKE ${search + "%"}`,
-                sql`${patients.phone} LIKE ${"%" + search + "%"}`,
-              ),
-            )
-          : eq(patients.clinicId, req.user!.clinicId);
+        const conditions = [eq(patients.clinicId, req.user!.clinicId)];
+        if (search) {
+          conditions.push(or(
+            sql`LOWER(${patients.fullName}) LIKE LOWER(${"%" + search + "%"})`,
+            sql`${patients.cpf} LIKE ${search + "%"}`,
+            sql`${patients.phone} LIKE ${"%" + search + "%"}`,
+          )!);
+        }
+        if (dentistId) {
+          conditions.push(eq(patients.responsibleDentistId, dentistId));
+        }
+        if (monthsWithoutContact !== undefined) {
+          conditions.push(sql`(
+            ${patients.lastContactDate} IS NULL OR
+            ${patients.lastContactDate} <= (
+              (NOW() AT TIME ZONE 'America/Sao_Paulo')::date - (${monthsWithoutContact} * INTERVAL '1 month')
+            )::date
+          `);
+        }
+        const whereConditions = and(...conditions);
 
         const [{ count: totalCount }] = await db
           .select({ count: sql<number>`count(*)::int` })
@@ -1480,11 +1517,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const sendConfig = await resolveConnectedSendConfig(req.user!.clinicId);
           if (!sendConfig) {
             return res.status(503).json({ message: "Nenhuma instância WhatsApp da clínica está conectada à Evolution." });
-          }
-          if (!(await ensureEvolutionWebhookForClinic(sendConfig))) {
-            return res.status(503).json({
-              message: "O envio foi bloqueado porque este ambiente local não tem URL pública para receber confirmação de entrega. Configure REPLIT_DEV_DOMAIN ou use o ambiente publicado.",
-            });
           }
           const result = await sendEvolutionButtonsForClinic(sendConfig, phone, {
             title: "Confirmação de consulta",
@@ -2020,54 +2052,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
+  app.get(
+    "/api/receivables/:id/reminder-preview",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const batch = await storage.getReceivableReminderBatch(req.user!.clinicId, req.params.id);
+        if (!batch) {
+          return res.status(404).json({ message: "Título não encontrado nesta clínica." });
+        }
+        if (!batch.bills.some((bill) => bill.id === req.params.id)) {
+          return res.status(409).json({ message: "O título selecionado não está mais vencido." });
+        }
+        const phone = normalizeBrazilianWhatsAppPhone(batch.patient.phone);
+        if (!phone) {
+          return res.status(400).json({ message: "O paciente não possui um celular brasileiro válido para WhatsApp." });
+        }
+
+        const clinic = await storage.getClinicById(req.user!.clinicId);
+        const totalCents = batch.bills.reduce((sum, bill) => sum + Math.round(Number(bill.valor) * 100), 0);
+        const message = buildReceivableBatchReminderMessage(clinic?.name ?? "", batch.patient.fullName, batch.bills.map((bill) => ({
+          id: bill.id,
+          value: bill.valor,
+          dueDate: bill.dataVencimento,
+          description: bill.descricao,
+          installmentNumber: bill.numeroParcela,
+          totalInstallments: bill.totalParcelas,
+          status: bill.status,
+        })), clinic?.paymentInstructions);
+
+        return res.json({
+          patientName: batch.patient.fullName,
+          phone,
+          total: totalCents / 100,
+          bills: batch.bills.map((bill) => ({
+            id: bill.id,
+            description: bill.descricao,
+            value: Number(bill.valor),
+            dueDate: bill.dataVencimento,
+            formattedDueDate: formatReceivableDateBR(bill.dataVencimento),
+            status: bill.status,
+            installmentNumber: bill.numeroParcela,
+            totalInstallments: bill.totalParcelas,
+            daysLate: getBrazilianDaysLate(bill.dataVencimento),
+          })),
+          message,
+        });
+      } catch (error) {
+        console.error("Build receivable reminder preview error:", error);
+        return res.status(500).json({ message: "Não foi possível montar a prévia da cobrança." });
+      }
+    },
+  );
+
   app.post(
     "/api/receivables/:id/reminder",
     authenticateToken,
     requireRole(["admin", "secretary"]),
     async (req: AuthenticatedRequest, res) => {
       try {
-        const receivable = await storage.getReceivableById(req.params.id, req.user!.clinicId);
-        if (!receivable) {
+        const batch = await storage.getReceivableReminderBatch(req.user!.clinicId, req.params.id);
+        if (!batch) {
           return res.status(404).json({ message: "Título não encontrado nesta clínica." });
         }
-        if (receivable.status !== "Pendente" && receivable.status !== "Vencido") {
-          return res.status(409).json({ message: "Só é possível enviar lembretes para títulos pendentes ou vencidos." });
+        if (!batch.bills.some((bill) => bill.id === req.params.id)) {
+          return res.status(409).json({ message: "O título selecionado não está mais vencido." });
         }
 
-        const patient = await storage.getPatientById(receivable.patientId, req.user!.clinicId);
-        if (!patient) {
-          return res.status(404).json({ message: "Paciente não encontrado nesta clínica." });
+        const expectedIds = req.body?.expectedReceivableIds;
+        if (!Array.isArray(expectedIds) || expectedIds.some((id: unknown) => typeof id !== "string")) {
+          return res.status(400).json({ message: "A lista de títulos confirmados é inválida. Atualize a prévia." });
+        }
+        if (typeof req.body?.expectedMessage !== "string" || req.body.expectedMessage.length > 20000) {
+          return res.status(400).json({ message: "A mensagem confirmada é inválida. Atualize a prévia." });
+        }
+        const currentIds = batch.bills.map((bill) => bill.id).sort();
+        const confirmedIds = [...new Set(expectedIds as string[])].sort();
+        if (currentIds.length !== confirmedIds.length || currentIds.some((id, index) => id !== confirmedIds[index])) {
+          return res.status(409).json({ message: "Os débitos do paciente foram alterados. Atualize a prévia antes de confirmar." });
         }
 
-        const phone = normalizeBrazilianWhatsAppPhone(patient.phone);
+        const phone = normalizeBrazilianWhatsAppPhone(batch.patient.phone);
         if (!phone) {
           return res.status(400).json({ message: "O paciente não possui um celular brasileiro válido para WhatsApp." });
         }
-        if (normalizeBrazilianWhatsAppPhone(req.body?.phone) !== phone) {
-          return res.status(409).json({ message: "O telefone do paciente foi alterado. Atualize a listagem antes de enviar o lembrete." });
+        const clinic = await storage.getClinicById(req.user!.clinicId);
+        const message = buildReceivableBatchReminderMessage(clinic?.name ?? "", batch.patient.fullName, batch.bills.map((bill) => ({
+          id: bill.id,
+          value: bill.valor,
+          dueDate: bill.dataVencimento,
+          description: bill.descricao,
+          installmentNumber: bill.numeroParcela,
+          totalInstallments: bill.totalParcelas,
+          status: bill.status,
+        })), clinic?.paymentInstructions);
+        if (message !== req.body.expectedMessage) {
+          return res.status(409).json({ message: "Os dados da cobrança mudaram. Revise a prévia antes de confirmar." });
         }
 
-        const message = buildReceivableReminderMessage({
-          patientName: patient.fullName,
-          value: receivable.valor,
-          dueDate: receivable.dataVencimento,
-          description: receivable.descricao,
-          installmentNumber: receivable.numeroParcela,
-          totalInstallments: receivable.totalParcelas,
-        });
-        await storage.createReceivableReminderLog({
-          clinicId: req.user!.clinicId,
-          receivableId: receivable.id,
-          patientId: patient.id,
-          actorUserId: req.user!.id,
-          phone,
-          message,
-        });
+        const evolutionConfig = await resolveConnectedSendConfig(req.user!.clinicId);
+        if (!evolutionConfig) {
+          return res.status(503).json({
+            code: "EVOLUTION_DISCONNECTED",
+            message: "Nenhuma instância WhatsApp está conectada. Reconecte a Evolution e tente novamente.",
+          });
+        }
 
-        return res.status(201).json({ success: true });
+        const sendResult = await sendEvolutionMessageForClinic(evolutionConfig, phone, message);
+        if (!sendResult.success) {
+          return res.status(502).json({
+            code: "EVOLUTION_SEND_FAILED",
+            message: sendResult.error || "A Evolution API não confirmou o envio da cobrança.",
+          });
+        }
+
+        try {
+          await storage.createReceivableReminderLogs(batch.bills.map((bill) => ({
+            clinicId: req.user!.clinicId,
+            receivableId: bill.id,
+            patientId: batch.patient.id,
+            actorUserId: req.user!.id,
+            phone,
+            message,
+            status: sendResult.status ?? "sent",
+            providerMessageId: sendResult.messageId ?? null,
+          })));
+        } catch (error) {
+          console.error("Reminder sent but audit persistence failed:", error);
+          return res.status(500).json({
+            code: "REMINDER_AUDIT_FAILED",
+            message: "A Evolution enviou a cobrança, mas não foi possível salvar o histórico. Avise o suporte antes de reenviar.",
+          });
+        }
+
+        return res.json({
+          success: true,
+          sentCount: batch.bills.length,
+          providerMessageId: sendResult.messageId,
+          providerStatus: sendResult.status ?? "sent",
+        });
       } catch (error) {
-        console.error("Register receivable reminder error:", error);
-        return res.status(500).json({ message: "Não foi possível registrar o lembrete." });
+        console.error("Send receivable reminder error:", error);
+        return res.status(500).json({ message: "Não foi possível enviar a cobrança." });
       }
     },
   );
@@ -3876,6 +4003,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw err;
         }
 
+        // Conversa humana nunca executa confirmações, cobrança ou qualquer resposta automatizada.
+        if (conversation.status === "human") {
+          console.log(`[WEBHOOK] Conversa ${conversation.id} está em atendimento humano; automação bloqueada.`);
+          return;
+        }
+
+        const guardrailResult = await messageGuardrailService.analyze(messageText);
+        if (guardrailResult.foraDoEscopo) {
+          const blockedAt = new Date();
+          const reasonByMotive = {
+            POLITICA: "Assunto fora de escopo: política ou eleições.",
+            RELIGIAO: "Assunto fora de escopo: religião ou crenças.",
+            OFENSA_PALAVRAO: "Detectada linguagem ofensiva, assédio ou hostilidade.",
+            OUTRO: "Assunto fora do escopo do atendimento odontológico.",
+            NENHUM: "Mensagem encaminhada para revisão humana.",
+          } as const;
+          const guardrailReason = guardrailResult.analiseIndisponivel
+            ? "Não foi possível verificar o conteúdo automaticamente; transferência preventiva para a equipe humana."
+            : reasonByMotive[guardrailResult.motivo];
+          const previousContext = conversation.contextData ?? {};
+
+          conversation = (await storage.updateWhatsappConversation(conversation.id, {
+            status: "human",
+            assignedUserId: null,
+            guardrailAlert: true,
+            guardrailReason,
+            guardrailMotive: guardrailResult.analiseIndisponivel ? "ANALISE_INDISPONIVEL" : guardrailResult.motivo,
+            guardrailBlockedAt: blockedAt,
+            contextData: {
+              ...previousContext,
+              bloqueio_guardrail: true,
+              motivo: guardrailResult.analiseIndisponivel ? "ANALISE_INDISPONIVEL" : guardrailResult.motivo,
+              confianca: guardrailResult.confianca,
+              bloqueado_em: blockedAt.toISOString(),
+            },
+          }))!;
+
+          const handoffReply = "Nosso canal automatizado é exclusivo para assuntos relacionados aos agendamentos, tratamentos e serviços da clínica. Não consigo dar continuidade por aqui sobre esse tema, mas já encaminhei sua conversa para a nossa equipe de atendimento, que assumirá o contato em breve.";
+          await storage.createWhatsappMessage({
+            conversationId: conversation.id,
+            sender: "ai",
+            direction: "outbound",
+            text: handoffReply,
+          });
+
+          const handoffConfig = await resolveSendConfig(clinicId, webhookInstanceName);
+          if (isClinicEvolutionConfigured(handoffConfig)) {
+            const sendResult = await sendEvolutionMessageForClinic(
+              handoffConfig,
+              normalizedPhone,
+              `[🤖 IA] ${handoffReply}`,
+            );
+            if (!sendResult.success) {
+              console.error(`[GUARDRAIL] Handoff salvo, mas não foi possível enviar a resposta: ${sendResult.error}`);
+            }
+          }
+
+          console.warn(`[GUARDRAIL] Conversa ${conversation.id} transferida. Motivo: ${conversation.guardrailMotive}`);
+          return;
+        }
+
         const normalizedConfirmationText = messageText.trim().toLowerCase();
         const confirmationMatch = /^(1|2)(?:\s*[-:]\s*(.*))?$/.exec(normalizedConfirmationText);
         const confirmationChoice = selectedButtonId === "appointment_confirm" || /^(confirmar|confirm|aceitar|sim)$/.test(normalizedConfirmationText)
@@ -5162,16 +5350,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch(
     "/api/conversations/:id/status",
     authenticateToken,
+    requireRole(["admin", "secretary"]),
     async (req: AuthenticatedRequest, res) => {
       try {
         const { id } = req.params;
         const { status } = req.body;
-        const updated = await storage.updateWhatsappConversation(id, {
-          status,
-          assignedUserId: status === "human" ? req.user!.id : null,
-        });
+        if (status !== "human" && status !== "ai") {
+          return res.status(400).json({ message: "Status de conversa inválido." });
+        }
+        const conversation = await storage.getWhatsappConversationById(id);
+        if (!conversation || conversation.clinicId !== req.user!.clinicId) {
+          return res.status(404).json({ message: "Conversa não encontrada." });
+        }
+
+        const changedAt = new Date();
+        const contextData = conversation.contextData ?? {};
+        const updated = await storage.updateWhatsappConversation(id, status === "human"
+          ? {
+              status,
+              assignedUserId: req.user!.id,
+              guardrailAlert: false,
+              contextData: {
+                ...contextData,
+                bloqueio_guardrail: false,
+                atendimento_humano_assumido_em: changedAt.toISOString(),
+                atendimento_humano_assumido_por: req.user!.id,
+              },
+            }
+          : {
+              status,
+              assignedUserId: null,
+              guardrailAlert: false,
+              contextData: {
+                ...contextData,
+                bloqueio_guardrail: false,
+                guardrail_liberado_em: changedAt.toISOString(),
+                guardrail_liberado_por: req.user!.id,
+              },
+            });
         res.json(updated);
       } catch (error) {
+        console.error("Update conversation status error:", error);
         res.status(500).json({ message: "Internal server error" });
       }
     },
@@ -5199,6 +5418,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         if (conversation.status === "closed") {
           return res.status(400).json({ message: "Conversa já está encerrada" });
+        }
+        if (conversation.guardrailAlert) {
+          return res.status(409).json({ message: "Assuma o alerta de conteúdo antes de encerrar esta conversa." });
         }
 
         // PASSO 1: Se ainda está com a IA, transitar para 'human' primeiro
@@ -5298,6 +5520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/whatsapp/conversations/:id/send",
     authenticateToken,
+    requireRole(["admin", "secretary"]),
     async (req: AuthenticatedRequest, res) => {
       try {
         const { id } = req.params;
@@ -5319,14 +5542,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Acesso negado. Faça login novamente." });
         }
 
-        // REATIVAÇÃO PELO ATENDENTE: Se conversa estava encerrada, reativa como 'human'
-        if (conversation.status === "closed") {
+        if (conversation.status !== "human" && conversation.status !== "closed") {
+          return res.status(409).json({ message: "Assuma a conversa antes de enviar uma resposta manual." });
+        }
+
+        const contextData = conversation.contextData ?? {};
+        if (conversation.status === "closed" || conversation.guardrailAlert || !conversation.assignedUserId) {
           await storage.updateWhatsappConversation(id, {
             status: "human",
             assignedUserId: req.user!.id,
+            guardrailAlert: false,
+            contextData: {
+              ...contextData,
+              bloqueio_guardrail: false,
+              atendimento_humano_assumido_em: new Date().toISOString(),
+              atendimento_humano_assumido_por: req.user!.id,
+            },
           });
           console.log(
-            `[REATIVAÇÃO] Conversa ${id} reativada (closed → human) pelo atendente ${req.user!.fullName}`,
+            `[ATENDIMENTO HUMANO] Conversa ${id} assumida pelo atendente ${req.user!.fullName}`,
           );
         }
 
@@ -5381,6 +5615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/conversations/:id/send",
     authenticateToken,
+    requireRole(["admin", "secretary"]),
     async (req: AuthenticatedRequest, res) => {
       try {
         const { id } = req.params;
@@ -5402,14 +5637,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .json({ message: "Acesso negado. Faça login novamente." });
         }
 
-        // REATIVAÇÃO PELO ATENDENTE: Se conversa estava encerrada, reativa como 'human'
-        if (conversation.status === "closed") {
+        if (conversation.status !== "human" && conversation.status !== "closed") {
+          return res.status(409).json({ message: "Assuma a conversa antes de enviar uma resposta manual." });
+        }
+
+        const contextDataAlias = conversation.contextData ?? {};
+        if (conversation.status === "closed" || conversation.guardrailAlert || !conversation.assignedUserId) {
           await storage.updateWhatsappConversation(id, {
             status: "human",
             assignedUserId: req.user!.id,
+            guardrailAlert: false,
+            contextData: {
+              ...contextDataAlias,
+              bloqueio_guardrail: false,
+              atendimento_humano_assumido_em: new Date().toISOString(),
+              atendimento_humano_assumido_por: req.user!.id,
+            },
           });
           console.log(
-            `[REATIVAÇÃO] Conversa ${id} reativada (closed → human) pelo atendente ${req.user!.fullName}`,
+            `[ATENDIMENTO HUMANO] Conversa ${id} assumida pelo atendente ${req.user!.fullName}`,
           );
         }
 
@@ -5529,6 +5775,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const patient = await storage.getPatientById(appointment.patientId, clinicRow.id);
           const phone = patient?.phone?.replace(/\D/g, "") || "";
           if (!patient || phone.length < 10) continue;
+          if (await storage.hasHumanWhatsappConversationByPhone(clinicRow.id, phone)) continue;
 
           const dentist = dentistsForClinic.find((user) => user.id === appointment.dentistId);
           const appointmentDate = new Date(appointment.scheduledDate);

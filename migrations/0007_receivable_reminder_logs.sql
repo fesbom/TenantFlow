@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS receivable_reminder_logs (
   actor_user_id varchar REFERENCES users(id) ON DELETE SET NULL,
   phone text NOT NULL,
   message text NOT NULL,
+  status text NOT NULL DEFAULT 'sent',
+  provider_message_id text,
   created_at timestamp NOT NULL DEFAULT now()
 );
 

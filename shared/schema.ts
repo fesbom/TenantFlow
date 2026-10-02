@@ -21,6 +21,7 @@ export const clinics = pgTable("clinics", {
   email: text("email").notNull().unique(),
   phone: text("phone"),
   address: text("address"),
+  paymentInstructions: text("payment_instructions"),
   logoUrl: text("logo_url"),
   // WhatsApp / Evolution API per-clinic config
   evolutionInstanceName: text("evolution_instance_name"),
@@ -293,6 +294,11 @@ export const whatsappConversations = pgTable("whatsapp_conversations", {
   status: text("status").default('ai').notNull(), // 'ai' | 'human' | 'closed'
   instanceName: text("instance_name").notNull().default(""), // Evolution instance (WhatsApp number) this conversation belongs to — "" = número/global padrão
   assignedUserId: varchar("assigned_user_id").references(() => users.id), // Staff member who took over
+  guardrailAlert: boolean("guardrail_alert").default(false).notNull(),
+  guardrailReason: text("guardrail_reason"),
+  guardrailMotive: text("guardrail_motive"),
+  guardrailBlockedAt: timestamp("guardrail_blocked_at"),
+  contextData: jsonb("context_data").$type<Record<string, unknown>>().default({}).notNull(),
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
   lastMessageSender: text("last_message_sender"), // 'patient' | 'ai' | 'staff' — quem enviou a última mensagem
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -390,6 +396,8 @@ export const receivableReminderLogs = pgTable("receivable_reminder_logs", {
   actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
   phone: text("phone").notNull(),
   message: text("message").notNull(),
+  status: text("status").default("sent").notNull(),
+  providerMessageId: text("provider_message_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   index("receivable_reminder_logs_receivable_idx").on(t.receivableId, t.createdAt),

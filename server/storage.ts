@@ -112,6 +112,13 @@ export interface ReceivableListResult {
   };
 }
 
+export interface ReceivableReminderBatch {
+  patient: Pick<Patient, "id" | "fullName" | "phone">;
+  bills: Array<Pick<Receivable,
+    "id" | "descricao" | "valor" | "dataVencimento" | "status" | "numeroParcela" | "totalParcelas"
+  >>;
+}
+
 export interface GenerateReceivablesParams {
   clinicId: string;
   patientId: string;
@@ -264,6 +271,7 @@ export interface IStorage {
   getWhatsappConversationByPhone(clinicId: string, phone: string, instanceName?: string): Promise<WhatsappConversation | undefined>;
   getWhatsappConversationById(id: string): Promise<WhatsappConversation | undefined>;
   updateWhatsappConversation(id: string, updates: Partial<InsertWhatsappConversation>): Promise<WhatsappConversation | undefined>;
+  hasHumanWhatsappConversationByPhone(clinicId: string, phone: string): Promise<boolean>;
   linkUnlinkedConversationsByPhone(clinicId: string, phone: string, patientId: string): Promise<number>;
 
   // WhatsApp message methods
@@ -290,14 +298,17 @@ export interface IStorage {
   generateReceivablesForTreatment(params: GenerateReceivablesParams): Promise<Receivable[]>;
   listReceivables(clinicId: string, requester: ReceivableRequester, filters: ReceivableFilters): Promise<ReceivableListResult>;
   getReceivableById(id: string, clinicId: string): Promise<Receivable | undefined>;
-  createReceivableReminderLog(data: {
+  getReceivableReminderBatch(clinicId: string, receivableId: string): Promise<ReceivableReminderBatch | undefined>;
+  createReceivableReminderLogs(data: Array<{
     clinicId: string;
     receivableId: string;
     patientId: string;
     actorUserId: string;
     phone: string;
     message: string;
-  }): Promise<void>;
+    status: string;
+    providerMessageId: string | null;
+  }>): Promise<void>;
   updateReceivable(id: string, clinicId: string, updates: {
     patientId: string;
     dentistId: string;
@@ -997,23 +1008,21 @@ export class DatabaseStorage implements IStorage {
   async createTreatmentMovement(insertMovement: InsertTreatmentMovement): Promise<TreatmentMovement> {
     const [movement] = await db.insert(treatmentMovements).values(insertMovement).returning();
 
-    // Update patient's last visit date automatically
+    // Keep the patient's contact date aligned with the latest treatment movement.
     try {
-      // Get the treatment to find the patient
       const [treatment] = await db
         .select({ patientId: treatments.patientId })
         .from(treatments)
         .where(eq(treatments.id, insertMovement.treatmentId));
 
       if (treatment) {
-        // Update patient's last visit date to today
         await db
           .update(patients)
-          .set({ lastVisitDate: new Date().toISOString().split('T')[0] }) // YYYY-MM-DD format
+          .set({ lastContactDate: insertMovement.dataMovimentacao })
           .where(eq(patients.id, treatment.patientId));
       }
     } catch (error) {
-      console.error('Error updating patient last visit date:', error);
+      console.error('Error updating patient last contact date:', error);
       // Don't throw - the movement was created successfully
     }
 
@@ -1285,6 +1294,20 @@ export class DatabaseStorage implements IStorage {
     return conversation || undefined;
   }
 
+  async hasHumanWhatsappConversationByPhone(clinicId: string, phone: string): Promise<boolean> {
+    const digitsOnly = phone.replace(/\D/g, "");
+    const [conversation] = await db
+      .select({ id: whatsappConversations.id })
+      .from(whatsappConversations)
+      .where(and(
+        eq(whatsappConversations.clinicId, clinicId),
+        eq(whatsappConversations.status, "human"),
+        sql`REGEXP_REPLACE(${whatsappConversations.phone}, '[^0-9]', '', 'g') = ${digitsOnly}`,
+      ))
+      .limit(1);
+    return !!conversation;
+  }
+
   async linkUnlinkedConversationsByPhone(clinicId: string, phone: string, patientId: string): Promise<number> {
     // Normaliza o telefone para dígitos apenas
     const digitsOnly = phone.replace(/\D/g, '');
@@ -1321,7 +1344,7 @@ export class DatabaseStorage implements IStorage {
       .from(whatsappConversations)
       .where(
         and(
-          sql`${whatsappConversations.status} IN ('ai', 'human')`,
+          eq(whatsappConversations.status, "ai"),
           sql`${whatsappConversations.lastMessageSender} != 'patient'`,
           sql`${whatsappConversations.lastMessageSender} IS NOT NULL`,
           sql`${whatsappConversations.lastMessageAt} < ${cutoffDate}`,
@@ -1661,15 +1684,54 @@ export class DatabaseStorage implements IStorage {
     return receivable || undefined;
   }
 
-  async createReceivableReminderLog(data: {
+  async getReceivableReminderBatch(clinicId: string, receivableId: string): Promise<ReceivableReminderBatch | undefined> {
+    const [trigger] = await db
+      .select({ patientId: receivables.patientId })
+      .from(receivables)
+      .where(and(eq(receivables.id, receivableId), eq(receivables.clinicId, clinicId)));
+    if (!trigger) return undefined;
+
+    const [patient] = await db
+      .select({ id: patients.id, fullName: patients.fullName, phone: patients.phone })
+      .from(patients)
+      .where(and(eq(patients.id, trigger.patientId), eq(patients.clinicId, clinicId)));
+    if (!patient) return undefined;
+
+    const bills = await db
+      .select({
+        id: receivables.id,
+        descricao: receivables.descricao,
+        valor: receivables.valor,
+        dataVencimento: receivables.dataVencimento,
+        status: receivables.status,
+        numeroParcela: receivables.numeroParcela,
+        totalParcelas: receivables.totalParcelas,
+      })
+      .from(receivables)
+      .where(and(
+        eq(receivables.clinicId, clinicId),
+        eq(receivables.patientId, patient.id),
+        eq(receivables.status, "Vencido"),
+      ))
+      .orderBy(asc(receivables.dataVencimento), asc(receivables.numeroParcela));
+
+    return { patient, bills };
+  }
+
+  async createReceivableReminderLogs(data: Array<{
     clinicId: string;
     receivableId: string;
     patientId: string;
     actorUserId: string;
     phone: string;
     message: string;
-  }): Promise<void> {
-    await db.insert(receivableReminderLogs).values(data);
+    status: string;
+    providerMessageId: string | null;
+  }>): Promise<void> {
+    if (data.length === 0) return;
+    await db.transaction(async (transaction) => {
+      await transaction.insert(receivableReminderLogs).values(data);
+    });
   }
 
   async updateReceivable(

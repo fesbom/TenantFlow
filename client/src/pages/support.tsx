@@ -59,12 +59,18 @@ type FilterTab = "all" | "waiting_staff" | "waiting_patient" | "closed";
 type ConversationWithPatient = WhatsappConversation & {
   patientName?: string | null;
   lastMessageSender?: string | null;
+  guardrailAlert: boolean;
+  guardrailReason: string | null;
+  guardrailMotive: string | null;
 };
 
 // ──────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────
 function getConvDerivedStatus(conv: ConversationWithPatient): "waiting_staff" | "waiting_patient" | "closed" {
+  if (conv.guardrailAlert || (conv.status === "human" && !!conv.assignedUserId && conv.lastMessageSender !== "staff")) {
+    return "waiting_staff";
+  }
   if (conv.status === "closed") return "closed";
   if (conv.lastMessageSender === "patient") return "waiting_staff";
   return "waiting_patient";
@@ -395,7 +401,10 @@ export default function Support() {
     const derived = getConvDerivedStatus(conv);
     let content: React.ReactNode;
     let label: string;
-    if (derived === "closed") {
+    if (conv.guardrailAlert) {
+      content = <Badge variant="destructive" className="text-[10px] px-1.5 py-0"><AlertTriangle className="h-2.5 w-2.5" /></Badge>;
+      label = conv.guardrailReason || "Alerta de conteúdo: atendimento humano necessário";
+    } else if (derived === "closed") {
       content = <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-gray-100 text-gray-500"><CheckCircle className="h-2.5 w-2.5" /></Badge>;
       label = "Concluído";
     } else if (derived === "waiting_staff") {
@@ -711,6 +720,13 @@ export default function Support() {
                               </Tooltip>
                             )}
 
+                            {conversation.guardrailMotive && conversation.status === "human" && (
+                              <div className={`mt-1 flex items-start gap-1 rounded-md border px-2 py-1 text-[10px] leading-snug ${conversation.guardrailAlert ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                                <span className="line-clamp-2">{conversation.guardrailReason || "Conteúdo encaminhado para atendimento humano."}</span>
+                              </div>
+                            )}
+
                             <ConvTimeInfo conv={conversation} />
                           </button>
                         );
@@ -807,6 +823,31 @@ export default function Support() {
                         </Tooltip>
                       </div>
                     </div>
+
+                    {selectedConversation?.guardrailMotive && selectedConversation?.status === "human" && (
+                      <div className={`mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs ${selectedConversation.guardrailAlert ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                        <div className="flex min-w-0 items-start gap-2">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <div>
+                            <p className="font-semibold">{selectedConversation.guardrailAlert ? "Alerta de conteúdo · automação bloqueada" : "Motivo do transbordo · atendimento humano"}</p>
+                            <p>{selectedConversation.guardrailReason || "A conversa precisa de atendimento humano."}</p>
+                          </div>
+                        </div>
+                        {selectedConversation.guardrailAlert && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0 border-red-300 bg-white text-red-800 hover:bg-red-100"
+                            onClick={() => takeoverMutation.mutate(selectedConversationId!)}
+                            disabled={takeoverMutation.isPending}
+                            data-testid="button-assume-guardrail-conversation"
+                          >
+                            <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+                            {takeoverMutation.isPending ? "Assumindo..." : "Assumir conversa"}
+                          </Button>
+                        )}
+                      </div>
+                    )}
 
                     {/* Barra de progresso no header do chat ativo */}
                     {selectedConversation && getConvDerivedStatus(selectedConversation as ConversationWithPatient) === "waiting_patient" && (

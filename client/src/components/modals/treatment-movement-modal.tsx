@@ -113,6 +113,7 @@ export default function TreatmentMovementModal({ isOpen, onClose, treatment, mov
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/treatment-movements/treatment", treatment?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/patients"] });
       toast({
         title: "Movimentação adicionada",
         description: "Movimentação do tratamento adicionada com sucesso",

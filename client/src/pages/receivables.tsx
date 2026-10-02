@@ -15,10 +15,11 @@ import { apiRequest } from "@/lib/api";
 import { formatDateBR } from "@/lib/date-formatter";
 import { ReceivableStatus } from "@/types";
 import ReceivableEditModal from "@/components/modals/receivable-edit-modal";
+import ReceivableReminderDialog from "@/components/modals/receivable-reminder-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DollarSign, AlertTriangle, CheckCircle2, HandCoins, Pencil, Layers3, Trash2, Ban, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
-import { buildReceivableReminderMessage, buildWhatsAppReminderUrl, normalizeBrazilianWhatsAppPhone } from "@shared/whatsapp-reminder";
+import { normalizeBrazilianWhatsAppPhone } from "@shared/whatsapp-reminder";
 
 interface ReceivableRow {
   id: string;
@@ -97,6 +98,7 @@ export default function Receivables() {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [editingReceivable, setEditingReceivable] = useState<ReceivableRow | null>(null);
   const [editMode, setEditMode] = useState<"edit" | "installments">("edit");
+  const [reminderReceivableId, setReminderReceivableId] = useState<string | null>(null);
 
   const params = new URLSearchParams();
   if (startDate) params.set("startDate", startDate);
@@ -156,22 +158,6 @@ export default function Receivables() {
     },
   });
 
-  const sendReminderMutation = useMutation({
-    mutationFn: async ({ id, phone }: { id: string; phone: string }) => {
-      await apiRequest("POST", `/api/receivables/${id}/reminder`, { phone });
-    },
-    onSuccess: () => {
-      toast({ title: "WhatsApp aberto", description: "A tentativa de envio do lembrete foi registrada no histórico." });
-    },
-    onError: (error: unknown) => {
-      toast({
-        title: "Lembrete aberto, mas não registrado",
-        description: error instanceof Error ? error.message : "Não foi possível registrar a tentativa no histórico.",
-        variant: "destructive",
-      });
-    },
-  });
-
   const rows = data?.data ?? [];
   const kpis = data?.kpis ?? { totalAReceber: 0, totalRecebido: 0, totalInadimplente: 0 };
   const openReceivableModal = (row: ReceivableRow, mode: "edit" | "installments") => {
@@ -188,23 +174,6 @@ export default function Receivables() {
       updateStatusMutation.mutate({ id: row.id, status: "Cancelado" });
     }
   };
-  const handleSendWhatsAppReminder = (row: ReceivableRow) => {
-    const phone = normalizeBrazilianWhatsAppPhone(row.patientPhone);
-    if (!phone) return;
-
-    const message = buildReceivableReminderMessage({
-      patientName: row.patientName,
-      value: row.valor,
-      dueDate: row.dataVencimento,
-      description: row.descricao,
-      installmentNumber: row.numeroParcela,
-      totalInstallments: row.totalParcelas,
-    });
-    const url = buildWhatsAppReminderUrl(phone, message);
-    window.open(url, "_blank", "noopener,noreferrer");
-    sendReminderMutation.mutate({ id: row.id, phone });
-  };
-
   return (
     <div className="app-container bg-slate-50">
       <Sidebar
@@ -384,15 +353,15 @@ export default function Receivables() {
                           {canManage && (
                             <TableCell>
                               <div className="flex items-center gap-1">
-                                {(row.status === "Pendente" || row.status === "Vencido") && (() => {
+                                {row.status === "Vencido" && (() => {
                                   const hasValidPhone = !!normalizeBrazilianWhatsAppPhone(row.patientPhone);
                                   return (
                                     <Button
                                       variant="ghost"
                                       size="icon"
                                       className="h-8 w-8 text-green-600 hover:text-green-700"
-                                      onClick={() => handleSendWhatsAppReminder(row)}
-                                      disabled={!hasValidPhone || sendReminderMutation.isPending}
+                                      onClick={() => setReminderReceivableId(row.id)}
+                                      disabled={!hasValidPhone}
                                       title={hasValidPhone ? "Enviar lembrete por WhatsApp" : "Paciente sem celular válido para WhatsApp"}
                                       aria-label={hasValidPhone ? "Enviar lembrete por WhatsApp" : "Paciente sem celular válido para WhatsApp"}
                                       data-testid={`button-whatsapp-reminder-${row.id}`}
@@ -492,6 +461,12 @@ export default function Receivables() {
         receivable={editingReceivable}
         onClose={() => setEditingReceivable(null)}
         onSaved={() => queryClient.invalidateQueries({ queryKey: [url] })}
+      />
+      <ReceivableReminderDialog
+        receivableId={reminderReceivableId}
+        open={!!reminderReceivableId}
+        onOpenChange={(open) => { if (!open) setReminderReceivableId(null); }}
+        onSent={() => queryClient.invalidateQueries({ queryKey: [url] })}
       />
     </div>
   );
