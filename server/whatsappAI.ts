@@ -178,15 +178,20 @@ export async function processPatientMessage(
       const promptTokens = Number(response.usageMetadata.promptTokenCount || 0);
       const completionTokens = Number(response.usageMetadata.candidatesTokenCount || 0);
       const totalTokens = Number(response.usageMetadata.totalTokenCount || promptTokens + completionTokens);
-      await pool.query(
-        `INSERT INTO ai_usage_records
-          (clinic_id, source, prompt_tokens, completion_tokens, total_tokens)
-         VALUES ($1, 'whatsapp_gemini', $2, $3, $4)`,
-        [clinicId, promptTokens, completionTokens, totalTokens],
-      );
+      try {
+        await pool.query(
+          `INSERT INTO ai_usage_records
+            (clinic_id, source, prompt_tokens, completion_tokens, total_tokens)
+           VALUES ($1, 'whatsapp_gemini', $2, $3, $4)`,
+          [clinicId, promptTokens, completionTokens, totalTokens],
+        );
+      } catch (usageError) {
+        console.error("[AI Usage Error]:", usageError);
+      }
     }
 
-    const parsed = JSON.parse(response.text || '{}');
+    const rawText = (response.text || '{}').replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+    const parsed = JSON.parse(rawText);
 
     return {
       message: parsed.message || "Como posso ajudar?",
