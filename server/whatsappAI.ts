@@ -2,10 +2,16 @@ import { GoogleGenAI } from "@google/genai";
 import { pool } from "./db";
 
 const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  apiKey:
+    process.env.AI_INTEGRATIONS_GEMINI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    "",
   httpOptions: {
-    apiVersion: process.env.AI_INTEGRATIONS_GEMINI_API_VERSION || "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+    apiVersion:
+      process.env.AI_INTEGRATIONS_GEMINI_API_VERSION ??
+      (process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ? "" : "v1beta"),
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL || undefined,
   },
 });
 

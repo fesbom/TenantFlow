@@ -34,10 +34,16 @@ Responda exclusivamente com JSON válido, sem markdown, com exatamente esta estr
 Use motivo NENHUM quando foraDoEscopo=false. Use POLITICA, RELIGIAO ou OFENSA_PALAVRAO para as categorias correspondentes; OUTRO para assunto claramente fora do escopo que não se encaixe nelas. confianca deve ser número entre 0 e 1.`;
 
 const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
+  apiKey:
+    process.env.AI_INTEGRATIONS_GEMINI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    "",
   httpOptions: {
-    apiVersion: process.env.AI_INTEGRATIONS_GEMINI_API_VERSION || "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+    apiVersion:
+      process.env.AI_INTEGRATIONS_GEMINI_API_VERSION ??
+      (process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ? "" : "v1beta"),
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL || undefined,
   },
 });
 
