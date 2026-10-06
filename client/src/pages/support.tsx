@@ -54,7 +54,7 @@ const CONVERSATIONS_POLL_INTERVAL = 5000;
 const MESSAGES_POLL_INTERVAL = 3000;
 const AUTO_CLOSE_MS = 2 * 60 * 60 * 1000; // 2 horas
 
-type FilterTab = "all" | "waiting_staff" | "waiting_patient" | "closed";
+type FilterTab = "all" | "active" | "waiting_staff" | "waiting_patient" | "closed";
 
 type ConversationWithPatient = WhatsappConversation & {
   patientName?: string | null;
@@ -108,7 +108,7 @@ export default function Support() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkSearch, setLinkSearch] = useState("");
   const [linkSearchDebounced, setLinkSearchDebounced] = useState("");
-  const [filterTab, setFilterTab] = useState<FilterTab>("all");
+  const [filterTab, setFilterTab] = useState<FilterTab>("active");
   const [instanceFilter, setInstanceFilter] = useState<string>("all");
   const [convSearch, setConvSearch] = useState("");
   const [convSearchDebounced, setConvSearchDebounced] = useState("");
@@ -355,6 +355,7 @@ export default function Support() {
         // Sem busca: aplica filtro de tab normalmente
         const derived = getConvDerivedStatus(conv);
         if (filterTab === "all") return true;
+        if (filterTab === "active") return derived === "waiting_staff" || derived === "waiting_patient";
         return derived === filterTab;
       })
       .sort((a, b) => {
@@ -384,6 +385,10 @@ export default function Support() {
     const base = conversations.filter((c) => instanceFilter === "all" || c.instanceName === instanceFilter);
     return {
       all: base.length,
+      active: base.filter((c) => {
+        const d = getConvDerivedStatus(c);
+        return d === "waiting_staff" || d === "waiting_patient";
+      }).length,
       waiting_staff: base.filter((c) => getConvDerivedStatus(c) === "waiting_staff").length,
       waiting_patient: base.filter((c) => getConvDerivedStatus(c) === "waiting_patient").length,
       closed: base.filter((c) => getConvDerivedStatus(c) === "closed").length,
@@ -473,6 +478,7 @@ export default function Support() {
 
   // ── TABS de filtro ────────────────────────────────────────────────────
   const TABS: { key: FilterTab; label: string; shortLabel: string; icon: any; color: string }[] = [
+    { key: "active", label: "Ativas (Aguardando Atendimento + Aguardando Cliente)", shortLabel: "Ativas", icon: MessageSquare, color: "text-primary" },
     { key: "all", label: "Todos", shortLabel: "Todos", icon: MessageSquare, color: "text-gray-600" },
     { key: "waiting_staff", label: "Aguardando Atendimento", shortLabel: "AA", icon: Hourglass, color: "text-red-500" },
     { key: "waiting_patient", label: "Aguardando Cliente", shortLabel: "AC", icon: Clock, color: "text-gray-500" },

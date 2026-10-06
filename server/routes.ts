@@ -68,6 +68,7 @@ import {
 } from "./evolutionService";
 import type { InstanceContext } from "./whatsappAI";
 import { registerAdminRoutes } from "./admin/adminRoutes";
+import { registerSimulatorRoutes } from "./simulator/simulatorRoutes";
 import { recordAccessAudit } from "./admin/adminRepository";
 import {
   buildReceivableBatchReminderMessage,
@@ -106,7 +107,18 @@ function parseWallClockAsFakeUTC(value: Date | string): Date {
 // Resolve a config de envio correta: prioriza a instância do webhook (se informada),
 // depois qualquer instância conectada da clínica (whatsapp_instances),
 // e por último a config legada da clínica.
+// Se a clínica estiver em Modo Simulação, a config volta marcada como `simulated`
+// e o envio à Evolution API é totalmente ignorado (bypass em evolutionService).
 async function resolveSendConfig(
+  clinicId: string,
+  preferredInstanceName?: string,
+): Promise<ClinicEvolutionConfig> {
+  const base = await resolveSendConfigBase(clinicId, preferredInstanceName);
+  const clinic = await storage.getClinicById(clinicId);
+  return { ...base, clinicId, simulated: !!clinic?.simulationMode };
+}
+
+async function resolveSendConfigBase(
   clinicId: string,
   preferredInstanceName?: string,
 ): Promise<ClinicEvolutionConfig> {
@@ -148,6 +160,13 @@ async function resolveConnectedSendConfig(clinicId: string): Promise<ClinicEvolu
     instanceName: instance.instanceName,
   }));
   const clinic = await storage.getClinicById(clinicId);
+
+  // Modo Simulação: não consulta o estado de conexão na Evolution API (bypass total).
+  if (clinic?.simulationMode) {
+    const first = candidates[0] ?? buildClinicConfig(clinic);
+    return { ...first, clinicId, simulated: true };
+  }
+
   candidates.push(clinic ? buildClinicConfig(clinic) : globalConfig());
 
   const uniqueCandidates = candidates.filter((candidate, index, all) =>
@@ -165,6 +184,23 @@ async function resolveConnectedSendConfig(clinicId: string): Promise<ClinicEvolu
 export async function registerRoutes(app: Express): Promise<Server> {
   // Mantém instalações existentes compatíveis antes de consultar o novo campo.
   await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS payment_instructions text`);
+  // Simulador de WhatsApp (ver migrations/0011_whatsapp_simulator.sql)
+  await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS simulation_mode boolean NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS simulation_updated_at timestamp`);
+  await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS simulation_updated_by varchar`);
+  await db.execute(sql`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS is_simulated boolean NOT NULL DEFAULT false`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS simulation_contacts (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      clinic_id varchar NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+      patient_id varchar REFERENCES patients(id) ON DELETE SET NULL,
+      name text,
+      phone text NOT NULL,
+      created_by varchar REFERENCES users(id) ON DELETE SET NULL,
+      created_at timestamp NOT NULL DEFAULT now(),
+      CONSTRAINT uq_simulation_contacts_clinic_phone UNIQUE (clinic_id, phone)
+    )
+  `);
   await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS guardrail_alert boolean NOT NULL DEFAULT false`);
   await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS guardrail_reason text`);
   await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS guardrail_motive text`);
@@ -3695,15 +3731,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================
   // WEBHOOK EVOLUTION API - ROTA COMPLETA (PRODUÇÃO)
   // ============================================================
-  app.post("/webhook/evolution", (req, res) => {
-    // RESPOSTA IMEDIATA - Evita timeout do Railway e retentativas da Evolution
-    res.status(200).send("OK");
-
-    // PROCESSAMENTO ASSÍNCRONO
-    (async () => {
+  // Pipeline único de processamento de mensagens recebidas. É chamado pela rota pública
+  // `/webhook/evolution` (payload real) e pelo Simulador de WhatsApp (payload sintético,
+  // `simulated = true`), garantindo que ambos executem exatamente o mesmo fluxo.
+  const processEvolutionWebhook = async (data: any, simulated = false): Promise<void> => {
+    await (async () => {
       try {
-        const data = req.body;
-
         if (!data) return;
 
         // ── CONNECTION_UPDATE: atualiza connectedPhone no banco ──
@@ -3917,6 +3950,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clinic = await storage.getClinicById(clinicId);
         if (!clinic) return;
 
+        // Mensagens do simulador só são aceitas com o Modo Simulação ativo; caso contrário
+        // as respostas seriam enviadas de verdade (sem bypass) para um número fictício.
+        if (simulated && !clinic.simulationMode) {
+          console.warn(`[SIMULADOR] Clínica ${clinicId} sem Modo Simulação ativo — mensagem descartada`);
+          return;
+        }
+
         // Buscar paciente pelo telefone e conversa existente
         const patientByPhone = await storage.getPatientByPhone(
           clinicId,
@@ -3997,6 +4037,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             direction: "inbound",
             text: messageText,
             externalMessageId: evolutionMessageId,
+            isSimulated: simulated,
           });
         } catch (err: any) {
           if (err.code === "23505") return;
@@ -4239,9 +4280,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (dentist) {
                 // Duração dinâmica: usa o padrão do dentista ou 60min como fallback
                 const dentistDuration = dentist.defaultAppointmentDuration || 60;
-                const requestedDate = new Date(`${date}T${time}:00`);
+                const requestedDate = parseWallClockAsFakeUTC(`${date}T${time}:00`);
                 const requestedEndMs = requestedDate.getTime() + dentistDuration * 60 * 1000;
-                const dayStart = new Date(`${date}T00:00:00`);
+                const dayStart = parseWallClockAsFakeUTC(`${date}T00:00:00`);
                 const requestedTimeStr = time.substring(0, 5);
 
                 // Helper: converte YYYY-MM-DD → DD/MM/YYYY para exibição ao paciente
@@ -4261,8 +4302,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   console.log(`[AGENDA] Data ${date} é feriado/recesso (${holidayRecord.name}) — bloqueando agendamento`);
                   const slotsNextDay: string[] = [];
                   for (let d = 1; d <= 5; d++) {
-                    const next = new Date(`${date}T00:00:00`);
-                    next.setDate(next.getDate() + d);
+                    const next = parseWallClockAsFakeUTC(`${date}T00:00:00`);
+                    next.setUTCDate(next.getUTCDate() + d);
                     const nextStr = next.toISOString().slice(0, 10);
                     const isNextHoliday = await storage.isHoliday(clinicId, nextStr);
                     if (!isNextHoliday) {
@@ -4286,7 +4327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 // ── VALIDAÇÃO 2: Verificar se o horário está na grade do dentista ──
                 const scheduleForDay = await storage.getDentistSchedules(clinicId, dentist.id);
-                const weekday = requestedDate.getDay(); // 0=Dom ... 6=Sab
+                const weekday = requestedDate.getUTCDay(); // 0=Dom ... 6=Sab
                 const activePeriodsForDay = scheduleForDay.filter((s) => s.weekday === weekday && s.isActive);
 
                 let isOutsideSchedule = false;
@@ -4303,7 +4344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 if (isOutsideSchedule) {
                   console.log(`[AGENDA] Horário ${requestedTimeStr} fora da grade do dentista ${dentist.fullName} na ${["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][weekday]}`);
-                  const slotsOnDay = await storage.getAvailableSlotsForDate(clinicId, dentist.id, new Date(`${date}T00:00:00`));
+                  const slotsOnDay = await storage.getAvailableSlotsForDate(clinicId, dentist.id, parseWallClockAsFakeUTC(`${date}T00:00:00`));
                   const suggestions = slotsOnDay.slice(0, 3).map((s) => `${toDateBR(date)} às ${s}`).join(", ");
                   if (suggestions) {
                     aiResponse.message = `Olá ${displayName}! O ${dentist.fullName} não atende às ${requestedTimeStr} no dia ${toDateBR(date)}. Horários disponíveis: ${suggestions}. Algum deles te atende?`;
@@ -4314,7 +4355,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   aiResponse.extractedIntent.intent = "conversar";
                 } else {
 
-                const appointments = await storage.getAppointmentsByDate(clinicId, dayStart);
+                const appointments = await storage.getAppointmentsByWallClockDate(clinicId, dayStart);
 
                 // Verificação de sobreposição com duração (não apenas hora exata)
                 const isBusy = appointments.some((app) => {
@@ -4343,7 +4384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     // PRIMEIRO CONFLITO: Sugerir horários alternativos
                     console.log(`[CONFLITO] Primeiro conflito detectado para ${dentist.fullName} em ${date} às ${time}. Buscando slots livres...`);
 
-                    const requestedDay = new Date(`${date}T00:00:00`);
+                    const requestedDay = parseWallClockAsFakeUTC(`${date}T00:00:00`);
                     let availableSlots = await storage.getAvailableSlotsForDate(clinicId, dentist.id, requestedDay);
 
                     // Remover o horário conflitante da lista de sugestões
@@ -4354,7 +4395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     if (availableSlots.length < 3) {
                       // Buscar no dia seguinte também
                       const nextDay = new Date(requestedDay);
-                      nextDay.setDate(nextDay.getDate() + 1);
+                      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
                       const nextDateStr = nextDay.toISOString().split("T")[0];
                       const nextDaySlots = await storage.getAvailableSlotsForDate(clinicId, dentist.id, nextDay);
                       const combined = availableSlots.map((s) => `${toDateBR(date)} às ${s}`).concat(nextDaySlots.map((s) => `${toDateBR(nextDateStr)} às ${s}`));
@@ -4450,6 +4491,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error(`[WEBHOOK ERROR]: ${error.message}`);
       }
     })();
+  };
+
+  app.post("/webhook/evolution", (req, res) => {
+    // RESPOSTA IMEDIATA - Evita timeout do Railway e retentativas da Evolution
+    res.status(200).send("OK");
+
+    // PROCESSAMENTO ASSÍNCRONO
+    void processEvolutionWebhook(req.body);
+  });
+
+  registerSimulatorRoutes(app, {
+    processSimulatedInbound: (payload) => processEvolutionWebhook(payload, true),
   });
 
   // ─── WhatsApp per-clinic API ────────────────────────────────────────────────

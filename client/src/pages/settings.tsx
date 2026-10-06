@@ -196,6 +196,29 @@ export default function SettingsPage() {
     refetchInterval: 20000,
   });
 
+  // Simulation mode status (clinic admin can only turn it off)
+  const { data: simulationStatus } = useQuery<{ simulationMode: boolean; updatedAt: string | null; updatedByName: string | null }>({
+    queryKey: ["/api/whatsapp/simulation"],
+    enabled: currentUser?.role === "admin",
+    refetchInterval: 15000,
+    staleTime: 0,
+  });
+
+  const disableSimulationMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/whatsapp/simulation");
+      if (!res.ok) throw new Error("Erro ao desativar o Modo Simulação");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp/simulation"] });
+      toast({ title: "Modo Simulação desativado", description: "As mensagens voltam a ser enviadas pela Evolution API." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    },
+  });
+
   // Create instance mutation
   const createInstanceMutation = useMutation({
     mutationFn: async (data: typeof instanceForm) => {
@@ -913,6 +936,26 @@ export default function SettingsPage() {
                   )}
                 </CardContent>
               </Card>
+              {currentUser?.role === "admin" && simulationStatus?.simulationMode && (
+                <Card className="border-amber-300 bg-amber-50">
+                  <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
+                    <div>
+                      <p className="font-semibold text-amber-900">⚠️ MODO SIMULAÇÃO ATIVO</p>
+                      <p className="text-sm text-amber-800">
+                        Ambiente de teste: as mensagens da clínica não são enviadas pela Evolution API e ficam marcadas como simuladas.
+                        {simulationStatus.updatedByName ? ` Ativado por ${simulationStatus.updatedByName}.` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => disableSimulationMutation.mutate()}
+                      disabled={disableSimulationMutation.isPending}
+                    >
+                      Desativar Modo Simulação
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
               {/* ── WhatsApp Multi-Instance ── */}
               <Card>
                 <CardHeader>

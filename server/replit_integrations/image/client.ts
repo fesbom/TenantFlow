@@ -4,7 +4,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 export const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
   httpOptions: {
-    apiVersion: "",
+    apiVersion: process.env.AI_INTEGRATIONS_GEMINI_API_VERSION || "",
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
@@ -34,4 +34,3 @@ export async function generateImage(prompt: string): Promise<string> {
   const mimeType = imagePart.inlineData.mimeType || "image/png";
   return `data:${mimeType};base64,${imagePart.inlineData.data}`;
 }
-

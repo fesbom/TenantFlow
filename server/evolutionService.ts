@@ -1,4 +1,5 @@
 import axios from "axios";
+import { randomUUID } from "crypto";
 
 export function sanitizeUrl(url: string | undefined): string {
   if (!url) return "";
@@ -44,16 +45,24 @@ export interface ClinicEvolutionConfig {
   evoUrl: string;
   evoKey: string;
   instanceName: string;
+  // Preenchido por quem resolve a config: quando true, o envio é totalmente simulado
+  // (nenhuma chamada HTTP à Evolution API) e a mensagem é apenas persistida pelo chamador.
+  simulated?: boolean;
+  clinicId?: string;
 }
 
 export function buildClinicConfig(clinic: {
+  id?: string;
   evolutionInstanceName?: string | null;
   evolutionApiKey?: string | null;
+  simulationMode?: boolean | null;
 }): ClinicEvolutionConfig {
   return {
     evoUrl: GLOBAL_EVO_URL,
     evoKey: (clinic.evolutionApiKey || GLOBAL_EVO_KEY).trim(),
     instanceName: (clinic.evolutionInstanceName || GLOBAL_EVO_INSTANCE).trim(),
+    clinicId: clinic.id,
+    simulated: !!clinic.simulationMode,
   };
 }
 
@@ -71,6 +80,12 @@ export interface EvolutionSendResult {
   messageId?: string;
   status?: string;
   error?: string;
+  simulated?: boolean;
+}
+
+function simulatedSendResult(config: ClinicEvolutionConfig, phone: string, kind: string): EvolutionSendResult {
+  console.log(`🧪 [Simulação] ${kind} para ${phone} NÃO enviado à Evolution API (clínica ${config.clinicId ?? "?"}).`);
+  return { success: true, simulated: true, status: "simulated", messageId: `sim-out-${randomUUID()}` };
 }
 
 export interface EvolutionInstanceResult {
@@ -123,6 +138,7 @@ export async function sendEvolutionMessageForClinic(
   phone: string,
   text: string,
 ): Promise<EvolutionSendResult> {
+  if (config.simulated) return simulatedSendResult(config, phone, "Mensagem");
   if (!config.evoUrl || !config.evoKey || !config.instanceName) {
     return { success: false, error: "Evolution API não configurada para esta clínica" };
   }
@@ -157,6 +173,7 @@ export async function sendEvolutionButtonsForClinic(
   phone: string,
   content: { title: string; description: string; footer?: string; buttons: EvolutionReplyButton[] },
 ): Promise<EvolutionSendResult> {
+  if (config.simulated) return simulatedSendResult(config, phone, "Botões");
   if (!config.evoUrl || !config.evoKey || !config.instanceName) {
     return { success: false, error: "Evolution API não configurada para esta clínica" };
   }
@@ -485,6 +502,7 @@ export function isEvolutionConfigured(): boolean {
 }
 
 export function isClinicEvolutionConfigured(config: ClinicEvolutionConfig): boolean {
+  if (config.simulated) return !!config.instanceName;
   return !!(config.evoUrl && config.evoKey && config.instanceName);
 }
 

@@ -29,6 +29,10 @@ export const clinics = pgTable("clinics", {
   evolutionConnectedPhone: text("evolution_connected_phone"),
   // Nota Fiscal — campos habilitados para cópia rápida (JSON array of field keys)
   invoiceFields: text("invoice_fields"),
+  // Modo Simulação do WhatsApp: quando ativo, nenhuma chamada HTTP é feita à Evolution API
+  simulationMode: boolean("simulation_mode").default(false).notNull(),
+  simulationUpdatedAt: timestamp("simulation_updated_at"),
+  simulationUpdatedBy: varchar("simulation_updated_by"),
   status: text("status").default("active").notNull(), // active | suspended
   suspendedAt: timestamp("suspended_at"),
   suspendedBy: varchar("suspended_by"),
@@ -313,8 +317,20 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   text: text("text").notNull(),
   extractedIntent: text("extracted_intent"), // JSON with intent data from Gemini
   externalMessageId: text("external_message_id").unique(), // Evolution API message ID (UNIQUE para idempotência)
+  isSimulated: boolean("is_simulated").default(false).notNull(), // true = trocada no Simulador de WhatsApp (nunca saiu para a Evolution API)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Contatos externos usados no Simulador de WhatsApp (paciente existente ou número avulso)
+export const simulationContacts = pgTable("simulation_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id, { onDelete: "cascade" }),
+  patientId: varchar("patient_id").references(() => patients.id, { onDelete: "set null" }),
+  name: text("name"),
+  phone: text("phone").notNull(), // somente dígitos, com DDI
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [unique("uq_simulation_contacts_clinic_phone").on(t.clinicId, t.phone)]);
 
 // WhatsApp Instances - multiple phone numbers per clinic
 export const whatsappInstances = pgTable("whatsapp_instances", {
@@ -620,6 +636,9 @@ export const insertClinicSchema = createInsertSchema(clinics).omit({
   suspendedAt: true,
   suspendedBy: true,
   suspensionReason: true,
+  simulationMode: true,
+  simulationUpdatedAt: true,
+  simulationUpdatedBy: true,
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -704,6 +723,11 @@ export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages).
   createdAt: true,
 });
 
+export const insertSimulationContactSchema = createInsertSchema(simulationContacts).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertDentistScheduleSchema = createInsertSchema(dentistSchedules).omit({
   id: true,
 });
@@ -781,6 +805,9 @@ export type InsertWhatsappConversation = z.infer<typeof insertWhatsappConversati
 
 export type WhatsappMessage = typeof whatsappMessages.$inferSelect;
 export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
+
+export type SimulationContact = typeof simulationContacts.$inferSelect;
+export type InsertSimulationContact = z.infer<typeof insertSimulationContactSchema>;
 
 // Availability types
 export type DentistSchedule = typeof dentistSchedules.$inferSelect;

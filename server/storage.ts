@@ -17,6 +17,7 @@ import {
   whatsappMessages,
   whatsappInstances,
   whatsappInstanceDentists,
+  simulationContacts,
   dentistSchedules,
   clinicHolidays,
   receivables,
@@ -54,6 +55,8 @@ import {
   type WhatsappConversation,
   type InsertWhatsappConversation,
   type WhatsappMessage,
+  type SimulationContact,
+  type InsertSimulationContact,
   type InsertWhatsappMessage,
   type DentistSchedule,
   type InsertDentistSchedule,
@@ -66,6 +69,19 @@ import {
 
 import { db, pool } from "./db";
 import { eq, and, desc, asc, gte, lte, count, sum, sql, isNotNull, isNull, or, ilike, inArray } from "drizzle-orm";
+
+// Telefones BR podem estar salvos com ou sem o DDI 55: DDD+número tem 10/11 dígitos; com 55, 12/13.
+function phoneVariants(phone: string): string[] {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return [""];
+  const variants = new Set<string>([digits]);
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) {
+    variants.add(digits.slice(2));
+  } else if (digits.length === 10 || digits.length === 11) {
+    variants.add(`55${digits}`);
+  }
+  return Array.from(variants);
+}
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -176,6 +192,7 @@ export interface IStorage {
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
   getAppointmentsByClinic(clinicId: string): Promise<Appointment[]>;
   getAppointmentsByDate(clinicId: string, date: Date): Promise<Appointment[]>;
+  getAppointmentsByWallClockDate(clinicId: string, date: Date): Promise<Appointment[]>;
   getAvailableSlots(clinicId: string, dentistId: string, date: Date): Promise<string[]>;
   getAppointmentById(id: string, clinicId: string): Promise<Appointment | undefined>;
   updateAppointment(id: string, updates: Partial<InsertAppointment>, clinicId: string): Promise<Appointment | undefined>;
@@ -278,6 +295,11 @@ export interface IStorage {
   createWhatsappMessage(message: InsertWhatsappMessage): Promise<WhatsappMessage>;
   getWhatsappMessageByExternalId(externalMessageId: string): Promise<WhatsappMessage | undefined>;
   getWhatsappMessagesByConversation(conversationId: string): Promise<WhatsappMessage[]>;
+  setClinicSimulationMode(clinicId: string, enabled: boolean, userId: string): Promise<Clinic | undefined>;
+  getSimulationContactsByClinic(clinicId: string): Promise<SimulationContact[]>;
+  getSimulationContactById(id: string, clinicId: string): Promise<SimulationContact | undefined>;
+  getSimulationContactByPhone(clinicId: string, phone: string): Promise<SimulationContact | undefined>;
+  createSimulationContact(data: InsertSimulationContact): Promise<SimulationContact>;
   getConversationsForAutoClose(cutoffDate: Date): Promise<WhatsappConversation[]>;
 
   // Dentist schedule methods
@@ -453,16 +475,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPatientByPhone(clinicId: string, phone: string): Promise<Patient | undefined> {
-    const normalizedPhone = phone.replace(/\D/g, "");
     const [patient] = await db
       .select()
       .from(patients)
       .where(
         and(
           eq(patients.clinicId, clinicId),
-          sql`REGEXP_REPLACE(${patients.phone}, '[^0-9]', '', 'g') = ${normalizedPhone}`
+          inArray(sql`REGEXP_REPLACE(${patients.phone}, '[^0-9]', '', 'g')`, phoneVariants(phone))
         )
-      );
+      )
+      .limit(1);
     return patient || undefined;
   }
 
@@ -550,6 +572,25 @@ export class DatabaseStorage implements IStorage {
 
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
+
+    return await db
+      .select()
+      .from(appointments)
+      .where(and(
+        eq(appointments.clinicId, clinicId),
+        gte(appointments.scheduledDate, startOfDay),
+        lte(appointments.scheduledDate, endOfDay)
+      ))
+      .orderBy(appointments.scheduledDate);
+  }
+
+  // Agendamentos são gravados como "relógio em UTC": o dia é delimitado pelos campos UTC.
+  async getAppointmentsByWallClockDate(clinicId: string, date: Date): Promise<Appointment[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(date);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     return await db
       .select()
@@ -1270,10 +1311,12 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(whatsappConversations.clinicId, clinicId),
-          eq(whatsappConversations.phone, phone),
+          inArray(whatsappConversations.phone, phoneVariants(phone)),
           eq(whatsappConversations.instanceName, instanceName)
         )
-      );
+      )
+      .orderBy(desc(whatsappConversations.lastMessageAt))
+      .limit(1);
     return conversation || undefined;
   }
 
@@ -1327,7 +1370,21 @@ export class DatabaseStorage implements IStorage {
 
   // WhatsApp message methods
   async createWhatsappMessage(insertMessage: InsertWhatsappMessage): Promise<WhatsappMessage> {
-    const [message] = await db.insert(whatsappMessages).values(insertMessage).returning();
+    // Rastreabilidade: mensagens de saída geradas com o Modo Simulação da clínica ativo
+    // nunca chegam à Evolution API e por isso são sempre marcadas como simuladas.
+    let isSimulated = insertMessage.isSimulated;
+    if (isSimulated === undefined) {
+      isSimulated = false;
+      if (insertMessage.direction === "outbound") {
+        const [row] = await db
+          .select({ simulationMode: clinics.simulationMode })
+          .from(whatsappConversations)
+          .innerJoin(clinics, eq(clinics.id, whatsappConversations.clinicId))
+          .where(eq(whatsappConversations.id, insertMessage.conversationId));
+        isSimulated = !!row?.simulationMode;
+      }
+    }
+    const [message] = await db.insert(whatsappMessages).values({ ...insertMessage, isSimulated }).returning();
     await db
       .update(whatsappConversations)
       .set({
@@ -1367,6 +1424,44 @@ export class DatabaseStorage implements IStorage {
       .from(whatsappMessages)
       .where(eq(whatsappMessages.conversationId, conversationId))
       .orderBy(whatsappMessages.createdAt);
+  }
+
+  async setClinicSimulationMode(clinicId: string, enabled: boolean, userId: string): Promise<Clinic | undefined> {
+    const [clinic] = await db
+      .update(clinics)
+      .set({ simulationMode: enabled, simulationUpdatedAt: new Date(), simulationUpdatedBy: userId })
+      .where(eq(clinics.id, clinicId))
+      .returning();
+    return clinic || undefined;
+  }
+
+  async getSimulationContactsByClinic(clinicId: string): Promise<SimulationContact[]> {
+    return await db
+      .select()
+      .from(simulationContacts)
+      .where(eq(simulationContacts.clinicId, clinicId))
+      .orderBy(desc(simulationContacts.createdAt));
+  }
+
+  async getSimulationContactById(id: string, clinicId: string): Promise<SimulationContact | undefined> {
+    const [contact] = await db
+      .select()
+      .from(simulationContacts)
+      .where(and(eq(simulationContacts.id, id), eq(simulationContacts.clinicId, clinicId)));
+    return contact || undefined;
+  }
+
+  async getSimulationContactByPhone(clinicId: string, phone: string): Promise<SimulationContact | undefined> {
+    const [contact] = await db
+      .select()
+      .from(simulationContacts)
+      .where(and(eq(simulationContacts.clinicId, clinicId), eq(simulationContacts.phone, phone)));
+    return contact || undefined;
+  }
+
+  async createSimulationContact(data: InsertSimulationContact): Promise<SimulationContact> {
+    const [contact] = await db.insert(simulationContacts).values(data).returning();
+    return contact;
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1469,7 +1564,7 @@ export class DatabaseStorage implements IStorage {
     if (await this.isHoliday(clinicId, dateStr)) return [];
 
     // 2. Get dentist schedule for this weekday (0=Sun ... 6=Sat)
-    const weekday = date.getDay();
+    const weekday = date.getUTCDay();
     const schedules = await this.getDentistSchedules(clinicId, dentistId);
     const activePeriods = schedules.filter((s) => s.weekday === weekday && s.isActive);
 
@@ -1494,9 +1589,9 @@ export class DatabaseStorage implements IStorage {
 
     // 4. Filter booked ranges
     const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     const dayAppointments = await db
       .select()
@@ -1519,7 +1614,7 @@ export class DatabaseStorage implements IStorage {
     return slots.filter((slot) => {
       const [h, m] = slot.split(":").map(Number);
       const slotDate = new Date(date);
-      slotDate.setHours(h, m, 0, 0);
+      slotDate.setUTCHours(h, m, 0, 0);
       const slotMs = slotDate.getTime();
       return !bookedRanges.some(({ startMs, endMs }) => slotMs >= startMs && slotMs < endMs);
     });

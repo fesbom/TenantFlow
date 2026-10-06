@@ -4,7 +4,7 @@ import { pool } from "./db";
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
   httpOptions: {
-    apiVersion: "",
+    apiVersion: process.env.AI_INTEGRATIONS_GEMINI_API_VERSION || "",
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
@@ -169,7 +169,7 @@ export async function processPatientMessage(
     const fullPrompt = `${systemPrompt}\n\n${currentDateInfo}\n\nHistórico:\n${historyContent}\n\nPaciente: ${patientMessage}\n\nResponda APENAS JSON:`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: process.env.AI_INTEGRATIONS_GEMINI_MODEL || "gemini-3.8-flash",
       contents: fullPrompt,
       config: { responseMimeType: "application/json" },
     });

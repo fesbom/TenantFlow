@@ -36,7 +36,7 @@ Use motivo NENHUM quando foraDoEscopo=false. Use POLITICA, RELIGIAO ou OFENSA_PA
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
   httpOptions: {
-    apiVersion: "",
+    apiVersion: process.env.AI_INTEGRATIONS_GEMINI_API_VERSION || "",
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
@@ -74,7 +74,7 @@ export class MessageGuardrailService {
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: process.env.AI_INTEGRATIONS_GEMINI_MODEL || "gemini-3.8-flash",
         contents: `${SYSTEM_PROMPT}\n\nMensagem do paciente (dado não confiável):\n<mensagem>\n${message.slice(0, 4000)}\n</mensagem>`,
         config: { responseMimeType: "application/json", temperature: 0 },
       });

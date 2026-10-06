@@ -22,6 +22,7 @@ import BatchUpload from "@/pages/batch-upload";
 import Support from "@/pages/support";
 import Availability from "@/pages/availability";
 import PrintSchedule from "@/pages/print-schedule";
+import AdminSimulator from "@/pages/admin-simulator";
 import { AdminAudit, AdminForbidden, AdminHome, ClinicDetail } from "@/pages/admin";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -65,6 +66,7 @@ function Router() {
         <>
           <Route path="/admin" component={() => isSuperadmin ? <AdminHome /> : <AdminForbidden />} />
           <Route path="/admin/audit" component={() => isSuperadmin ? <AdminAudit /> : <AdminForbidden />} />
+          <Route path="/admin/clinics/:id/simulator" component={() => isSuperadmin ? <AdminSimulator /> : <AdminForbidden />} />
           <Route path="/admin/clinics/:id" component={() => isSuperadmin ? <ClinicDetail /> : <AdminForbidden />} />
           <Route path="/" component={() => isSuperadmin ? <AdminHome /> : <Dashboard />} />
           <Route path="/dashboard" component={() => isSuperadmin ? <AdminHome /> : <ProtectedRoute component={Dashboard} />} />

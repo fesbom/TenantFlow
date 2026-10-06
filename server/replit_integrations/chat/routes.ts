@@ -11,7 +11,7 @@ Usage: Include httpOptions with baseUrl and empty apiVersion when using AI Integ
 const ai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
   httpOptions: {
-    apiVersion: "",
+    apiVersion: process.env.AI_INTEGRATIONS_GEMINI_API_VERSION || "",
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
   },
 });
@@ -91,7 +91,7 @@ export function registerChatRoutes(app: Express): void {
 
       // Stream response from Gemini
       const stream = await ai.models.generateContentStream({
-        model: "gemini-2.5-flash",
+        model: process.env.AI_INTEGRATIONS_GEMINI_MODEL || "gemini-3.8-flash",
         contents: chatMessages,
       });
 
@@ -122,4 +122,3 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 }
-
