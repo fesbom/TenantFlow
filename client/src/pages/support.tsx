@@ -45,6 +45,7 @@ import {
   WifiOff,
   Maximize2,
   Minimize2,
+  Trash2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -115,6 +116,7 @@ export default function Support() {
   const [, setTick] = useState(0); // força re-render para timers ao vivo
   const [flashedIds, setFlashedIds] = useState<Set<string>>(new Set());
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -271,6 +273,21 @@ export default function Support() {
     onError: () => {
       setShowCloseConfirm(false);
       toast({ title: "Erro ao encerrar conversa", variant: "destructive" });
+    },
+  });
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: async (conversationId: string) =>
+      apiRequest("DELETE", `/api/conversations/${conversationId}`),
+    onSuccess: () => {
+      setShowDeleteConfirm(false);
+      setSelectedConversationId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({ title: "Conversa excluída com sucesso" });
+    },
+    onError: () => {
+      setShowDeleteConfirm(false);
+      toast({ title: "Erro ao excluir conversa", variant: "destructive" });
     },
   });
 
@@ -821,6 +838,21 @@ export default function Support() {
                         )}
                         <Tooltip>
                           <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-400"
+                              onClick={() => setShowDeleteConfirm(true)}
+                              disabled={deleteConversationMutation.isPending}
+                              data-testid="button-delete-conversation"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Excluir conversa</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/conversations"] }); queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId, "messages"] }); }} data-testid="button-refresh">
                               <RefreshCw className="h-3.5 w-3.5" />
                             </Button>
@@ -1025,6 +1057,27 @@ export default function Support() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A conversa e todas as mensagens serão removidas permanentemente. O paciente não será avisado. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteConversationMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedConversationId && deleteConversationMutation.mutate(selectedConversationId)}
+              disabled={deleteConversationMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleteConversationMutation.isPending ? "Excluindo..." : "Sim, excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Diálogo de confirmação de encerramento */}
       <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>

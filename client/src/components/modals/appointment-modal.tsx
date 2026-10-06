@@ -270,10 +270,12 @@ export default function AppointmentModal({
       if (result.status) setFormData((previous) => ({ ...previous, status: result.status }));
       setRefusalReason("");
       const message = variables.action === "send_confirmation"
-        ? "Solicitação aceita pela Evolution; aguardando confirmação de entrega."
+        ? result.simulated
+          ? "Confirmação enviada ao simulador de WhatsApp; responda por lá para testar o agendamento."
+          : "Solicitação aceita pela Evolution; aguardando confirmação de entrega."
         : variables.action === "accept"
           ? "Aceite registrado manualmente."
-          : "Recusa e motivo registrados manualmente.";
+          : "Recusa registrada manualmente.";
       toast({ title: "Ação registrada", description: message });
     },
     onError: (error: unknown, variables: { action: "send_confirmation" | "accept" | "refuse"; reason?: string }) => {
@@ -292,15 +294,11 @@ export default function AppointmentModal({
 
   const handleManualRefusal = () => {
     const reason = refusalReason.trim();
-    if (!reason) {
-      toast({ title: "Motivo obrigatório", description: "Informe o motivo da recusa.", variant: "destructive" });
-      return;
-    }
-    confirmationActionMutation.mutate({ action: "refuse", reason });
+    confirmationActionMutation.mutate({ action: "refuse", ...(reason ? { reason } : {}) });
   };
 
   const historyActionLabel: Record<string, string> = {
-    confirmation_sent: "Solicitação enviada à Evolution",
+    confirmation_sent: "Confirmação enviada",
     confirmation_warning_sent: "Último aviso enviado",
     confirmation_failed: "Falha no envio da confirmação",
     accepted: "Agendamento aceito",
@@ -315,6 +313,7 @@ export default function AppointmentModal({
     manual: "Manual",
   };
   const deliveryStatusLabel: Record<string, string> = {
+    simulated: "Disponível no simulador de WhatsApp",
     accepted: "Aceita pela Evolution; aguardando ACK de entrega",
     pending: "Pendente de entrega",
     server_ack: "Recebida pelo servidor WhatsApp",
@@ -560,9 +559,9 @@ export default function AppointmentModal({
                   <Textarea
                     value={refusalReason}
                     onChange={(event) => setRefusalReason(event.target.value)}
-                    placeholder="Motivo da recusa"
+                    placeholder="Motivo da recusa (opcional)"
                     rows={2}
-                    aria-label="Motivo da recusa manual"
+                    aria-label="Motivo da recusa manual (opcional)"
                   />
                   <Button
                     type="button"

@@ -1483,6 +1483,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: "Confirmação enviada antes do início do histórico detalhado; conteúdo indisponível.",
             actorUserId: null,
             actorName: null,
+            providerMessageId: null,
+            deliveryStatus: null,
             createdAt: appointment.confirmationSentAt,
           });
           history.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
@@ -1531,13 +1533,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (action === "refuse") {
           const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
-          if (!reason) return res.status(400).json({ message: "Informe o motivo da recusa." });
           await storage.updateAppointment(appointment.id, { status: "cancelled" }, req.user!.clinicId);
           await storage.createAppointmentConfirmationLog({
             ...actor,
             action: "refused",
-            reason,
-            message: "Recusa registrada manualmente pela equipe.",
+            reason: reason || null,
+            message: reason
+              ? "Recusa registrada manualmente pela equipe."
+              : "Recusa registrada manualmente pela equipe, sem motivo informado.",
           });
           return res.json({ success: true, status: "cancelled" });
         }
@@ -1550,7 +1553,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const dateText = appointmentDate.toLocaleDateString("pt-BR", { timeZone: "UTC" });
           const timeText = appointmentDate.toLocaleTimeString("pt-BR", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" });
           const message = `Olá, ${patient.fullName.split(" ")[0]}. Confirmação de consulta em ${dateText} às ${timeText} com ${dentist?.fullName || "o dentista"}. O paciente pode tocar em Confirmar ou Desmarcar.`;
-          const sendConfig = await resolveConnectedSendConfig(req.user!.clinicId);
+          const clinic = await storage.getClinicById(req.user!.clinicId);
+          let sendConfig: ClinicEvolutionConfig | null;
+          if (clinic?.simulationMode) {
+            const dentistInstance = (await storage.getWhatsappInstancesWithDentists(req.user!.clinicId))
+              .find((instance) => instance.dentistIds.includes(appointment.dentistId));
+            if (!dentistInstance) {
+              return res.status(409).json({
+                message: "Vincule o dentista a uma instância do WhatsApp para testar a confirmação no simulador administrativo.",
+              });
+            }
+            sendConfig = {
+              evoUrl: sanitizeUrl(process.env.EVO_URL || ""),
+              evoKey: (dentistInstance.apiKey || process.env.EVO_KEY || "").trim(),
+              instanceName: dentistInstance.instanceName,
+              clinicId: req.user!.clinicId,
+              simulated: true,
+            };
+          } else {
+            sendConfig = await resolveConnectedSendConfig(req.user!.clinicId);
+          }
           if (!sendConfig) {
             return res.status(503).json({ message: "Nenhuma instância WhatsApp da clínica está conectada à Evolution." });
           }
@@ -1574,15 +1596,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
             return res.status(502).json({ message: sendError });
           }
+          if (clinic?.simulationMode) {
+            let conversation = await storage.getWhatsappConversationByPhone(
+              req.user!.clinicId,
+              phone,
+              sendConfig.instanceName,
+            );
+            if (!conversation) {
+              conversation = await storage.createWhatsappConversation({
+                clinicId: req.user!.clinicId,
+                patientId: patient.id,
+                phone,
+                instanceName: sendConfig.instanceName,
+              });
+            }
+            await storage.updateWhatsappConversation(conversation.id, {
+              patientId: conversation.patientId ?? patient.id,
+              contextData: {
+                ...(conversation.contextData ?? {}),
+                pendingAppointmentConfirmationId: appointment.id,
+              },
+            });
+            await storage.createWhatsappMessage({
+              conversationId: conversation.id,
+              sender: "staff",
+              direction: "outbound",
+              text: `${message}\n\n[Confirmar] [Desmarcar]`,
+              isSimulated: true,
+            });
+          }
           await storage.updateAppointment(appointment.id, { confirmationSentAt: new Date() }, req.user!.clinicId);
           await storage.createAppointmentConfirmationLog({
             ...actor,
             action: "confirmation_sent",
             providerMessageId: result.messageId ?? null,
-            deliveryStatus: "accepted",
+            deliveryStatus: result.simulated ? "simulated" : "accepted",
             message,
           });
-          return res.json({ success: true, deliveryStatus: "accepted" });
+          return res.json({
+            success: true,
+            deliveryStatus: result.simulated ? "simulated" : "accepted",
+            simulated: !!result.simulated,
+          });
         }
 
         return res.status(400).json({ message: "Ação de confirmação inválida." });
@@ -4044,13 +4099,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw err;
         }
 
-        // Conversa humana nunca executa confirmações, cobrança ou qualquer resposta automatizada.
-        if (conversation.status === "human") {
+        const normalizedConfirmationText = messageText.trim().toLowerCase();
+        const confirmationMatch = /^(1|2)(?:\s*[-:]\s*(.*))?$/.exec(normalizedConfirmationText);
+        const confirmationChoice = selectedButtonId === "appointment_confirm" || /^(confirmar|confirm|aceitar|sim)$/.test(normalizedConfirmationText)
+          ? "1"
+          : selectedButtonId === "appointment_cancel" || /^(desmarcar|cancelar|recusar|não|nao)$/.test(normalizedConfirmationText)
+            ? "2"
+            : confirmationMatch?.[1];
+        const inlineRefusalReason = confirmationMatch?.[2]?.trim() || null;
+
+        // Respostas simuladas de confirmação devem funcionar mesmo em conversas transferidas para a equipe.
+        if (conversation.status === "human" && !(simulated && patient && confirmationChoice)) {
           console.log(`[WEBHOOK] Conversa ${conversation.id} está em atendimento humano; automação bloqueada.`);
           return;
         }
 
-        const guardrailResult = await messageGuardrailService.analyze(messageText);
+        const guardrailResult = simulated && patient && confirmationChoice
+          ? { foraDoEscopo: false, motivo: "NENHUM" as const, confianca: 1, analiseIndisponivel: false }
+          : await messageGuardrailService.analyze(messageText);
         if (guardrailResult.foraDoEscopo) {
           const blockedAt = new Date();
           const reasonByMotive = {
@@ -4105,15 +4171,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return;
         }
 
-        const normalizedConfirmationText = messageText.trim().toLowerCase();
-        const confirmationMatch = /^(1|2)(?:\s*[-:]\s*(.*))?$/.exec(normalizedConfirmationText);
-        const confirmationChoice = selectedButtonId === "appointment_confirm" || /^(confirmar|confirm|aceitar|sim)$/.test(normalizedConfirmationText)
-          ? "1"
-          : selectedButtonId === "appointment_cancel" || /^(desmarcar|cancelar|recusar|não|nao)$/.test(normalizedConfirmationText)
-            ? "2"
-            : confirmationMatch?.[1];
-        const inlineRefusalReason = confirmationMatch?.[2]?.trim() || null;
-
         if (patient && !confirmationChoice) {
           const pendingRefusal = await storage.getPendingPatientRefusalLog(patient.id, clinicId);
           if (pendingRefusal) {
@@ -4145,20 +4202,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Resposta curta da confirmação: 1 confirma, 2 desmarca.
         if (patient && (confirmationChoice === "1" || confirmationChoice === "2")) {
+          // No simulador, o agendamento que recebeu a confirmação é respondido mesmo que o horário já tenha passado.
+          const pendingAppointmentId = simulated &&
+            typeof conversation.contextData?.pendingAppointmentConfirmationId === "string"
+            ? conversation.contextData.pendingAppointmentConfirmationId
+            : null;
           const futureAppointments = (await storage.getAppointmentsByClinic(clinicId))
             .filter((appointment) => {
               const appointmentDate = new Date(appointment.scheduledDate).getTime();
               return appointment.patientId === patient.id &&
-                appointmentDate >= Date.now() &&
+                (appointmentDate >= Date.now() || appointment.id === pendingAppointmentId) &&
                 !!appointment.confirmationSentAt &&
                 ["pending", "scheduled"].includes(appointment.status);
             })
             .sort((left, right) => new Date(left.scheduledDate).getTime() - new Date(right.scheduledDate).getTime());
-          const appointment = futureAppointments[0];
+          const appointment = futureAppointments.find((item) => item.id === pendingAppointmentId) ?? futureAppointments[0];
 
           if (appointment) {
             const status = confirmationChoice === "1" ? "confirmed" : "cancelled";
             await storage.updateAppointment(appointment.id, { status }, clinicId);
+            if (pendingAppointmentId === appointment.id) {
+              await storage.updateWhatsappConversation(conversation.id, {
+                contextData: {
+                  ...(conversation.contextData ?? {}),
+                  pendingAppointmentConfirmationId: null,
+                },
+              });
+            }
             await storage.createAppointmentConfirmationLog({
               clinicId,
               appointmentId: appointment.id,
@@ -5519,6 +5589,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("[ENCERRAMENTO MANUAL] Erro:", error);
         res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // Excluir conversa e todo o seu histórico de mensagens
+  app.delete(
+    "/api/conversations/:id",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const deleted = await storage.deleteWhatsappConversation(req.params.id, req.user!.clinicId);
+        if (!deleted) return res.status(404).json({ message: "Conversa não encontrada" });
+        console.log(`[CONVERSA] Conversa ${req.params.id} excluída por ${req.user!.fullName}`);
+        res.json({ success: true });
+      } catch (error) {
+        console.error("[CONVERSA] Erro ao excluir:", error);
+        res.status(500).json({ message: "Não foi possível excluir a conversa." });
       }
     },
   );

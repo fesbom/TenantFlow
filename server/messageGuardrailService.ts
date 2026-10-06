@@ -41,6 +41,10 @@ const ai = new GoogleGenAI({
   },
 });
 
+// Saudações e respostas curtas inofensivas dispensam a análise por IA.
+const SAFE_SHORT_MESSAGE =
+  /^(oi+|ol[aá]|bom dia|boa tarde|boa noite|e a[ií]|tudo bem\??|obrigad[oa]|valeu|ok|sim|n[aã]o|confirmar|desmarcar|cancelar|[12])[\s!.?]*$/i;
+
 function parseClassification(rawText: string): Omit<MessageGuardrailResult, "analiseIndisponivel"> {
   const jsonText = rawText.match(/\{[\s\S]*\}/)?.[0];
   if (!jsonText) throw new Error("A resposta de moderação não contém JSON.");
@@ -68,7 +72,7 @@ function parseClassification(rawText: string): Omit<MessageGuardrailResult, "ana
 
 export class MessageGuardrailService {
   async analyze(message: string): Promise<MessageGuardrailResult> {
-    if (!message.trim()) {
+    if (!message.trim() || SAFE_SHORT_MESSAGE.test(message.trim())) {
       return { foraDoEscopo: false, motivo: "NENHUM", confianca: 1, analiseIndisponivel: false };
     }
 

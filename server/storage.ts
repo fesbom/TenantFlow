@@ -75,10 +75,22 @@ function phoneVariants(phone: string): string[] {
   const digits = phone.replace(/\D/g, "");
   if (!digits) return [""];
   const variants = new Set<string>([digits]);
-  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) {
-    variants.add(digits.slice(2));
-  } else if (digits.length === 10 || digits.length === 11) {
-    variants.add(`55${digits}`);
+  const national = (digits.length === 12 || digits.length === 13) && digits.startsWith("55")
+    ? digits.slice(2)
+    : digits;
+  if (national.length === 10 || national.length === 11) {
+    variants.add(national);
+    variants.add(`55${national}`);
+    // Celulares brasileiros: o WhatsApp pode omitir o 9º dígito (DDD + 8 dígitos).
+    const ddd = national.slice(0, 2);
+    const subscriber = national.slice(2);
+    const alternate = subscriber.length === 8
+      ? `${ddd}9${subscriber}`
+      : subscriber.startsWith("9") ? `${ddd}${subscriber.slice(1)}` : null;
+    if (alternate) {
+      variants.add(alternate);
+      variants.add(`55${alternate}`);
+    }
   }
   return Array.from(variants);
 }
@@ -288,6 +300,7 @@ export interface IStorage {
   getWhatsappConversationByPhone(clinicId: string, phone: string, instanceName?: string): Promise<WhatsappConversation | undefined>;
   getWhatsappConversationById(id: string): Promise<WhatsappConversation | undefined>;
   updateWhatsappConversation(id: string, updates: Partial<InsertWhatsappConversation>): Promise<WhatsappConversation | undefined>;
+  deleteWhatsappConversation(id: string, clinicId: string): Promise<boolean>;
   hasHumanWhatsappConversationByPhone(clinicId: string, phone: string): Promise<boolean>;
   linkUnlinkedConversationsByPhone(clinicId: string, phone: string, patientId: string): Promise<number>;
 
@@ -1335,6 +1348,19 @@ export class DatabaseStorage implements IStorage {
       .where(eq(whatsappConversations.id, id))
       .returning();
     return conversation || undefined;
+  }
+
+  async deleteWhatsappConversation(id: string, clinicId: string): Promise<boolean> {
+    return await db.transaction(async (tx) => {
+      const [conversation] = await tx
+        .select({ id: whatsappConversations.id })
+        .from(whatsappConversations)
+        .where(and(eq(whatsappConversations.id, id), eq(whatsappConversations.clinicId, clinicId)));
+      if (!conversation) return false;
+      await tx.delete(whatsappMessages).where(eq(whatsappMessages.conversationId, id));
+      await tx.delete(whatsappConversations).where(eq(whatsappConversations.id, id));
+      return true;
+    });
   }
 
   async hasHumanWhatsappConversationByPhone(clinicId: string, phone: string): Promise<boolean> {
