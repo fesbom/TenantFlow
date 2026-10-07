@@ -176,10 +176,20 @@ export async function sendEvolutionButtonsForClinic(
   if (config.simulated) return simulatedSendResult(config, phone, "Botões");
   // Botões interativos não são entregues em números comuns (Baileys); usa texto numerado,
   // que o webhook já interpreta ("1" confirma, "2" desmarca).
+  return sendEvolutionMessageForClinic(config, phone, buildReplyOptionsText(content));
+}
+
+export function buildReplyOptionsText(content: {
+  title: string;
+  description: string;
+  footer?: string;
+  buttons: EvolutionReplyButton[];
+}): string {
+  const icons: Record<string, string> = { appointment_confirm: "✅", appointment_cancel: "❌" };
   const options = content.buttons
-    .map((button, index) => `*${index + 1}* - ${button.displayText}`)
+    .map((button, index) => `${icons[button.id] ?? "▫️"} *${index + 1}* - ${button.displayText}`)
     .join("\n");
-  const text = [
+  return [
     `*${content.title}*`,
     content.description,
     `Responda com:\n${options}`,
@@ -187,7 +197,6 @@ export async function sendEvolutionButtonsForClinic(
   ]
     .filter(Boolean)
     .join("\n\n");
-  return sendEvolutionMessageForClinic(config, phone, text);
 }
 
 // ─── Per-clinic: get instance status ──────────────────────────────────────

@@ -1,4 +1,4 @@
-﻿import type { Express } from "express";
+import type { Express } from "express";
 import { createServer, type Server } from "http";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -55,6 +55,7 @@ import {
   sendEvolutionMessage,
   sendEvolutionMessageForClinic,
   sendEvolutionButtonsForClinic,
+  buildReplyOptionsText,
   isEvolutionConfigured,
   isClinicEvolutionConfigured,
   ensureEvolutionWebhookForClinic,
@@ -179,6 +180,48 @@ async function resolveConnectedSendConfig(clinicId: string): Promise<ClinicEvolu
   })));
   const connected = connectionResults.find((result) => result.status.connected)?.config;
   return connected ?? null;
+}
+
+async function recordConfirmationChatMessage(params: {
+  clinicId: string;
+  patientId: string;
+  phone: string;
+  instanceName: string;
+  appointmentId: string;
+  text: string;
+  simulated?: boolean;
+}): Promise<void> {
+  try {
+    let conversation = await storage.getWhatsappConversationByPhone(
+      params.clinicId,
+      params.phone,
+      params.instanceName,
+    );
+    if (!conversation) {
+      conversation = await storage.createWhatsappConversation({
+        clinicId: params.clinicId,
+        patientId: params.patientId,
+        phone: params.phone,
+        instanceName: params.instanceName,
+      });
+    }
+    await storage.updateWhatsappConversation(conversation.id, {
+      patientId: conversation.patientId ?? params.patientId,
+      contextData: {
+        ...(conversation.contextData ?? {}),
+        pendingAppointmentConfirmationId: params.appointmentId,
+      },
+    });
+    await storage.createWhatsappMessage({
+      conversationId: conversation.id,
+      sender: "staff",
+      direction: "outbound",
+      text: params.text,
+      ...(params.simulated ? { isSimulated: true } : {}),
+    });
+  } catch (error) {
+    console.error("[CONFIRMAÇÃO] Falha ao registrar mensagem no chat:", error);
+  }
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1576,15 +1619,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!sendConfig) {
             return res.status(503).json({ message: "Nenhuma instância WhatsApp da clínica está conectada à Evolution." });
           }
-          const result = await sendEvolutionButtonsForClinic(sendConfig, phone, {
+          const confirmationContent = {
             title: "Confirmação de consulta",
             description: `${dateText} às ${timeText} com ${dentist?.fullName || "o dentista"}. Se desmarcar, pediremos o motivo.`,
-            footer: "Toque em uma opção para responder.",
+            footer: "Responda com o número da opção.",
             buttons: [
               { id: "appointment_confirm", displayText: "Confirmar" },
               { id: "appointment_cancel", displayText: "Desmarcar" },
             ],
-          });
+          };
+          const result = await sendEvolutionButtonsForClinic(sendConfig, phone, confirmationContent);
           if (!result.success) {
             const sendError = `Falha ao enviar pela instância ${sendConfig.instanceName}: ${result.error || "erro não informado pela Evolution API"}`;
             await storage.createAppointmentConfirmationLog({
@@ -1596,35 +1640,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
             return res.status(502).json({ message: sendError });
           }
-          if (clinic?.simulationMode) {
-            let conversation = await storage.getWhatsappConversationByPhone(
-              req.user!.clinicId,
-              phone,
-              sendConfig.instanceName,
-            );
-            if (!conversation) {
-              conversation = await storage.createWhatsappConversation({
-                clinicId: req.user!.clinicId,
-                patientId: patient.id,
-                phone,
-                instanceName: sendConfig.instanceName,
-              });
-            }
-            await storage.updateWhatsappConversation(conversation.id, {
-              patientId: conversation.patientId ?? patient.id,
-              contextData: {
-                ...(conversation.contextData ?? {}),
-                pendingAppointmentConfirmationId: appointment.id,
-              },
-            });
-            await storage.createWhatsappMessage({
-              conversationId: conversation.id,
-              sender: "staff",
-              direction: "outbound",
-              text: `${message}\n\n[Confirmar] [Desmarcar]`,
-              isSimulated: true,
-            });
-          }
+          await recordConfirmationChatMessage({
+            clinicId: req.user!.clinicId,
+            patientId: patient.id,
+            phone,
+            instanceName: sendConfig.instanceName,
+            appointmentId: appointment.id,
+            text: buildReplyOptionsText(confirmationContent),
+            simulated: !!sendConfig.simulated,
+          });
           await storage.updateAppointment(appointment.id, { confirmationSentAt: new Date() }, req.user!.clinicId);
           await storage.createAppointmentConfirmationLog({
             ...actor,
@@ -5939,16 +5963,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
               continue;
             }
             const message = `Confirmação de consulta para ${dateText} às ${timeText} com ${dentistName}.`;
-            const result = await sendEvolutionButtonsForClinic(sendConfig, phone, {
+            const firstContent = {
               title: "Confirmação de consulta",
-              description: `Olá, ${patient.fullName.split(" ")[0]}. Você confirma este horário?`,
-              footer: "Toque em uma opção para responder.",
+              description: `Olá, ${patient.fullName.split(" ")[0]}. Você confirma sua consulta em ${dateText} às ${timeText} com ${dentistName}?`,
+              footer: "Responda com o número da opção.",
               buttons: [
                 { id: "appointment_confirm", displayText: "Confirmar" },
                 { id: "appointment_cancel", displayText: "Desmarcar" },
               ],
-            });
+            };
+            const result = await sendEvolutionButtonsForClinic(sendConfig, phone, firstContent);
             if (result.success) {
+              await recordConfirmationChatMessage({
+                clinicId: clinicRow.id,
+                patientId: patient.id,
+                phone,
+                instanceName: sendConfig.instanceName,
+                appointmentId: appointment.id,
+                text: buildReplyOptionsText(firstContent),
+              });
               const sentAt = new Date();
               await storage.updateAppointment(appointment.id, { confirmationSentAt: sentAt }, clinicRow.id);
               await storage.createAppointmentConfirmationLog({
@@ -5977,16 +6010,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!sendConfig) continue;
             if (!(await ensureEvolutionWebhookForClinic(sendConfig))) continue;
             const message = `Último aviso: sua consulta de ${dateText} às ${timeText} com ${dentistName} será cancelada se não houver resposta nas próximas 2 horas.`;
-            const result = await sendEvolutionButtonsForClinic(sendConfig, phone, {
+            const warningContent = {
               title: "Último aviso de confirmação",
               description: `A consulta de amanhã às ${timeText} será cancelada em 2 horas se você não escolher uma opção.`,
-              footer: "Toque em Confirmar ou Desmarcar.",
+              footer: "Responda com o número da opção.",
               buttons: [
                 { id: "appointment_confirm", displayText: "Confirmar" },
                 { id: "appointment_cancel", displayText: "Desmarcar" },
               ],
-            });
+            };
+            const result = await sendEvolutionButtonsForClinic(sendConfig, phone, warningContent);
             if (result.success) {
+              await recordConfirmationChatMessage({
+                clinicId: clinicRow.id,
+                patientId: patient.id,
+                phone,
+                instanceName: sendConfig.instanceName,
+                appointmentId: appointment.id,
+                text: buildReplyOptionsText(warningContent),
+              });
               await storage.createAppointmentConfirmationLog({
                 clinicId: clinicRow.id,
                 appointmentId: appointment.id,
