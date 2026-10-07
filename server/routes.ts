@@ -1,4 +1,4 @@
-import type { Express } from "express";
+﻿import type { Express } from "express";
 import { createServer, type Server } from "http";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -1552,7 +1552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const appointmentDate = new Date(appointment.scheduledDate);
           const dateText = appointmentDate.toLocaleDateString("pt-BR", { timeZone: "UTC" });
           const timeText = appointmentDate.toLocaleTimeString("pt-BR", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" });
-          const message = `Olá, ${patient.fullName.split(" ")[0]}. Confirmação de consulta em ${dateText} às ${timeText} com ${dentist?.fullName || "o dentista"}. O paciente pode tocar em Confirmar ou Desmarcar.`;
+          const message = `Olá, ${patient.fullName.split(" ")[0]}. Confirmação de consulta em ${dateText} às ${timeText} com ${dentist?.fullName || "o dentista"}. O paciente pode responder 1 (Confirmar) ou 2 (Desmarcar).`;
           const clinic = await storage.getClinicById(req.user!.clinicId);
           let sendConfig: ClinicEvolutionConfig | null;
           if (clinic?.simulationMode) {

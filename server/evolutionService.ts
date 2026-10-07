@@ -174,39 +174,20 @@ export async function sendEvolutionButtonsForClinic(
   content: { title: string; description: string; footer?: string; buttons: EvolutionReplyButton[] },
 ): Promise<EvolutionSendResult> {
   if (config.simulated) return simulatedSendResult(config, phone, "Botões");
-  if (!config.evoUrl || !config.evoKey || !config.instanceName) {
-    return { success: false, error: "Evolution API não configurada para esta clínica" };
-  }
-  try {
-    const normalizedPhone = normalizePhoneForEvolution(phone);
-    if (normalizedPhone.length < 12 || normalizedPhone.length > 15) {
-      return { success: false, error: "Telefone inválido. Informe DDD e número com código do país quando aplicável." };
-    }
-    const response = await axios.post(
-      `${config.evoUrl}/message/sendButtons/${config.instanceName}`,
-      {
-        number: normalizedPhone,
-        title: content.title,
-        description: content.description,
-        footer: content.footer,
-        buttons: content.buttons.map((button) => ({
-          type: "reply",
-          displayText: button.displayText,
-          id: button.id,
-        })),
-        delay: 1200,
-      },
-      {
-        headers: { apikey: config.evoKey, "Content-Type": "application/json" },
-        timeout: 30000,
-      },
-    );
-    return { success: true, messageId: response.data?.key?.id };
-  } catch (error: any) {
-    const detail = getEvolutionSendError(error);
-    console.error(`❌ [Evolution] Erro ao enviar botões para ${config.instanceName}:`, detail);
-    return { success: false, error: detail };
-  }
+  // Botões interativos não são entregues em números comuns (Baileys); usa texto numerado,
+  // que o webhook já interpreta ("1" confirma, "2" desmarca).
+  const options = content.buttons
+    .map((button, index) => `*${index + 1}* - ${button.displayText}`)
+    .join("\n");
+  const text = [
+    `*${content.title}*`,
+    content.description,
+    `Responda com:\n${options}`,
+    content.footer ? `_${content.footer}_` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  return sendEvolutionMessageForClinic(config, phone, text);
 }
 
 // ─── Per-clinic: get instance status ──────────────────────────────────────
