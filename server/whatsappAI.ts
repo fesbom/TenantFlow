@@ -165,8 +165,12 @@ export async function processPatientMessage(
   try {
     const systemPrompt = buildSystemPrompt(patientContext, clinicName, instanceContext);
 
+    const tz = "America/Sao_Paulo";
     const now = new Date();
-    const currentDateInfo = `DATA ATUAL DO SISTEMA: ${now.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Hora: ${now.getHours()}:${now.getMinutes()}`;
+    const dateText = now.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: tz });
+    const isoDate = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);
+    const timeText = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+    const currentDateInfo = `DATA ATUAL DO SISTEMA (fuso America/Sao_Paulo): ${dateText} (${isoDate}). Hora: ${timeText}. Calcule "hoje", "amanhã" e dias da semana a partir desta data.`;
 
     const historyContent = conversationHistory
       .map(msg => `${msg.role === 'patient' ? 'Paciente' : 'Assistente'}: ${msg.text}`)
