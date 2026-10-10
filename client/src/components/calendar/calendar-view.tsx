@@ -24,6 +24,7 @@ import {
   AppointmentMonthGridEventCard,
   ScheduleXAppointmentEvent,
 } from "./schedule-x-event-card";
+import { snapAppointmentStartTime } from "@/lib/appointment-time";
 
 // Configura o moment para o Português (Brasil)
 moment.locale('pt-br');
@@ -203,7 +204,19 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   }, [filteredAppointments, patients, users]);
 
   const handleSelectSlot = (start: Date, end: Date) => {
-    setNewAppointmentSlot({ start, end });
+    const clickedDateTime = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}T${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+    const snappedDateTime = snapAppointmentStartTime(
+      appointments,
+      selectedDentist !== "all" ? selectedDentist : undefined,
+      clickedDateTime,
+    );
+    const [datePart, timePart] = snappedDateTime.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute] = timePart.split(":").map(Number);
+    const snappedStart = new Date(year, month - 1, day, hour, minute);
+    const snappedEnd = new Date(snappedStart.getTime() + (end.getTime() - start.getTime()));
+
+    setNewAppointmentSlot({ start: snappedStart, end: snappedEnd });
     setSelectedAppointment(null);
     setSelectedAppointmentPatientName(null);
     setIsAppointmentModalOpen(true);
@@ -324,7 +337,6 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
           setNewAppointmentSlot(null);
         }}
         appointment={selectedAppointment}
-        appointments={appointments}
         patientName={selectedAppointmentPatientName ?? undefined}
         initialDateTime={newAppointmentSlot?.start}
         initialDentistId={selectedDentist !== "all" ? selectedDentist : undefined}
