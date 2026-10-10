@@ -366,6 +366,33 @@ export const dentistSchedules = pgTable(
   (t) => [unique("uq_dentist_schedule").on(t.dentistId, t.weekday, t.period)],
 );
 
+// Dentist Booking Messages - mensagem de confirmação de agendamento configurável por dentista
+export const dentistBookingMessages = pgTable(
+  "dentist_booking_messages",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    clinicId: varchar("clinic_id").notNull().references(() => clinics.id, { onDelete: "cascade" }),
+    dentistId: varchar("dentist_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    message: text("message").notNull(),
+  },
+  (t) => [unique("uq_dentist_booking_message").on(t.dentistId)],
+);
+
+// Clinic Business Hours - horário de atendimento humano da clínica por dia da semana/período
+export const clinicBusinessHours = pgTable(
+  "clinic_business_hours",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    clinicId: varchar("clinic_id").notNull().references(() => clinics.id, { onDelete: "cascade" }),
+    weekday: integer("weekday").notNull(), // 0=Sun ... 6=Sat
+    period: text("period").notNull(), // 'morning' | 'afternoon' | 'evening'
+    startTime: text("start_time").notNull(), // "HH:MM"
+    endTime: text("end_time").notNull(), // "HH:MM"
+    isActive: boolean("is_active").default(true).notNull(),
+  },
+  (t) => [unique("uq_clinic_business_hours").on(t.clinicId, t.weekday, t.period)],
+);
+
 // Clinic Holidays & Recesses - global blocked days for all dentists
 export const clinicHolidays = pgTable("clinic_holidays", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -732,6 +759,10 @@ export const insertDentistScheduleSchema = createInsertSchema(dentistSchedules).
   id: true,
 });
 
+export const insertClinicBusinessHoursSchema = createInsertSchema(clinicBusinessHours).omit({
+  id: true,
+});
+
 export const insertClinicHolidaySchema = createInsertSchema(clinicHolidays).omit({
   id: true,
   createdAt: true,
@@ -813,6 +844,9 @@ export type InsertSimulationContact = z.infer<typeof insertSimulationContactSche
 export type DentistSchedule = typeof dentistSchedules.$inferSelect;
 export type InsertDentistSchedule = z.infer<typeof insertDentistScheduleSchema>;
 
+export type DentistBookingMessage = typeof dentistBookingMessages.$inferSelect;
+export type ClinicBusinessHours = typeof clinicBusinessHours.$inferSelect;
+export type InsertClinicBusinessHours = z.infer<typeof insertClinicBusinessHoursSchema>;
 export type ClinicHoliday = typeof clinicHolidays.$inferSelect;
 export type InsertClinicHoliday = z.infer<typeof insertClinicHolidaySchema>;
 

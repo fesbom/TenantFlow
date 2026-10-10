@@ -69,7 +69,8 @@ type ConversationWithPatient = WhatsappConversation & {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────
 function getConvDerivedStatus(conv: ConversationWithPatient): "waiting_staff" | "waiting_patient" | "closed" {
-  if (conv.guardrailAlert || (conv.status === "human" && !!conv.assignedUserId && conv.lastMessageSender !== "staff")) {
+  // Conversa transferida para a equipe sem resposta humana fica pendente, mesmo que a última mensagem seja da IA
+  if (conv.guardrailAlert || (conv.status === "human" && conv.lastMessageSender !== "staff")) {
     return "waiting_staff";
   }
   if (conv.status === "closed") return "closed";

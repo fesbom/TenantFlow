@@ -3,6 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
+import BusinessHoursCard from "@/components/business-hours-card";
+import BookingMessageCard from "@/components/booking-message-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -437,6 +439,12 @@ export default function Availability() {
               </table>
             </CardContent>
           </Card>
+
+          {selectedDentistId && (
+            <BookingMessageCard dentistId={selectedDentistId} dentistName={selectedDentist?.fullName} />
+          )}
+
+          {user?.role !== "dentist" && <BusinessHoursCard />}
 
           {/* ── HOLIDAYS & RECESSES ── */}
           <Card>

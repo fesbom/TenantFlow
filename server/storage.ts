@@ -19,6 +19,8 @@ import {
   whatsappInstanceDentists,
   simulationContacts,
   dentistSchedules,
+  clinicBusinessHours,
+  dentistBookingMessages,
   clinicHolidays,
   receivables,
   receivableReminderLogs,
@@ -60,6 +62,8 @@ import {
   type InsertWhatsappMessage,
   type DentistSchedule,
   type InsertDentistSchedule,
+  type ClinicBusinessHours,
+  type InsertClinicBusinessHours,
   type ClinicHoliday,
   type InsertClinicHoliday,
   type Receivable,
@@ -319,6 +323,10 @@ export interface IStorage {
   getDentistSchedules(clinicId: string, dentistId: string): Promise<DentistSchedule[]>;
   setDentistSchedules(clinicId: string, dentistId: string, schedules: InsertDentistSchedule[]): Promise<DentistSchedule[]>;
   getAllDentistSchedulesByClinic(clinicId: string): Promise<DentistSchedule[]>;
+  getClinicBusinessHours(clinicId: string): Promise<ClinicBusinessHours[]>;
+  getDentistBookingMessage(clinicId: string, dentistId: string): Promise<string | null>;
+  setDentistBookingMessage(clinicId: string, dentistId: string, message: string | null): Promise<void>;
+  setClinicBusinessHours(clinicId: string, hours: InsertClinicBusinessHours[]): Promise<ClinicBusinessHours[]>;
 
   // Holiday methods
   getClinicHolidays(clinicId: string): Promise<ClinicHoliday[]>;
@@ -1523,6 +1531,42 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return inserted;
+  }
+
+  async getDentistBookingMessage(clinicId: string, dentistId: string): Promise<string | null> {
+    const [row] = await db
+      .select()
+      .from(dentistBookingMessages)
+      .where(and(eq(dentistBookingMessages.clinicId, clinicId), eq(dentistBookingMessages.dentistId, dentistId)))
+      .limit(1);
+    return row?.message ?? null;
+  }
+
+  async setDentistBookingMessage(clinicId: string, dentistId: string, message: string | null): Promise<void> {
+    if (!message) {
+      await db
+        .delete(dentistBookingMessages)
+        .where(and(eq(dentistBookingMessages.clinicId, clinicId), eq(dentistBookingMessages.dentistId, dentistId)));
+      return;
+    }
+    await db
+      .insert(dentistBookingMessages)
+      .values({ clinicId, dentistId, message })
+      .onConflictDoUpdate({ target: dentistBookingMessages.dentistId, set: { message, clinicId } });
+  }
+
+  async getClinicBusinessHours(clinicId: string): Promise<ClinicBusinessHours[]> {
+    return await db
+      .select()
+      .from(clinicBusinessHours)
+      .where(eq(clinicBusinessHours.clinicId, clinicId))
+      .orderBy(clinicBusinessHours.weekday, clinicBusinessHours.period);
+  }
+
+  async setClinicBusinessHours(clinicId: string, hours: InsertClinicBusinessHours[]): Promise<ClinicBusinessHours[]> {
+    await db.delete(clinicBusinessHours).where(eq(clinicBusinessHours.clinicId, clinicId));
+    if (hours.length === 0) return [];
+    return await db.insert(clinicBusinessHours).values(hours).returning();
   }
 
   // ─────────────────────────────────────────────────────────────────────

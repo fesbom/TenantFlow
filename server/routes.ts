@@ -1,4 +1,4 @@
-import type { Express } from "express";
+﻿import type { Express } from "express";
 import { createServer, type Server } from "http";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -9,6 +9,8 @@ import fs from "fs";
 import csv from "csv-parser";
 import { Readable } from "stream";
 import { storage } from "./storage";
+import { applyOutOfHoursNotice } from "./clinicBusinessHoursService";
+import { DEFAULT_BOOKING_MESSAGE, renderBookingMessage } from "@shared/booking-message";
 import {
   authenticateToken,
   requireRole,
@@ -242,6 +244,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       created_by varchar REFERENCES users(id) ON DELETE SET NULL,
       created_at timestamp NOT NULL DEFAULT now(),
       CONSTRAINT uq_simulation_contacts_clinic_phone UNIQUE (clinic_id, phone)
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS dentist_booking_messages (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      clinic_id varchar NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+      dentist_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message text NOT NULL,
+      CONSTRAINT uq_dentist_booking_message UNIQUE (dentist_id)
+    )
+  `);
+  // Horário de atendimento da clínica (limita o aviso de transferência da IA)
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS clinic_business_hours (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      clinic_id varchar NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+      weekday integer NOT NULL,
+      period text NOT NULL,
+      start_time text NOT NULL,
+      end_time text NOT NULL,
+      is_active boolean NOT NULL DEFAULT true,
+      CONSTRAINT uq_clinic_business_hours UNIQUE (clinic_id, weekday, period)
     )
   `);
   await db.execute(sql`ALTER TABLE whatsapp_conversations ADD COLUMN IF NOT EXISTS guardrail_alert boolean NOT NULL DEFAULT false`);
@@ -3594,6 +3618,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           JSON.stringify(aiResponse, null, 2),
         );
 
+        if (aiResponse.extractedIntent.intent === "falar_com_humano") {
+          aiResponse.message = await applyOutOfHoursNotice(clinicId, aiResponse.message);
+        }
+
         const savedAiMsg = await storage.createWhatsappMessage({
           conversationId: conversation.id,
           sender: "ai",
@@ -3692,6 +3720,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(result);
       } catch (error) {
         console.error("[SCHEDULE] Erro ao salvar grade:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // GET /api/availability/booking-message/:dentistId — mensagem de confirmação de agendamento do dentista
+  app.get(
+    "/api/availability/booking-message/:dentistId",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const message = await storage.getDentistBookingMessage(req.user!.clinicId, req.params.dentistId);
+        res.json({ message, isDefault: !message, defaultMessage: DEFAULT_BOOKING_MESSAGE });
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // PUT /api/availability/booking-message/:dentistId — salvar (vazio = restaurar padrão)
+  app.put(
+    "/api/availability/booking-message/:dentistId",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { dentistId } = req.params;
+        if (req.user!.role === "dentist" && req.user!.id !== dentistId) {
+          return res.status(403).json({ message: "Sem permissão para alterar a mensagem de outro dentista" });
+        }
+        const dentist = await storage.getUserById(dentistId);
+        if (!dentist || dentist.clinicId !== req.user!.clinicId) {
+          return res.status(404).json({ message: "Dentista não encontrado" });
+        }
+        const raw = (req.body as { message?: unknown }).message;
+        const message = typeof raw === "string" ? raw.trim() : "";
+        if (message.length > 2000) {
+          return res.status(400).json({ message: "A mensagem deve ter no máximo 2000 caracteres" });
+        }
+        await storage.setDentistBookingMessage(req.user!.clinicId, dentistId, message || null);
+        res.json({ message: message || null, isDefault: !message });
+      } catch (error) {
+        console.error("[BOOKING MESSAGE] Erro ao salvar:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // GET /api/availability/business-hours — horário de atendimento da clínica
+  app.get(
+    "/api/availability/business-hours",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        res.json(await storage.getClinicBusinessHours(req.user!.clinicId));
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // PUT /api/availability/business-hours — salvar horário de atendimento completo
+  app.put(
+    "/api/availability/business-hours",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        if (req.user!.role === "dentist") {
+          return res.status(403).json({ message: "Sem permissão para alterar o horário de atendimento" });
+        }
+        const clinicId = req.user!.clinicId;
+        const { hours } = req.body as { hours: Array<{ weekday: number; period: string; startTime: string; endTime: string; isActive: boolean }> };
+        if (!Array.isArray(hours)) {
+          return res.status(400).json({ message: "hours deve ser um array" });
+        }
+        const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
+        const periods = ["morning", "afternoon", "evening"];
+        for (const h of hours) {
+          if (
+            !Number.isInteger(h.weekday) || h.weekday < 0 || h.weekday > 6 ||
+            !periods.includes(h.period) ||
+            !timeRe.test(h.startTime) || !timeRe.test(h.endTime) ||
+            (h.isActive && h.endTime <= h.startTime)
+          ) {
+            return res.status(400).json({ message: "Horário de atendimento inválido" });
+          }
+        }
+        const result = await storage.setClinicBusinessHours(
+          clinicId,
+          hours.map((h) => ({
+            clinicId,
+            weekday: h.weekday,
+            period: h.period,
+            startTime: h.startTime,
+            endTime: h.endTime,
+            isActive: !!h.isActive,
+          })),
+        );
+        res.json(result);
+      } catch (error) {
+        console.error("[BUSINESS HOURS] Erro ao salvar:", error);
         res.status(500).json({ message: "Internal server error" });
       }
     },
@@ -4171,7 +4299,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
           }))!;
 
-          const handoffReply = "Nosso canal automatizado é exclusivo para assuntos relacionados aos agendamentos, tratamentos e serviços da clínica. Não consigo dar continuidade por aqui sobre esse tema, mas já encaminhei sua conversa para a nossa equipe de atendimento, que assumirá o contato em breve.";
+          const handoffReply = await applyOutOfHoursNotice(
+            clinicId,
+            "Nosso canal automatizado é exclusivo para assuntos relacionados aos agendamentos, tratamentos e serviços da clínica. Não consigo dar continuidade por aqui sobre esse tema, mas já encaminhei sua conversa para a nossa equipe de atendimento, que assumirá o contato em breve.",
+          );
           await storage.createWhatsappMessage({
             conversationId: conversation.id,
             sender: "ai",
@@ -4537,7 +4668,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   );
                   const [yyyy, mm, dd] = date.split("-");
                   const dateBR = `${dd}/${mm}/${yyyy}`;
-                  aiResponse.message = `Perfeito! Seu agendamento com o ${dentist.fullName} foi confirmado para o dia ${dateBR} às ${time}.`;
+                  const bookingTemplate = (await storage.getDentistBookingMessage(clinicId, dentist.id)) || DEFAULT_BOOKING_MESSAGE;
+                  aiResponse.message = renderBookingMessage(bookingTemplate, {
+                    paciente: displayName,
+                    dentista: dentist.fullName,
+                    data: dateBR,
+                    hora: time,
+                  });
                 }
 
                 } // close: else (isOutsideSchedule)
@@ -4560,6 +4697,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(
             `[IA DEBUG] Intenção: ${aiResponse.extractedIntent.intent} | Data: ${aiResponse.extractedIntent.date} | Hora: ${aiResponse.extractedIntent.time} | Resumo: ${aiResponse.extractedIntent.summary}`,
           );
+
+          // Se a IA transferiu para a equipe fora do horário de atendimento, avisar o paciente
+          const conversationAfterAi = await storage.getWhatsappConversationById(conversation.id);
+          if (conversationAfterAi?.status === "human" || aiResponse.extractedIntent.intent === "falar_com_humano") {
+            aiResponse.message = await applyOutOfHoursNotice(clinicId, aiResponse.message);
+          }
 
           // Salvar resposta da IA e Enviar
           await storage.createWhatsappMessage({
