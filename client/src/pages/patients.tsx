@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/api";
 import PatientModal from "@/components/modals/patient-modal";
 import InvoiceCopyModal, { DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
 import { Patient, User as AppUser } from "@/types";
-import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User, FileText, SlidersHorizontal, ChevronDown, X } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User, FileText, SlidersHorizontal, ChevronDown, X, CircleCheck } from "lucide-react";
 import { formatDateBR } from "@/lib/date-formatter";
 import { ProtectedImage } from "@/components/ui/protected-image";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -143,6 +143,23 @@ export default function Patients() {
       toast({
         title: "Erro ao remover paciente",
         description: "Não foi possível remover o paciente",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmAiReviewMutation = useMutation({
+    mutationFn: async (patientId: string) => {
+      await apiRequest("PATCH", `/api/patients/${patientId}/ai-review`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/patients"] });
+      toast({ title: "Cadastro revisado", description: "A pendência de revisão foi concluída." });
+    },
+    onError: () => {
+      toast({
+        title: "Não foi possível concluir a revisão",
+        description: "Tente novamente ou verifique suas permissões.",
         variant: "destructive",
       });
     },
@@ -332,7 +349,12 @@ export default function Patients() {
 
                                 {/* Patient Info */}
                                 <div>
-                                  <div className="font-medium">{patient.fullName}</div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <div className="font-medium">{patient.fullName}</div>
+                                    {patient.createdByAi && patient.needsSecretaryReview && (
+                                      <Badge variant="secondary">Cadastro via IA — revisar</Badge>
+                                    )}
+                                  </div>
                                   {patient.cpf && (
                                     <div className="text-sm text-gray-500">CPF: {patient.cpf}</div>
                                   )}
@@ -359,6 +381,18 @@ export default function Patients() {
                             <TableCell>{formatDateBR(patient.createdAt)}</TableCell>
                             <TableCell>
                               <div className="flex items-center space-x-2">
+                                {patient.createdByAi && patient.needsSecretaryReview && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => confirmAiReviewMutation.mutate(patient.id)}
+                                    title="Concluir revisão do cadastro criado pela IA"
+                                    className="text-emerald-600 hover:text-emerald-700"
+                                    data-testid={`button-confirm-ai-review-${patient.id}`}
+                                  >
+                                    <CircleCheck className="h-4 w-4" />
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="sm"

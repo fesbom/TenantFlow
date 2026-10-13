@@ -92,6 +92,25 @@ const ADMIN_SETUP_TOKEN = process.env.ADMIN_SETUP_TOKEN || "";
 // Date(string)` sem timezone interpreta a string usando o fuso horário do PROCESSO Node, o que
 // causa deslocamento (ex: +3h) se o servidor não estiver rodando com TZ=UTC. Esta função ignora
 // o fuso do processo e monta o Date diretamente a partir dos números informados.
+function normalizeCpf(value: string | undefined): string {
+  return (value ?? "").replace(/\D/g, "");
+}
+
+function isValidCpf(value: string): boolean {
+  if (!/^\d{11}$/.test(value) || /^(\d)\1{10}$/.test(value)) return false;
+
+  const digitAt = (length: number): number => {
+    const sum = value
+      .slice(0, length)
+      .split("")
+      .reduce((total, digit, index) => total + Number(digit) * (length + 1 - index), 0);
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  return digitAt(9) === Number(value[9]) && digitAt(10) === Number(value[10]);
+}
+
 function parseWallClockAsFakeUTC(value: Date | string): Date {
   if (value instanceof Date) return value;
   const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
@@ -1527,6 +1546,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res
           .status(500)
           .json({ message: "Erro interno do servidor. Tente novamente." });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/patients/:id/ai-review",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const patient = await storage.updatePatient(
+          req.params.id,
+          { needsSecretaryReview: false },
+          req.user!.clinicId,
+        );
+        if (!patient) return res.status(404).json({ message: "Paciente não encontrado." });
+        res.json(patient);
+      } catch (error) {
+        console.error("Confirm AI patient review error:", error);
+        res.status(500).json({ message: "Não foi possível concluir a revisão do cadastro." });
       }
     },
   );
@@ -4686,34 +4725,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     await storage.updateWhatsappConversation(conversation.id, { status: "human" });
                   }
                 } else {
-                  let customNotes = `[IA]: ${summary || "Agendamento via WhatsApp"}`;
-                  if (!conversation.patientId) {
-                    customNotes += `\n[DADOS COLETADOS]: Nome: ${tempData || "Não informado"} | Tel: ${normalizedPhone}`;
+                  const bookingForAnotherPerson = aiResponse.extractedIntent.bookingForAnotherPerson === true;
+                  const targetName = (
+                    aiResponse.extractedIntent.targetPatientName ||
+                    aiResponse.extractedIntent.patientName ||
+                    tempData ||
+                    ""
+                  ).trim();
+                  const targetCpf = normalizeCpf(aiResponse.extractedIntent.targetPatientCpf);
+                  let appointmentPatient = bookingForAnotherPerson ? undefined : patient;
+
+                  if (bookingForAnotherPerson || !appointmentPatient) {
+                    if (!targetName || !isValidCpf(targetCpf)) {
+                      aiResponse.message = targetCpf
+                        ? "Para concluir o agendamento, preciso do nome completo e de um CPF válido da pessoa que será atendida."
+                        : "Para concluir o agendamento, informe o nome completo e o CPF da pessoa que será atendida.";
+                      aiResponse.extractedIntent.intent = "conversar";
+                    } else {
+                      appointmentPatient = await storage.getPatientByCpf(clinicId, targetCpf);
+                      if (!appointmentPatient) {
+                        appointmentPatient = await storage.createPatient({
+                          clinicId,
+                          fullName: targetName,
+                          cpf: targetCpf,
+                          phone: aiResponse.extractedIntent.targetPatientPhone || normalizedPhone,
+                          createdByAi: true,
+                          needsSecretaryReview: true,
+                        });
+                        console.log(`[IA] Paciente criado para revisão: ${appointmentPatient.id}`);
+                      }
+
+                      // A conversa pertence ao contato do WhatsApp. Somente a vinculamos ao
+                      // paciente novo quando o próprio contato está sendo agendado.
+                      if (!bookingForAnotherPerson && !conversation.patientId) {
+                        await storage.updateWhatsappConversation(conversation.id, {
+                          patientId: appointmentPatient.id,
+                        });
+                      }
+                    }
                   }
 
-                  await storage.createAppointment({
-                    clinicId,
-                    patientId: conversation.patientId || null,
-                    dentistId: dentist.id,
-                    scheduledDate: requestedDate,
-                    scheduledTime: time,
-                    duration: dentistDuration,
-                    status: "pending",
-                    notes: customNotes,
-                  });
+                  if (appointmentPatient) {
+                    let customNotes = `[IA]: ${summary || "Agendamento via WhatsApp"}`;
+                    if (bookingForAnotherPerson) {
+                      customNotes += `\n[SOLICITANTE WHATSAPP]: ${patient?.fullName || normalizedPhone}${aiResponse.extractedIntent.relationshipToPatient ? ` | Vínculo informado: ${aiResponse.extractedIntent.relationshipToPatient}` : ""}`;
+                    } else if (!conversation.patientId) {
+                      customNotes += `\n[CADASTRO VIA IA]: revisão da secretaria pendente.`;
+                    }
 
-                  console.log(
-                    `[SUCESSO] Agendamento criado: ${dentist.fullName} | Duração: ${dentistDuration}min`,
-                  );
-                  const [yyyy, mm, dd] = date.split("-");
-                  const dateBR = `${dd}/${mm}/${yyyy}`;
-                  const bookingTemplate = (await storage.getDentistBookingMessage(clinicId, dentist.id)) || DEFAULT_BOOKING_MESSAGE;
-                  aiResponse.message = renderBookingMessage(bookingTemplate, {
-                    paciente: displayName,
-                    dentista: dentist.fullName,
-                    data: dateBR,
-                    hora: time,
-                  });
+                    await storage.createAppointment({
+                      clinicId,
+                      patientId: appointmentPatient.id,
+                      dentistId: dentist.id,
+                      scheduledDate: requestedDate,
+                      duration: dentistDuration,
+                      status: "pending",
+                      notes: customNotes,
+                    });
+
+                    console.log(
+                      `[SUCESSO] Agendamento criado: ${dentist.fullName} | Duração: ${dentistDuration}min`,
+                    );
+                    const [yyyy, mm, dd] = date.split("-");
+                    const dateBR = `${dd}/${mm}/${yyyy}`;
+                    const bookingTemplate = (await storage.getDentistBookingMessage(clinicId, dentist.id)) || DEFAULT_BOOKING_MESSAGE;
+                    aiResponse.message = renderBookingMessage(bookingTemplate, {
+                      paciente: appointmentPatient.fullName.split(" ")[0] || displayName,
+                      dentista: dentist.fullName,
+                      data: dateBR,
+                      hora: time,
+                    });
+                  }
                 }
 
                 } // close: else (isOutsideSchedule)

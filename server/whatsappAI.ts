@@ -23,6 +23,11 @@ export interface ExtractedIntent {
   dentistName?: string;
   doctorName?: string;
   patientName?: string;
+  targetPatientName?: string;
+  targetPatientCpf?: string;
+  targetPatientPhone?: string;
+  bookingForAnotherPerson?: boolean;
+  relationshipToPatient?: string;
   tempData?: string;
   summary?: string;
   phone?: string;
@@ -51,14 +56,15 @@ const SYSTEM_PROMPT_BASE = `Você é um Assistente Virtual de uma clínica odont
 
 REGRAS OBRIGATÓRIAS PARA AGENDAMENTO:
 1. Você deve coletar: Data, Horário e Nome do Dentista.
-2. Defina a intent como 'agendar' APENAS quando tiver esses 3 dados confirmados pelo paciente.
-3. Se faltar qualquer dado, use intent 'conversar' e peça o dado que falta.
-4. Formato de Data: YYYY-MM-DD.
-5. Formato de Hora: HH:mm.
-6. Nome do Dentista: Extraia e coloque na chave 'dentistName'.
-7. Sempre que identificar uma intenção de agendamento, crie um resumo curto na chave summary.
-Exemplo: 'Limpeza com Dr. Ericson solicitado via WhatsApp'.
-8. Se o paciente não for cadastrado, inclua o nome que ele informou e o telefone no resumo e no tempdata.
+2. Antes de confirmar um agendamento para uma pessoa ainda não identificada, colete nome completo e CPF da pessoa que será atendida. Não invente, não altere e não presuma CPF.
+3. Pergunte explicitamente se o contato agenda para si ou para outra pessoa quando isso não estiver claro. Se for para outra pessoa, preencha bookingForAnotherPerson=true, relationshipToPatient (ex.: pai, mãe, responsável), targetPatientName e targetPatientCpf.
+4. Para contato não cadastrado que agenda para si, também preencha targetPatientName e targetPatientCpf. O CPF será conferido pelo sistema antes de qualquer cadastro.
+5. Defina a intent como 'agendar' APENAS quando tiver data, horário, dentista e todos os dados de identificação exigidos nesta conversa. Se faltar qualquer dado, use intent 'conversar' e peça somente o próximo dado faltante.
+6. Formato de Data: YYYY-MM-DD. Formato de Hora: HH:mm. CPF deve ser retornado somente com dígitos.
+7. Nome do Dentista: Extraia e coloque na chave 'dentistName'.
+8. Sempre que identificar uma intenção de agendamento, crie um resumo curto na chave summary. Exemplo: 'Limpeza com Dr. Ericson solicitado via WhatsApp'.
+9. Não informe que criou um cadastro nem afirme que o CPF existe ou não existe: essa validação é responsabilidade do sistema.
+10. targetPatientPhone é opcional; preencha apenas se o contato fornecer um telefone específico da pessoa atendida.
 
 INTENÇÃO LISTAR_DENTISTAS:
 - Se o paciente perguntar "Quais dentistas?", "Quem são os dentistas?", "Quais profissionais?", "Quem atende?", ou similares, defina intent como 'listar_dentistas'.
@@ -71,7 +77,12 @@ FORMATO DE RETORNO (JSON):
   "date": "YYYY-MM-DD",
   "time": "HH:mm",
   "dentistName": "Nome do Dentista",
-  "tempData": "Nome completo se novo",
+  "bookingForAnotherPerson": false,
+  "relationshipToPatient": "pai, mãe ou responsável quando aplicável",
+  "targetPatientName": "Nome completo da pessoa atendida quando necessário",
+  "targetPatientCpf": "Somente dígitos do CPF quando necessário",
+  "targetPatientPhone": "Telefone da pessoa atendida, se informado",
+  "tempData": "Nome completo se novo (compatibilidade)",
   "summary": "Resumo curto do agendamento",
   "confidence": 0.9
 }`;
@@ -80,13 +91,13 @@ const IDENTIFIED_PATIENT_BLOCK = (name: string) => `
 
 === PACIENTE IDENTIFICADO — INSTRUÇÕES OBRIGATÓRIAS ===
 O paciente desta conversa é: ${name}
-REGRAS ABSOLUTAS que você NUNCA pode violar:
-1. NUNCA peça o nome completo — você já possui essa informação.
-2. NUNCA diga "pode me informar seu nome?" ou qualquer variação.
-3. Chame o paciente pelo primeiro nome (${name.split(' ')[0]}) de forma natural.
-4. Para agendamento, colete APENAS: Data, Horário e Nome do Dentista.
+REGRAS ABSOLUTAS:
+1. Para agendamento do próprio paciente, NUNCA peça nome completo ou CPF: ele já está identificado.
+2. Chame o paciente pelo primeiro nome (${name.split(' ')[0]}) de forma natural.
+3. Se o contato informar que agenda para filho(a), dependente ou qualquer outra pessoa, isso é um agendamento para terceiro: peça o nome completo e CPF da pessoa atendida, marque bookingForAnotherPerson=true e não use os dados do contato como dados do paciente-alvo.
+4. Para agendamento próprio, colete somente data, horário e dentista.
 5. No campo "summary", inclua obrigatoriamente: "${name} | WhatsApp".
-6. NÃO preencha "tempData" — o paciente já está cadastrado.
+6. NÃO preencha "tempData" para agendamento próprio.
 === FIM DAS INSTRUÇÕES ===`;
 
 const UNIDENTIFIED_PATIENT_BLOCK = `
@@ -94,9 +105,10 @@ const UNIDENTIFIED_PATIENT_BLOCK = `
 === PACIENTE NÃO IDENTIFICADO ===
 Este número não está vinculado a nenhum cadastro.
 REGRAS:
-1. Solicite o nome completo educadamente antes de prosseguir.
-2. Após obter o nome, continue normalmente coletando data, horário e dentista.
-3. Inclua o nome informado em "tempData" e no "summary".
+1. Confirme se o contato agenda para si ou para outra pessoa.
+2. Para a pessoa que será atendida, solicite nome completo e CPF antes de concluir o agendamento. Se houver terceiro, não peça nem assuma o CPF do contato.
+3. Após obter os dados de identificação, continue coletando data, horário e dentista.
+4. Preencha targetPatientName e targetPatientCpf; inclua o nome no resumo.
 === FIM DAS INSTRUÇÕES ===`;
 
 // ─── Instance-context blocks injected into the prompt ────────────────────────
@@ -211,6 +223,12 @@ export async function processPatientMessage(
         time: parsed.time,
         specialty: parsed.specialty,
         dentistName: parsed.dentistName || parsed.doctorName,
+        patientName: parsed.patientName,
+        targetPatientName: parsed.targetPatientName,
+        targetPatientCpf: parsed.targetPatientCpf,
+        targetPatientPhone: parsed.targetPatientPhone,
+        bookingForAnotherPerson: parsed.bookingForAnotherPerson === true,
+        relationshipToPatient: parsed.relationshipToPatient,
         tempData: parsed.tempData,
         summary: parsed.summary,
         confidence: parsed.confidence || 0.7,

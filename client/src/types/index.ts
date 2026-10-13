@@ -25,6 +25,8 @@ export interface Patient {
   lastVisitDate?: string | null;
   medicalNotes?: string;
   photoUrl?: string;
+  createdByAi?: boolean;
+  needsSecretaryReview?: boolean;
   clinicId: string;
   createdAt: string;
   updatedAt: string;

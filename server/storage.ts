@@ -284,8 +284,9 @@ export interface IStorage {
     attendanceRate: number;
   }>;
 
-  // Patient lookup by phone
+  // Patient lookup by contact identifiers
   getPatientByPhone(clinicId: string, phone: string): Promise<Patient | undefined>;
+  getPatientByCpf(clinicId: string, cpf: string): Promise<Patient | undefined>;
 
   // WhatsApp instance methods
   createWhatsappInstance(data: InsertWhatsappInstance): Promise<WhatsappInstance>;
@@ -503,6 +504,20 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(patients.clinicId, clinicId),
           inArray(sql`REGEXP_REPLACE(${patients.phone}, '[^0-9]', '', 'g')`, phoneVariants(phone))
+        )
+      )
+      .limit(1);
+    return patient || undefined;
+  }
+
+  async getPatientByCpf(clinicId: string, cpf: string): Promise<Patient | undefined> {
+    const [patient] = await db
+      .select()
+      .from(patients)
+      .where(
+        and(
+          eq(patients.clinicId, clinicId),
+          sql`REGEXP_REPLACE(COALESCE(${patients.cpf}, ''), '[^0-9]', '', 'g') = ${cpf}`
         )
       )
       .limit(1);

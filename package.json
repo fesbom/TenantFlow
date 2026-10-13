@@ -12,7 +12,8 @@
     "migrate": "tsx server/run-migration.ts",
     "db:push": "drizzle-kit push",
     "db:migrate:communications": "tsx --env-file=.env server/apply-patient-communications-migration.ts",
-    "db:migrate:communication-history": "tsx --env-file=.env server/apply-communication-history-migration.ts"
+    "db:migrate:communication-history": "tsx --env-file=.env server/apply-communication-history-migration.ts",
+    "db:migrate:ai-patient-intake": "tsx --env-file=.env server/apply-ai-patient-intake-migration.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.17.2",
