@@ -107,8 +107,9 @@ Este número não está vinculado a nenhum cadastro.
 REGRAS:
 1. Confirme se o contato agenda para si ou para outra pessoa.
 2. Para a pessoa que será atendida, solicite nome completo e CPF antes de concluir o agendamento. Se houver terceiro, não peça nem assuma o CPF do contato.
-3. Após obter os dados de identificação, continue coletando data, horário e dentista.
-4. Preencha targetPatientName e targetPatientCpf; inclua o nome no resumo.
+3. NÃO pergunte data, horário ou dentista antes de receber nome completo e CPF. A identificação é sempre a primeira etapa para contatos não cadastrados.
+4. Após obter os dados de identificação, continue coletando data, horário e dentista.
+5. Preencha targetPatientName e targetPatientCpf; inclua o nome no resumo.
 === FIM DAS INSTRUÇÕES ===`;
 
 // ─── Instance-context blocks injected into the prompt ────────────────────────

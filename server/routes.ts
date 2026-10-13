@@ -111,6 +111,17 @@ function isValidCpf(value: string): boolean {
   return digitAt(9) === Number(value[9]) && digitAt(10) === Number(value[10]);
 }
 
+function extractCpfFromMessage(value: string): string {
+  const matches = value.match(/\d[\d.\s-]{9,13}\d/g) ?? [];
+  return matches
+    .map(normalizeCpf)
+    .find((candidate) => candidate.length === 11) ?? "";
+}
+
+function looksLikeAppointmentRequest(value: string): boolean {
+  return /\b(agend|agenda|marc|consulta|hor[aá]rio)\w*/i.test(value);
+}
+
 function parseWallClockAsFakeUTC(value: Date | string): Date {
   if (value instanceof Date) return value;
   const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
@@ -4526,6 +4537,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
             webhookInstanceContext,
             clinicId,
           );
+
+          const savedIntakeName =
+            typeof conversation.contextData?.aiIntakeTargetName === "string"
+              ? conversation.contextData.aiIntakeTargetName
+              : "";
+          const savedIntakeCpf =
+            typeof conversation.contextData?.aiIntakeTargetCpf === "string"
+              ? conversation.contextData.aiIntakeTargetCpf
+              : "";
+          const extractedTargetName = (
+            aiResponse.extractedIntent.targetPatientName ||
+            aiResponse.extractedIntent.patientName ||
+            aiResponse.extractedIntent.tempData ||
+            ""
+          ).trim();
+          const extractedTargetCpf = normalizeCpf(
+            aiResponse.extractedIntent.targetPatientCpf,
+          );
+          const messageCpf = extractCpfFromMessage(messageText);
+          const targetName = extractedTargetName || savedIntakeName;
+          const targetCpf = extractedTargetCpf || messageCpf || savedIntakeCpf;
+
+          if (targetName || targetCpf) {
+            await storage.updateWhatsappConversation(conversation.id, {
+              contextData: {
+                ...(conversation.contextData ?? {}),
+                aiIntakeTargetName: targetName,
+                aiIntakeTargetCpf: targetCpf,
+                aiIntakeInProgress: true,
+              },
+            });
+          }
+
+          if (targetName) aiResponse.extractedIntent.targetPatientName = targetName;
+          if (targetCpf) aiResponse.extractedIntent.targetPatientCpf = targetCpf;
+
+          const requiresPatientIdentity =
+            !conversation.patientId ||
+            aiResponse.extractedIntent.bookingForAnotherPerson === true;
+          const isIdentityCollectionInProgress =
+            conversation.contextData?.aiIntakeInProgress === true;
+          const shouldBlockForIdentity =
+            requiresPatientIdentity &&
+            (
+              aiResponse.extractedIntent.intent === "agendar" ||
+              looksLikeAppointmentRequest(messageText) ||
+              isIdentityCollectionInProgress
+            );
+
+          if (
+            shouldBlockForIdentity &&
+            (!targetName || !isValidCpf(targetCpf))
+          ) {
+            aiResponse.extractedIntent.intent = "conversar";
+            aiResponse.message = !targetName
+              ? "Para cadastrar a pessoa que será atendida e continuar o agendamento, informe o nome completo e o CPF, por favor."
+              : "Obrigado. Agora informe o CPF válido, com 11 dígitos, da pessoa que será atendida para eu concluir o cadastro.";
+          }
 
           /* --- ROTINA DE AGENDAMENTO COM FILTRO DE HORÁRIO CORRIGIDO --- */
           // --- LISTAR DENTISTAS ---
