@@ -263,6 +263,9 @@ export const communicationLogs = pgTable("communication_logs", {
   patientId: varchar("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
   reasonId: varchar("reason_id").references(() => communicationReasons.id, { onDelete: "set null" }),
   treatmentId: varchar("treatment_id").references(() => treatments.id, { onDelete: "set null" }),
+  appointmentId: varchar("appointment_id").references(() => appointments.id, { onDelete: "set null" }),
+  category: text("category").default("manual").notNull(), // birthday | inactivity_6m | treatment_completed | appointment_confirmation | manual
+  origin: text("origin").default("manual").notNull(), // automatic | manual
   recipientPhone: text("recipient_phone").notNull(),
   messageSent: text("message_sent").notNull(),
   status: text("status").default("pending").notNull(), // pending | sent | failed | simulated
@@ -274,7 +277,10 @@ export const communicationLogs = pgTable("communication_logs", {
   index("communication_logs_clinic_created_idx").on(t.clinicId, t.createdAt),
   index("communication_logs_patient_reason_idx").on(t.clinicId, t.patientId, t.reasonId, t.sentAt),
   index("communication_logs_treatment_idx").on(t.treatmentId),
+  index("communication_logs_appointment_idx").on(t.appointmentId),
   check("communication_logs_status_check", sql`${t.status} IN ('pending', 'sent', 'failed', 'simulated')`),
+  check("communication_logs_category_check", sql`${t.category} IN ('birthday', 'inactivity_6m', 'treatment_completed', 'appointment_confirmation', 'manual')`),
+  check("communication_logs_origin_check", sql`${t.origin} IN ('automatic', 'manual')`),
 ]);
 
 // Budget Items - itens detalhados do orçamento

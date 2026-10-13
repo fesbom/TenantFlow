@@ -25,6 +25,7 @@ import {
   budgetItems,
   treatmentMovements,
   clinics,
+  communicationLogs,
 } from "@shared/schema";
 import { eq, and, or, isNotNull, sql } from "drizzle-orm";
 import { upload, uploadCSV, uploadPatientPhoto } from "./middleware/upload";
@@ -234,6 +235,32 @@ async function recordConfirmationChatMessage(params: {
   } catch (error) {
     console.error("[CONFIRMAÇÃO] Falha ao registrar mensagem no chat:", error);
   }
+}
+
+async function recordAppointmentConfirmationCommunication(params: {
+  clinicId: string;
+  patientId: string;
+  appointmentId: string;
+  phone: string;
+  message: string;
+  result: { success: boolean; simulated?: boolean; messageId?: string; error?: string };
+}): Promise<void> {
+  const status = params.result.success
+    ? params.result.simulated ? "simulated" : "sent"
+    : "failed";
+  await db.insert(communicationLogs).values({
+    clinicId: params.clinicId,
+    patientId: params.patientId,
+    appointmentId: params.appointmentId,
+    category: "appointment_confirmation",
+    origin: "automatic",
+    recipientPhone: params.phone,
+    messageSent: params.message,
+    status,
+    evolutionMessageId: params.result.messageId ?? null,
+    error: params.result.error ?? null,
+    sentAt: params.result.success ? new Date() : null,
+  });
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -6134,6 +6161,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ],
             };
             const result = await sendEvolutionButtonsForClinic(sendConfig, phone, firstContent);
+            await recordAppointmentConfirmationCommunication({
+              clinicId: clinicRow.id,
+              patientId: patient.id,
+              appointmentId: appointment.id,
+              phone,
+              message: buildReplyOptionsText(firstContent),
+              result,
+            });
             if (result.success) {
               await recordConfirmationChatMessage({
                 clinicId: clinicRow.id,
@@ -6181,6 +6216,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ],
             };
             const result = await sendEvolutionButtonsForClinic(sendConfig, phone, warningContent);
+            await recordAppointmentConfirmationCommunication({
+              clinicId: clinicRow.id,
+              patientId: patient.id,
+              appointmentId: appointment.id,
+              phone,
+              message: buildReplyOptionsText(warningContent),
+              result,
+            });
             if (result.success) {
               await recordConfirmationChatMessage({
                 clinicId: clinicRow.id,
@@ -6221,7 +6264,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
             const sendConfig = await resolveConnectedSendConfig(clinicRow.id);
             if (sendConfig) {
-              await sendEvolutionMessageForClinic(sendConfig, phone, cancellationMessage);
+              const result = await sendEvolutionMessageForClinic(sendConfig, phone, cancellationMessage);
+              await recordAppointmentConfirmationCommunication({
+                clinicId: clinicRow.id,
+                patientId: patient.id,
+                appointmentId: appointment.id,
+                phone,
+                message: cancellationMessage,
+                result,
+              });
             }
             console.log(`[CONFIRMAÇÃO D-1] Agendamento ${appointment.id} cancelado por falta de resposta.`);
           }

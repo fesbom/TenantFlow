@@ -5,6 +5,7 @@ import {
   clinics,
   communicationLogs,
   communicationReasons,
+  appointments,
   medicalRecords,
   patients,
   treatments,
@@ -153,6 +154,8 @@ async function sendCommunication(params: {
   patient: { id: string; fullName: string; phone: string };
   reasonId?: string | null;
   treatmentId?: string | null;
+  category: "birthday" | "inactivity_6m" | "treatment_completed" | "manual";
+  origin: "automatic" | "manual";
   template: string;
 }): Promise<{ status: "sent" | "failed" | "simulated"; error?: string }> {
   const [clinic] = await db.select({ name: clinics.name }).from(clinics).where(eq(clinics.id, params.clinicId)).limit(1);
@@ -164,6 +167,8 @@ async function sendCommunication(params: {
     patientId: params.patient.id,
     reasonId: params.reasonId ?? null,
     treatmentId: params.treatmentId ?? null,
+    category: params.category,
+    origin: params.origin,
     recipientPhone: phone,
     messageSent: text,
     status: "pending",
@@ -238,7 +243,7 @@ async function runAutomaticCommunications(): Promise<void> {
       ));
       for (const patient of birthdayPatients) {
         if (!(await hasSuccessfulLog(clinicId, patient.id, birthdayReason.id, startOfYear))) {
-          await sendCommunication({ clinicId, patient, reasonId: birthdayReason.id, template: birthdayReason.messageTemplate });
+          await sendCommunication({ clinicId, patient, reasonId: birthdayReason.id, category: "birthday", origin: "automatic", template: birthdayReason.messageTemplate });
         }
       }
     }
@@ -260,7 +265,7 @@ async function runAutomaticCommunications(): Promise<void> {
       `);
       for (const patient of inactivePatients.rows as Array<{ id: string; fullName: string; phone: string }>) {
         if (!(await hasSuccessfulLog(clinicId, patient.id, inactivityReason.id, inactivityCutoff))) {
-          await sendCommunication({ clinicId, patient, reasonId: inactivityReason.id, template: inactivityReason.messageTemplate });
+          await sendCommunication({ clinicId, patient, reasonId: inactivityReason.id, category: "inactivity_6m", origin: "automatic", template: inactivityReason.messageTemplate });
         }
       }
     }
@@ -280,6 +285,8 @@ async function runAutomaticCommunications(): Promise<void> {
           patient,
           reasonId: treatmentReason.id,
           treatmentId: treatment.id,
+          category: "treatment_completed",
+          origin: "automatic",
           template: treatmentReason.messageTemplate,
         });
         if (result.status === "sent" || result.status === "simulated") {
@@ -382,7 +389,7 @@ export function registerPatientCommunicationRoutes(app: Express): void {
       const results: Array<{ patientId: string; status: string; error?: string }> = [];
       for (let index = 0; index < selectedPatients.length; index += 1) {
         const patient = selectedPatients[index];
-        const result = await sendCommunication({ clinicId, patient, reasonId, template: parsed.data.message });
+        const result = await sendCommunication({ clinicId, patient, reasonId, category: "manual", origin: "manual", template: parsed.data.message });
         results.push({ patientId: patient.id, ...result });
         if (index < selectedPatients.length - 1) await delay((parsed.data.delaySeconds ?? 2) * 1000);
       }
@@ -408,11 +415,22 @@ export function registerPatientCommunicationRoutes(app: Express): void {
     if (patientName) filters.push(ilike(patients.fullName, `%${patientName}%`));
     if (reasonId) filters.push(eq(communicationLogs.reasonId, reasonId));
     if (status) filters.push(eq(communicationLogs.status, status));
-    const rows = await db.select({ log: communicationLogs, patientName: patients.fullName, reasonName: communicationReasons.name })
+    const rows = await db.select({
+      log: communicationLogs,
+      patientName: patients.fullName,
+      reasonName: communicationReasons.name,
+      appointmentScheduledDate: appointments.scheduledDate,
+    })
       .from(communicationLogs).innerJoin(patients, eq(patients.id, communicationLogs.patientId))
       .leftJoin(communicationReasons, eq(communicationReasons.id, communicationLogs.reasonId))
+      .leftJoin(appointments, eq(appointments.id, communicationLogs.appointmentId))
       .where(and(...filters)).orderBy(desc(communicationLogs.createdAt)).limit(500);
-    res.json(rows.map(({ log, patientName, reasonName }) => ({ ...log, patientName, reasonName })));
+    res.json(rows.map(({ log, patientName, reasonName, appointmentScheduledDate }) => ({
+      ...log,
+      patientName,
+      reasonName,
+      appointmentScheduledDate,
+    })));
   });
 
   void runAutomaticCommunications().catch((error) => console.error("[COMUNICAÇÕES] Falha na execução inicial:", error));
