@@ -21,6 +21,7 @@ import ImportData from "@/pages/import-data";
 import BatchUpload from "@/pages/batch-upload";
 import Support from "@/pages/support";
 import Availability from "@/pages/availability";
+import Communications from "@/pages/communications";
 import PrintSchedule from "@/pages/print-schedule";
 import AdminSimulator from "@/pages/admin-simulator";
 import { AdminAudit, AdminForbidden, AdminHome, ClinicDetail } from "@/pages/admin";
@@ -81,6 +82,7 @@ function Router() {
           <Route path="/batch-upload" component={() => <ProtectedRoute component={BatchUpload} />} />
           <Route path="/support" component={() => <ProtectedRoute component={Support} />} />
           <Route path="/availability" component={() => <ProtectedRoute component={Availability} />} />
+          <Route path="/communications" component={() => <ProtectedRoute component={Communications} />} />
           <Route path="/print-schedule" component={() => <ProtectedRoute component={PrintSchedule} />} />
           <Route component={NotFound} />
         </>

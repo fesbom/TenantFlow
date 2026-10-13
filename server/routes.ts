@@ -72,6 +72,7 @@ import {
 import type { InstanceContext } from "./whatsappAI";
 import { registerAdminRoutes } from "./admin/adminRoutes";
 import { registerSimulatorRoutes } from "./simulator/simulatorRoutes";
+import { registerPatientCommunicationRoutes } from "./patientCommunicationRoutes";
 import { recordAccessAudit } from "./admin/adminRepository";
 import {
   buildReceivableBatchReminderMessage,
@@ -234,6 +235,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS simulation_updated_at timestamp`);
   await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS simulation_updated_by varchar`);
   await db.execute(sql`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS is_simulated boolean NOT NULL DEFAULT false`);
+  registerPatientCommunicationRoutes(app);
+
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS simulation_contacts (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),

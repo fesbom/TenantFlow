@@ -121,6 +121,7 @@ export const patients = pgTable("patients", {
   phone: text("phone").notNull(),
   workPhone: text("work_phone"), // Fone de Trabalho
   birthDate: date("birth_date"),
+  sex: text("sex"),
   birthCity: text("birth_city"), // Cidade de Nascimento
   maritalStatus: text("marital_status"), // Estado Civil
   
@@ -233,10 +234,48 @@ export const treatments = pgTable("treatments", {
   dataInicio: date("data_inicio").notNull(),
   situacaoTratamento: text("situacao_tratamento").default('Em andamento').notNull(), // 'Em andamento', 'Concluído', 'Cancelado'
   tituloTratamento: text("titulo_tratamento").notNull(),
+  avaliado: boolean("avaliado").default(false).notNull(),
+  avaliadoAt: timestamp("avaliado_at"),
   externalId: text("external_id").unique(), // ID from legacy system for import deduplication
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const communicationReasons = pgTable("communication_reasons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  triggerType: text("trigger_type").notNull(), // birthday | inactivity_6m | treatment_completed | manual
+  messageTemplate: text("message_template").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  isSystemDefault: boolean("is_system_default").default(false).notNull(),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("communication_reasons_clinic_idx").on(t.clinicId, t.isActive),
+  check("communication_reasons_trigger_check", sql`${t.triggerType} IN ('birthday', 'inactivity_6m', 'treatment_completed', 'manual')`),
+]);
+
+export const communicationLogs = pgTable("communication_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clinicId: varchar("clinic_id").notNull().references(() => clinics.id, { onDelete: "cascade" }),
+  patientId: varchar("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  reasonId: varchar("reason_id").references(() => communicationReasons.id, { onDelete: "set null" }),
+  treatmentId: varchar("treatment_id").references(() => treatments.id, { onDelete: "set null" }),
+  recipientPhone: text("recipient_phone").notNull(),
+  messageSent: text("message_sent").notNull(),
+  status: text("status").default("pending").notNull(), // pending | sent | failed | simulated
+  evolutionMessageId: text("evolution_message_id"),
+  error: text("error"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("communication_logs_clinic_created_idx").on(t.clinicId, t.createdAt),
+  index("communication_logs_patient_reason_idx").on(t.clinicId, t.patientId, t.reasonId, t.sentAt),
+  index("communication_logs_treatment_idx").on(t.treatmentId),
+  check("communication_logs_status_check", sql`${t.status} IN ('pending', 'sent', 'failed', 'simulated')`),
+]);
 
 // Budget Items - itens detalhados do orçamento
 export const budgetItems = pgTable("budget_items", {
@@ -475,6 +514,7 @@ export const patientsRelations = relations(patients, ({ one, many }) => ({
   anamnesisResponses: many(anamnesisResponses),
   budgets: many(budgets),
   treatments: many(treatments),
+  communicationLogs: many(communicationLogs),
 }));
 
 export const appointmentsRelations = relations(appointments, ({ one, many }) => ({
@@ -556,6 +596,34 @@ export const treatmentsRelations = relations(treatments, ({ one, many }) => ({
   budgetSummary: one(budgetSummary),
   treatmentMovements: many(treatmentMovements),
   anamnesisResponses: many(anamnesisResponses),
+  communicationLogs: many(communicationLogs),
+}));
+
+export const communicationReasonsRelations = relations(communicationReasons, ({ one, many }) => ({
+  clinic: one(clinics, {
+    fields: [communicationReasons.clinicId],
+    references: [clinics.id],
+  }),
+  logs: many(communicationLogs),
+}));
+
+export const communicationLogsRelations = relations(communicationLogs, ({ one }) => ({
+  clinic: one(clinics, {
+    fields: [communicationLogs.clinicId],
+    references: [clinics.id],
+  }),
+  patient: one(patients, {
+    fields: [communicationLogs.patientId],
+    references: [patients.id],
+  }),
+  reason: one(communicationReasons, {
+    fields: [communicationLogs.reasonId],
+    references: [communicationReasons.id],
+  }),
+  treatment: one(treatments, {
+    fields: [communicationLogs.treatmentId],
+    references: [treatments.id],
+  }),
 }));
 
 export const budgetItemsRelations = relations(budgetItems, ({ one }) => ({
@@ -715,6 +783,21 @@ export const insertTreatmentSchema = createInsertSchema(treatments).omit({
   updatedAt: true,
 });
 
+export const insertCommunicationReasonSchema = createInsertSchema(communicationReasons).omit({
+  id: true,
+  clinicId: true,
+  isSystemDefault: true,
+  deletedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCommunicationLogSchema = createInsertSchema(communicationLogs).omit({
+  id: true,
+  clinicId: true,
+  createdAt: true,
+});
+
 export const insertBudgetItemSchema = createInsertSchema(budgetItems).omit({
   id: true,
   createdAt: true,
@@ -807,6 +890,11 @@ export type InsertBudget = z.infer<typeof insertBudgetSchema>;
 
 export type Treatment = typeof treatments.$inferSelect;
 export type InsertTreatment = z.infer<typeof insertTreatmentSchema>;
+
+export type CommunicationReason = typeof communicationReasons.$inferSelect;
+export type InsertCommunicationReason = z.infer<typeof insertCommunicationReasonSchema>;
+export type CommunicationLog = typeof communicationLogs.$inferSelect;
+export type InsertCommunicationLog = z.infer<typeof insertCommunicationLogSchema>;
 
 export type BudgetItem = typeof budgetItems.$inferSelect;
 export type InsertBudgetItem = z.infer<typeof insertBudgetItemSchema>;

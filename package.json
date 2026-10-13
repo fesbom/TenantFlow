@@ -10,7 +10,8 @@
     "test": "vitest run --config vitest.config.ts",
     "check": "tsc",
     "migrate": "tsx server/run-migration.ts",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:migrate:communications": "tsx --env-file=.env server/apply-patient-communications-migration.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.17.2",
