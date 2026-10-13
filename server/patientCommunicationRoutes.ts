@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { and, asc, desc, eq, gte, ilike, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   clinics,
@@ -10,7 +10,7 @@ import {
   treatments,
 } from "@shared/schema";
 import { db } from "./db";
-import { buildClinicConfig, sendEvolutionMessageForClinic, type ClinicEvolutionConfig } from "./evolutionService";
+import { sendEvolutionMessageForClinic, type ClinicEvolutionConfig } from "./evolutionService";
 import { authenticateToken, requireRole, type AuthenticatedRequest } from "./middleware/auth";
 import { storage } from "./storage";
 
@@ -55,15 +55,40 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function selectRandomInstance<T>(instances: T[]): T {
+  return instances[Math.floor(Math.random() * instances.length)];
+}
+
 async function resolveCommunicationConfig(clinicId: string): Promise<ClinicEvolutionConfig> {
   const instances = await storage.getWhatsappInstancesByClinic(clinicId);
-  const preferred = instances.find((instance) => instance.connectedPhone) ?? instances[0];
   const clinic = await storage.getClinicById(clinicId);
   if (!clinic) throw new Error("Clínica não encontrada.");
-  const base = buildClinicConfig(clinic);
-  return preferred
-    ? { ...base, instanceName: preferred.instanceName, evoKey: (preferred.apiKey || base.evoKey).trim() }
-    : base;
+
+  if (clinic.simulationMode) {
+    const simulationInstance = instances.length > 0 ? selectRandomInstance(instances) : undefined;
+    return {
+      evoUrl: "",
+      evoKey: "",
+      instanceName: simulationInstance?.instanceName ?? "simulation",
+      clinicId,
+      simulated: true,
+    };
+  }
+
+  const connectedInstances = instances.filter((instance) => instance.connectedPhone);
+  if (connectedInstances.length === 0) {
+    throw new Error(
+      "Nenhum número de WhatsApp conectado foi configurado para esta clínica. Configure e conecte um número em Configurações > WhatsApp antes de enviar comunicações.",
+    );
+  }
+  const selectedInstance = selectRandomInstance(connectedInstances);
+
+  return {
+    evoUrl: (process.env.EVO_URL || "").replace(/\/+$/, ""),
+    evoKey: (selectedInstance.apiKey || process.env.EVO_KEY || "").trim(),
+    instanceName: selectedInstance.instanceName,
+    clinicId,
+  };
 }
 
 async function ensureSystemReasons(clinicId: string): Promise<void> {
@@ -144,7 +169,15 @@ async function sendCommunication(params: {
     status: "pending",
   }).returning();
 
-  const config = await resolveCommunicationConfig(params.clinicId);
+  let config: ClinicEvolutionConfig;
+  try {
+    config = await resolveCommunicationConfig(params.clinicId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Não foi possível identificar uma instância do WhatsApp.";
+    await db.update(communicationLogs).set({ status: "failed", error: message }).where(eq(communicationLogs.id, log.id));
+    return { status: "failed", error: message };
+  }
+
   const result = await sendEvolutionMessageForClinic(config, phone, text);
   const status = result.success ? (result.simulated ? "simulated" : "sent") : "failed";
   await db.update(communicationLogs).set({
@@ -333,26 +366,31 @@ export function registerPatientCommunicationRoutes(app: Express): void {
   });
 
   app.post("/api/communications/dispatch", authenticateToken, requireRole(STAFF_ROLES), async (req, res) => {
-    const parsed = dispatchSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Dados de envio inválidos.", errors: parsed.error.flatten() });
-    const clinicId = (req as AuthenticatedRequest).user!.clinicId;
-    let reasonId: string | null = parsed.data.reasonId ?? null;
-    if (reasonId) {
-      const [reason] = await db.select({ id: communicationReasons.id }).from(communicationReasons).where(and(eq(communicationReasons.id, reasonId), eq(communicationReasons.clinicId, clinicId), isNull(communicationReasons.deletedAt))).limit(1);
-      if (!reason) return res.status(400).json({ message: "Motivo inválido para esta clínica." });
-    }
-    const selectedPatients = await db.select({ id: patients.id, fullName: patients.fullName, phone: patients.phone }).from(patients)
-      .where(and(eq(patients.clinicId, clinicId), sql`${patients.id} = ANY(${parsed.data.patientIds})`));
-    if (selectedPatients.length !== parsed.data.patientIds.length) return res.status(400).json({ message: "Um ou mais pacientes não pertencem à clínica." });
+    try {
+      const parsed = dispatchSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Dados de envio inválidos.", errors: parsed.error.flatten() });
+      const clinicId = (req as AuthenticatedRequest).user!.clinicId;
+      const reasonId: string | null = parsed.data.reasonId ?? null;
+      if (reasonId) {
+        const [reason] = await db.select({ id: communicationReasons.id }).from(communicationReasons).where(and(eq(communicationReasons.id, reasonId), eq(communicationReasons.clinicId, clinicId), isNull(communicationReasons.deletedAt))).limit(1);
+        if (!reason) return res.status(400).json({ message: "Motivo inválido para esta clínica." });
+      }
+      const selectedPatients = await db.select({ id: patients.id, fullName: patients.fullName, phone: patients.phone }).from(patients)
+        .where(and(eq(patients.clinicId, clinicId), inArray(patients.id, parsed.data.patientIds)));
+      if (selectedPatients.length !== parsed.data.patientIds.length) return res.status(400).json({ message: "Um ou mais pacientes não pertencem à clínica." });
 
-    const results: Array<{ patientId: string; status: string; error?: string }> = [];
-    for (let index = 0; index < selectedPatients.length; index += 1) {
-      const patient = selectedPatients[index];
-      const result = await sendCommunication({ clinicId, patient, reasonId, template: parsed.data.message });
-      results.push({ patientId: patient.id, ...result });
-      if (index < selectedPatients.length - 1) await delay((parsed.data.delaySeconds ?? 2) * 1000);
+      const results: Array<{ patientId: string; status: string; error?: string }> = [];
+      for (let index = 0; index < selectedPatients.length; index += 1) {
+        const patient = selectedPatients[index];
+        const result = await sendCommunication({ clinicId, patient, reasonId, template: parsed.data.message });
+        results.push({ patientId: patient.id, ...result });
+        if (index < selectedPatients.length - 1) await delay((parsed.data.delaySeconds ?? 2) * 1000);
+      }
+      res.status(202).json({ results });
+    } catch (error) {
+      console.error("[COMUNICAÇÕES] Falha no disparo manual:", error);
+      res.status(500).json({ message: "Não foi possível processar o disparo. Tente novamente." });
     }
-    res.status(202).json({ results });
   });
 
   app.get("/api/communications/logs", authenticateToken, requireRole(STAFF_ROLES), async (req, res) => {

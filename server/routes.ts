@@ -167,8 +167,17 @@ async function resolveConnectedSendConfig(clinicId: string): Promise<ClinicEvolu
 
   // Modo Simulação: não consulta o estado de conexão na Evolution API (bypass total).
   if (clinic?.simulationMode) {
-    const first = candidates[0] ?? buildClinicConfig(clinic);
-    return { ...first, clinicId, simulated: true };
+    const instancesWithDentists = await storage.getWhatsappInstancesWithDentists(clinicId);
+    const simulatorInstances = instancesWithDentists.filter((instance) => instance.dentistIds.length > 0);
+    if (simulatorInstances.length === 0) return null;
+    const selected = simulatorInstances[Math.floor(Math.random() * simulatorInstances.length)];
+    return {
+      evoUrl,
+      evoKey: (selected.apiKey || process.env.EVO_KEY || "").trim(),
+      instanceName: selected.instanceName,
+      clinicId,
+      simulated: true,
+    };
   }
 
   candidates.push(clinic ? buildClinicConfig(clinic) : globalConfig());
@@ -6069,7 +6078,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     setInterval(runAutoCloseJob, AUTO_CLOSE_INTERVAL_MS);
   }, 60_000);
 
+  let appointmentConfirmationJobRunning = false;
   const runAppointmentConfirmationJob = async () => {
+    if (appointmentConfirmationJobRunning) {
+      console.warn("[CONFIRMAÇÃO D-1] Execução ignorada: o job já está em andamento.");
+      return;
+    }
+    appointmentConfirmationJobRunning = true;
     try {
       const escalationDelayMs = 2 * 60 * 60 * 1000;
       const tomorrow = new Date();
@@ -6104,7 +6119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!firstConfirmation) {
             const sendConfig = await resolveConnectedSendConfig(clinicRow.id);
             if (!sendConfig) continue;
-            if (!(await ensureEvolutionWebhookForClinic(sendConfig))) {
+            if (!sendConfig.simulated && !(await ensureEvolutionWebhookForClinic(sendConfig))) {
               console.warn("[CONFIRMAÇÃO D-1] Envio automático ignorado: ambiente sem webhook público para receber ACKs.");
               continue;
             }
@@ -6154,7 +6169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!warning && Date.now() - firstSentAt >= escalationDelayMs) {
             const sendConfig = await resolveConnectedSendConfig(clinicRow.id);
             if (!sendConfig) continue;
-            if (!(await ensureEvolutionWebhookForClinic(sendConfig))) continue;
+            if (!sendConfig.simulated && !(await ensureEvolutionWebhookForClinic(sendConfig))) continue;
             const message = `Último aviso: sua consulta de ${dateText} às ${timeText} com ${dentistName} será cancelada se não houver resposta nas próximas 2 horas.`;
             const warningContent = {
               title: "Último aviso de confirmação",
@@ -6214,13 +6229,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       console.error("[CONFIRMAÇÃO D-1] Erro no job:", error);
+    } finally {
+      appointmentConfirmationJobRunning = false;
     }
   };
 
-  setTimeout(() => {
-    runAppointmentConfirmationJob();
-    setInterval(runAppointmentConfirmationJob, 15 * 60_000);
-  }, 30_000);
+  app.post("/internal/jobs/appointment-confirmations", async (req, res) => {
+    const token = process.env.APPOINTMENT_CONFIRMATION_CRON_TOKEN;
+    const authorization = req.header("authorization");
+    if (!token) {
+      console.error("[CONFIRMAÇÃO D-1] Endpoint cron indisponível: APPOINTMENT_CONFIRMATION_CRON_TOKEN não configurado.");
+      return res.status(503).json({ message: "Cron de confirmação não configurado." });
+    }
+    if (authorization !== `Bearer ${token}`) {
+      return res.status(401).json({ message: "Não autorizado." });
+    }
+
+    await runAppointmentConfirmationJob();
+    res.status(202).json({ message: "Job de confirmação executado." });
+  });
+
+  if (process.env.APPOINTMENT_CONFIRMATION_INLINE_SCHEDULER !== "false") {
+    setTimeout(() => {
+      runAppointmentConfirmationJob();
+      setInterval(runAppointmentConfirmationJob, 15 * 60_000);
+    }, 30_000);
+  }
 
   const httpServer = createServer(app);
   return httpServer;
