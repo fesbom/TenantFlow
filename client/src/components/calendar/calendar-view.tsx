@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCalendarApp, ScheduleXCalendar } from "@schedule-x/react";
 import { viewDay, viewWeek, viewMonthGrid } from "@schedule-x/calendar";
@@ -24,7 +24,7 @@ import {
   AppointmentMonthGridEventCard,
   ScheduleXAppointmentEvent,
 } from "./schedule-x-event-card";
-import { snapAppointmentStartTime } from "@/lib/appointment-time";
+import { getAppointmentStartSuggestion } from "@/lib/appointment-time";
 
 // Configura o moment para o Português (Brasil)
 moment.locale('pt-br');
@@ -111,14 +111,30 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [selectedAppointmentPatientName, setSelectedAppointmentPatientName] = useState<string | null>(null);
   const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null);
-  const [newAppointmentSlot, setNewAppointmentSlot] = useState<{ start: Date; end: Date } | null>(null);
+  const [newAppointmentSlot, setNewAppointmentSlot] = useState<{
+    start: Date;
+    end: Date;
+    dentistId?: string;
+  } | null>(null);
   const [isMaximized, setIsMaximized] = useState(false);
 
   // --- TODAS AS CHAMADAS useQuery CORRIGIDAS ---
   const { data: appointments = [], isLoading: appointmentsLoading } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
     queryFn: ({ queryKey }) => fetchData(queryKey[0] as string),
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: true,
   });
+  const appointmentsRef = useRef<Appointment[]>(appointments);
+  const selectedDentistRef = useRef(selectedDentist);
+
+  useEffect(() => {
+    appointmentsRef.current = appointments;
+  }, [appointments]);
+
+  useEffect(() => {
+    selectedDentistRef.current = selectedDentist;
+  }, [selectedDentist]);
 
   const { data: patientsResponse, isLoading: patientsLoading } = useQuery<PaginatedPatientsResponse>({
     queryKey: ["/api/patients", { page: 1, pageSize: 5000 }], // Pega todos para o seletor
@@ -204,19 +220,24 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   }, [filteredAppointments, patients, users]);
 
   const handleSelectSlot = (start: Date, end: Date) => {
+    const activeDentistId = selectedDentistRef.current;
     const clickedDateTime = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}T${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
-    const snappedDateTime = snapAppointmentStartTime(
-      appointments,
-      selectedDentist !== "all" ? selectedDentist : undefined,
+    const startSuggestion = getAppointmentStartSuggestion(
+      appointmentsRef.current,
+      activeDentistId !== "all" ? activeDentistId : undefined,
       clickedDateTime,
     );
-    const [datePart, timePart] = snappedDateTime.split("T");
+    const [datePart, timePart] = startSuggestion.scheduledDate.split("T");
     const [year, month, day] = datePart.split("-").map(Number);
     const [hour, minute] = timePart.split(":").map(Number);
     const snappedStart = new Date(year, month - 1, day, hour, minute);
     const snappedEnd = new Date(snappedStart.getTime() + (end.getTime() - start.getTime()));
 
-    setNewAppointmentSlot({ start: snappedStart, end: snappedEnd });
+    setNewAppointmentSlot({
+      start: snappedStart,
+      end: snappedEnd,
+      dentistId: startSuggestion.dentistId,
+    });
     setSelectedAppointment(null);
     setSelectedAppointmentPatientName(null);
     setIsAppointmentModalOpen(true);
@@ -339,7 +360,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
         appointment={selectedAppointment}
         patientName={selectedAppointmentPatientName ?? undefined}
         initialDateTime={newAppointmentSlot?.start}
-        initialDentistId={selectedDentist !== "all" ? selectedDentist : undefined}
+        initialDentistId={newAppointmentSlot?.dentistId ?? (selectedDentist !== "all" ? selectedDentist : undefined)}
         onDelete={handleDeleteAppointment}
         dentists={dentists}
       />

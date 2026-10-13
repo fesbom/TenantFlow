@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Appointment } from "@/types";
-import { snapAppointmentStartTime } from "./appointment-time";
+import {
+  getAppointmentStartSuggestion,
+  snapAppointmentStartTime,
+} from "./appointment-time";
 
 const appointment = (overrides: Partial<Appointment> = {}): Appointment => ({
   id: "appointment-1",
@@ -56,5 +59,24 @@ describe("snapAppointmentStartTime", () => {
       "dentist-1",
       "2026-10-10T08:50",
     )).toBe("2026-10-10T08:45");
+  });
+
+  it("uses the previous appointment's end for the selected dentist at the following grid boundary", () => {
+    expect(snapAppointmentStartTime(
+      [appointment({ duration: 45 })],
+      "dentist-1",
+      "2026-10-10T09:00",
+    )).toBe("2026-10-10T08:45");
+  });
+
+  it("infers the dentist and exact previous end when the calendar is not filtered", () => {
+    expect(getAppointmentStartSuggestion(
+      [appointment({ duration: 45 })],
+      undefined,
+      "2026-10-10T09:00",
+    )).toEqual({
+      scheduledDate: "2026-10-10T08:45",
+      dentistId: "dentist-1",
+    });
   });
 });
