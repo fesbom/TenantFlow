@@ -4583,7 +4583,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             (
               aiResponse.extractedIntent.intent === "agendar" ||
               looksLikeAppointmentRequest(messageText) ||
-              isIdentityCollectionInProgress
+              isIdentityCollectionInProgress ||
+              !!targetName ||
+              !!targetCpf
             );
 
           if (
@@ -4595,6 +4597,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ? "Para cadastrar a pessoa que será atendida e continuar o agendamento, informe o nome completo e o CPF, por favor."
               : "Obrigado. Agora informe o CPF válido, com 11 dígitos, da pessoa que será atendida para eu concluir o cadastro.";
           }
+
+          let appointmentWasCreated = false;
 
           /* --- ROTINA DE AGENDAMENTO COM FILTRO DE HORÁRIO CORRIGIDO --- */
           // --- LISTAR DENTISTAS ---
@@ -4851,6 +4855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       status: "pending",
                       notes: customNotes,
                     });
+                    appointmentWasCreated = true;
 
                     console.log(
                       `[SUCESSO] Agendamento criado: ${dentist.fullName} | Duração: ${dentistDuration}min`,
@@ -4881,6 +4886,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
               }
             }
+          }
+
+          const responseClaimsAppointmentWasRecorded =
+            /\b(registrei|registrado|agendamento\s+(?:foi|est[aá])\s+(?:confirmado|registrado)|consulta\s+(?:foi|est[aá])\s+(?:confirmada|registrada))\b/i.test(
+              aiResponse.message,
+            );
+          if (!appointmentWasCreated && responseClaimsAppointmentWasRecorded) {
+            aiResponse.extractedIntent.intent = "conversar";
+            aiResponse.message = conversation.patientId
+              ? "Ainda não concluí o agendamento. Vou confirmar a data, o horário e o profissional antes de registrar a consulta."
+              : "Ainda não concluí o agendamento. Para continuar, preciso primeiro do nome completo e do CPF válido da pessoa que será atendida.";
           }
 
           // Log de debug atualizado para você ver o resumo
