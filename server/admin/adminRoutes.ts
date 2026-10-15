@@ -139,7 +139,7 @@ export function registerAdminRoutes(app: Express) {
     if (confirm !== true || typedClinicName !== detail.clinic.name || confirmationPhrase !== `EXCLUIR ${detail.clinic.name}`) {
       return res.status(400).json({ code: "CONFIRMACAO_INSUFICIENTE", message: "Confirmação, nome exato da clínica e frase de confirmação são obrigatórios." });
     }
-    if (!Array.isArray(modules) || !modules.length || modules.some((m) => !["appointments", "records", "messages", "patients"].includes(m))) {
+    if (!Array.isArray(modules) || !modules.length || modules.some((m) => !["appointments", "records", "messages", "patients", "receivables"].includes(m))) {
       return res.status(400).json({ code: "MODULOS_INVALIDOS", message: "Selecione módulos válidos." });
     }
     const job = await createJob("clinic_cleanup", req.params.clinicId, req.user!.id, { modules });

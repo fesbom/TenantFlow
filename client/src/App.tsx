@@ -20,6 +20,7 @@ import Settings from "@/pages/settings";
 import ImportData from "@/pages/import-data";
 import BatchUpload from "@/pages/batch-upload";
 import Support from "@/pages/support";
+import Help from "@/pages/help";
 import Availability from "@/pages/availability";
 import Communications from "@/pages/communications";
 import PrintSchedule from "@/pages/print-schedule";
@@ -81,6 +82,7 @@ function Router() {
           <Route path="/import-data" component={() => <ProtectedRoute component={ImportData} />} />
           <Route path="/batch-upload" component={() => <ProtectedRoute component={BatchUpload} />} />
           <Route path="/support" component={() => <ProtectedRoute component={Support} />} />
+          <Route path="/help" component={() => <ProtectedRoute component={Help} />} />
           <Route path="/availability" component={() => <ProtectedRoute component={Availability} />} />
           <Route path="/communications" component={() => <ProtectedRoute component={Communications} />} />
           <Route path="/print-schedule" component={() => <ProtectedRoute component={PrintSchedule} />} />

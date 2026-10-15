@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Clock,
   Send,
+  CircleHelp,
 } from "lucide-react";
 
 const navigation = [
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"] },
   { name: "Contas a Receber", href: "/receivables", icon: DollarSign, roles: ["admin", "dentist", "secretary"] },
   { name: "Atendimento", href: "/support", icon: MessageSquare, roles: ["admin", "secretary"], badge: true },
+  { name: "Ajuda do Sistema", href: "/help", icon: CircleHelp, roles: ["admin", "dentist", "secretary"] },
   { name: "Comunicação Ativa", href: "/communications", icon: Send, roles: ["admin", "dentist", "secretary"] },
   { name: "Importar Dados", href: "/import-data", icon: Upload, roles: ["admin"] },
   { name: "Upload Fotos", href: "/batch-upload", icon: Images, roles: ["admin", "secretary"] },

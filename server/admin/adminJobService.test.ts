@@ -65,6 +65,38 @@ describe("administrative jobs clinic isolation", () => {
     expect(repository.updateJob).toHaveBeenLastCalledWith("job-a", expect.objectContaining({ status: "completed" }));
   });
 
+  it("deletes clinic receivables before treatments when cleaning patients", async () => {
+    repository.claimJob.mockResolvedValue({
+      id: "job-patients", type: "clinic_cleanup", clinicId: "clinic-a", payload: { modules: ["patients"] },
+    });
+    repository.queryRows.mockResolvedValue([]);
+
+    await processAdminJob("job-patients");
+
+    const mutatingCalls = database.client.query.mock.calls.filter(([query]) => !["BEGIN", "COMMIT"].includes(query));
+    const receivablesDelete = mutatingCalls.findIndex(([query]) => query.includes("DELETE FROM receivables WHERE clinic_id=$1"));
+    const treatmentsDelete = mutatingCalls.findIndex(([query]) => query.includes("DELETE FROM treatments WHERE clinic_id=$1"));
+    expect(receivablesDelete).toBeGreaterThanOrEqual(0);
+    expect(treatmentsDelete).toBeGreaterThan(receivablesDelete);
+    expect(mutatingCalls[receivablesDelete][1]).toEqual(["clinic-a"]);
+    expect(repository.updateJob).toHaveBeenLastCalledWith("job-patients", expect.objectContaining({ status: "completed" }));
+  });
+
+  it("deletes only receivables when that cleanup module is selected", async () => {
+    repository.claimJob.mockResolvedValue({
+      id: "job-receivables", type: "clinic_cleanup", clinicId: "clinic-a", payload: { modules: ["receivables"] },
+    });
+    repository.queryRows.mockResolvedValue([]);
+
+    await processAdminJob("job-receivables");
+
+    const mutatingCalls = database.client.query.mock.calls.filter(([query]) => !["BEGIN", "COMMIT"].includes(query));
+    expect(mutatingCalls).toHaveLength(1);
+    expect(mutatingCalls[0][0]).toContain("DELETE FROM receivables WHERE clinic_id=$1");
+    expect(mutatingCalls[0][1]).toEqual(["clinic-a"]);
+    expect(repository.updateJob).toHaveBeenLastCalledWith("job-receivables", expect.objectContaining({ status: "completed" }));
+  });
+
   it("scans only the clinic prefix even if storage returns a cross-clinic object", async () => {
     repository.claimJob.mockResolvedValue({
       id: "scan-a", type: "orphan_media_scan", clinicId: "clinic-a", payload: { dryRun: true },

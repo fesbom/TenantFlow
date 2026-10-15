@@ -6,7 +6,7 @@ import { claimJob, queryRows, updateJob } from "./adminRepository";
 import { ObjectStorageService } from "../objectStorage";
 
 const exportRoot = path.join(process.cwd(), "private-admin-exports");
-const allowedModules = new Set(["appointments", "records", "messages", "patients"]);
+const allowedModules = new Set(["appointments", "records", "messages", "patients", "receivables"]);
 
 function csvCell(value: unknown) {
   if (value === null || value === undefined) return "";
@@ -153,6 +153,7 @@ async function cleanupClinic(clinicId: string, modules: string[]) {
       await run("budget_summary", `DELETE FROM budget_summary bs USING treatments t WHERE bs.treatment_id=t.id AND t.clinic_id=$1`);
       await run("budget_items", `DELETE FROM budget_items bi USING treatments t WHERE bi.treatment_id=t.id AND t.clinic_id=$1`);
       await run("treatment_movements", `DELETE FROM treatment_movements tm USING treatments t WHERE tm.treatment_id=t.id AND t.clinic_id=$1`);
+      await run("receivables", `DELETE FROM receivables WHERE clinic_id=$1`);
       await run("medical_records", `DELETE FROM medical_records WHERE clinic_id=$1`);
       await run("budgets", `DELETE FROM budgets WHERE clinic_id=$1`);
       await run("appointments", `DELETE FROM appointments WHERE clinic_id=$1`);
@@ -167,6 +168,9 @@ async function cleanupClinic(clinicId: string, modules: string[]) {
       if (modules.includes("records")) {
         await run("medical_records", `DELETE FROM medical_records WHERE clinic_id=$1`);
       }
+    }
+    if (modules.includes("receivables") && !modules.includes("patients")) {
+      await run("receivables", `DELETE FROM receivables WHERE clinic_id=$1`);
     }
     if (modules.includes("messages")) {
       await run("whatsapp_messages", `DELETE FROM whatsapp_messages m USING whatsapp_conversations c WHERE m.conversation_id=c.id AND c.clinic_id=$1`);

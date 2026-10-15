@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DentalCare — Apresentação e Guia Interativo para Dentistas e Secretárias</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+      overflow-x: hidden;
+    }
+    .slide-enter {
+      animation: fadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+
+  <!-- Top Navigation Bar -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand -->
+      <div class="flex items-center gap-3">
+        <a href="/" target="_blank" rel="noopener noreferrer" class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-cyan-600 flex items-center justify-center text-white font-bold shadow-sm hover:opacity-90 transition-opacity" title="Abrir DentalCare">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        </a>
+        <div>
+          <div class="flex items-center gap-2">
+            <a href="/" target="_blank" rel="noopener noreferrer" class="font-extrabold text-lg tracking-tight text-slate-900 hover:text-teal-700 transition-colors">DentalCare</a>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">Treinamento da Equipe</span>
+            <a href="/" target="_blank" rel="noopener noreferrer" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-600 text-white hover:bg-teal-700 transition-colors inline-flex items-center gap-1 shadow-sm">
+              Abrir Sistema ↗
+            </a>
+          </div>
+          <p class="text-xs text-slate-500 hidden sm:block">Sistema de Gestão para Clínicas Odontológicas • Dentistas &amp; Secretárias</p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher Tabs -->
+      <nav class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200" aria-label="Modos de Visualização">
+        <button id="tab-slides" type="button" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-white text-teal-700 shadow-sm">
+          1. Apresentação (10 Slides)
+        </button>
+        <button id="tab-matrix" type="button" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-600 hover:text-slate-900">
+          2. Rotina &amp; Acessos
+        </button>
+      </nav>
+
+      <!-- Audience Highlight Filter -->
+      <div class="flex items-center gap-1.5">
+        <span class="text-xs font-medium text-slate-500 hidden md:inline">Destacar perfil:</span>
+        <button id="role-all" type="button" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white transition-all">
+          Todos
+        </button>
+        <button id="role-dentist" type="button" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-all">
+          🦷 Dentistas
+        </button>
+        <button id="role-secretary" type="button" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-all">
+          🎧 Secretárias
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Active Role Filter Banner -->
+  <div id="role-banner" class="hidden bg-gradient-to-r from-slate-800 to-slate-900 text-white text-xs py-2 px-4">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <span id="role-banner-text" class="font-medium">Filtro de perfil ativo.</span>
+      <button id="role-banner-reset" type="button" class="underline font-semibold hover:text-teal-300">Mostrar todos os slides e módulos</button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- ==================== VIEW 1: SLIDE PRESENTATION ==================== -->
+    <section id="view-slides" class="space-y-5">
+      <!-- Slide Progress & Quick Jump Bar -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm flex flex-col gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span id="slide-counter-badge" class="px-2.5 py-1 rounded-lg bg-teal-600 text-white text-xs font-bold">Slide 1 de 10</span>
+            <span id="slide-audience-badge" class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold">Visão Geral da Clínica</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btn-toggle-notes" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-1.5">
+              <span>🎙️ Roteiro de Fala</span>
+            </button>
+            <button id="btn-prev-slide" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition-all">
+              ← Anterior
+            </button>
+            <button id="btn-next-slide" type="button" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-40 transition-all shadow-sm">
+              Próximo →
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress Pills -->
+        <div id="slide-pills-container" class="grid grid-cols-5 sm:grid-cols-10 gap-1.5 pt-1"></div>
+      </div>
+
+      <!-- Slide Stage -->
+      <div id="slide-stage" class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[520px] flex flex-col justify-between slide-enter">
+        <!-- Dynamic Slide Content injected via JS -->
+      </div>
+
+      <!-- Presenter Notes Drawer -->
+      <div id="presenter-notes-box" class="hidden bg-amber-50/90 border border-amber-200 rounded-2xl p-4 sm:p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-amber-900">🎙️ Roteiro sugerido para o apresentador neste slide</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">Dica de Treinamento</span>
+          </div>
+          <button id="btn-close-notes" type="button" class="text-xs font-semibold text-amber-800 hover:underline">Ocultar</button>
+        </div>
+        <p id="presenter-notes-text" class="text-sm text-amber-950 leading-relaxed"></p>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: ROUTINE & ACCESS MATRIX ==================== -->
+    <section id="view-matrix" class="hidden space-y-6">
+      <!-- Daily Routine Checklists for Dentists & Secretaries -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Secretary Daily Checklist -->
+        <div class="bg-white rounded-3xl border border-purple-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-purple-100 pb-3">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full">Rotina da Recepção</span>
+              <h3 class="text-lg font-extrabold text-slate-900 mt-1">🎧 Checklist Diário da Secretária</h3>
+            </div>
+            <span id="sec-progress-text" class="text-xs font-bold text-purple-700 bg-purple-100 px-2.5 py-1 rounded-lg">0/6 concluídos</span>
+          </div>
+          <div id="sec-checklist-container" class="space-y-2.5"></div>
+        </div>
+
+        <!-- Dentist Daily Checklist -->
+        <div class="bg-white rounded-3xl border border-blue-200 p-5 sm:p-6 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-blue-100 pb-3">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full">Rotina do Consultório</span>
+              <h3 class="text-lg font-extrabold text-slate-900 mt-1">🦷 Checklist Diário do Dentista</h3>
+            </div>
+            <span id="dent-progress-text" class="text-xs font-bold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-lg">0/6 concluídos</span>
+          </div>
+          <div id="dent-checklist-container" class="space-y-2.5"></div>
+        </div>
+      </div>
+
+      <!-- Full System Modules & Permissions Table -->
+      <div class="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-lg font-extrabold text-slate-900">Mapa Completo de Telas, Rotas e Permissões do DentalCare</h3>
+            <p class="text-xs text-slate-500">Clique em qualquer módulo ou rota abaixo para abrir diretamente a página correspondente no <a href="/" target="_blank" rel="noopener noreferrer" class="text-teal-700 underline font-semibold">DentalCare</a>.</p>
+          </div>
+          <input id="matrix-search-input" type="text" placeholder="Buscar tela, rota ou funcionalidade..." class="text-xs border border-slate-300 rounded-xl px-3.5 py-2 w-full sm:w-64 bg-slate-50" />
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr class="border-b border-slate-200 text-slate-500 bg-slate-50/80">
+                <th class="py-3 px-3 font-bold">Módulo / Menu</th>
+                <th class="py-3 px-3 font-bold">Link Direto no Sistema</th>
+                <th class="py-3 px-3 font-bold text-center">🦷 Dentista</th>
+                <th class="py-3 px-3 font-bold text-center">🎧 Secretária</th>
+                <th class="py-3 px-3 font-bold text-center">⚙️ Admin</th>
+                <th class="py-3 px-3 font-bold">Uso Prático na Clínica</th>
+              </tr>
+            </thead>
+            <tbody id="matrix-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-4 px-4 sm:px-6 mt-8">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+      <span><strong>DentalCare</strong> — Apresentação Interativa de Onboarding para Clínicas Odontológicas</span>
+      <span>Use as setas do teclado (<strong>←</strong> / <strong>→</strong>) para navegar pelos slides • Acesso ao sistema: <a href="/" target="_blank" rel="noopener noreferrer" class="text-teal-700 font-semibold hover:underline">Abrir DentalCare ↗</a></span>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var BASE_URL = '';
+
+      function appUrl(path) {
+        if (!path || path === '/') return BASE_URL + '/';
+        return BASE_URL + (path.charAt(0) === '/' ? path : '/' + path);
+      }
+
+      function routeLink(path, label, extraClass) {
+        var cls = extraClass || 'text-teal-700 hover:text-teal-900 underline font-semibold';
+        return '<a href="' + appUrl(path) + '" target="_blank" rel="noopener noreferrer" class="' + cls + '">' + (label || path) + ' ↗</a>';
+      }
+
+      // ==================== DATA: 10 SLIDES ====================
+      var slidesData = [
+        {
+          id: 1,
+          roleTag: 'all',
+          badge: 'Boas-Vindas & Visão Geral',
+          title: 'DentalCare: Gestão Odontológica Integrada da Recepção ao Consultório',
+          subtitle: 'Uma plataforma única que conecta o agendamento inteligente no WhatsApp, a rotina da Secretária e o Prontuário Clínico do Dentista.',
+          presenterNotes: 'Comece dando boas-vindas aos dentistas e secretárias. Explique que o objetivo do DentalCare não é gerar mais burocracia, mas eliminar retrabalho: o paciente que conversa com a IA no WhatsApp já cai na agenda e na fila de revisão da secretária, e tudo o que o dentista registra no prontuário e no orçamento já gera automaticamente as parcelas no Contas a Receber.',
+          accent: 'teal',
+          primaryLinks: [
+            { label: 'Abrir Dashboard', path: '/dashboard' },
+            { label: 'Abrir Agenda', path: '/appointments' },
+            { label: 'Abrir Prontuários', path: '/medical-records' }
+          ],
+          highlights: [
+            {
+              icon: '🤖',
+              tag: 'WhatsApp + IA (Evolution API & Gemini)',
+              path: '/support',
+              linkLabel: 'Abrir Atendimento (/support)',
+              title: 'Atendimento e Agendamento Inteligente 24h',
+              desc: 'O assistente virtual atende pacientes no WhatsApp, consulta horários livres dos dentistas e pré-cadastra novos pacientes com alerta de revisão para a recepção em ' + routeLink('/support', 'Atendimento') + '.'
+            },
+            {
+              icon: '🎧',
+              tag: 'Recepção & Secretárias',
+              path: '/appointments',
+              linkLabel: 'Abrir Agendamentos (/appointments)',
+              title: 'Controle Total do Fluxo de Pacientes e Caixa',
+              desc: 'Agenda visual rápida em ' + routeLink('/appointments', 'Agendamentos') + ' (Dia, Semana, Mês), confirmação com 1 clique, chat ao vivo com handoff da IA em ' + routeLink('/support', 'Atendimento') + ', ' + routeLink('/anamnesis', 'Anamnese') + ' e ' + routeLink('/receivables', 'Contas a Receber') + '.'
+            },
+            {
+              icon: '🦷',
+              tag: 'Consultório & Dentistas',
+              path: '/medical-records',
+              linkLabel: 'Abrir Prontuários (/medical-records)',
+              title: 'Prontuário Eletrônico e Tratamento por Dente',
+              desc: 'Histórico clínico vinculado a cada consulta em ' + routeLink('/medical-records', 'Prontuários') + ', alertas de ' + routeLink('/anamnesis', 'Anamnese') + ', evolução detalhada por número do dente e região, anexos radiográficos e orçamentos.'
+            },
+            {
+              icon: '🔒',
+              tag: 'Segurança & Configurações',
+              path: '/settings',
+              linkLabel: 'Abrir Configurações (/settings)',
+              title: 'Isolamento Total de Dados e Mídias da Clínica',
+              desc: 'Cada clínica opera em ambiente isolado com controle de permissões por perfil (Dentista, Secretária e Administrador) em ' + routeLink('/settings', 'Configurações') + ', além de ' + routeLink('/batch-upload', 'Upload de Fotos em Lote') + ' e ' + routeLink('/import-data', 'Importação de Dados') + ' exclusivos do Admin.'
+            }
+          ],
+          footerCallout: 'Clique em qualquer funcionalidade ou botão "Abrir..." nos cards acima para abrir a tela do DentalCare em uma nova aba.'
+        },
+        {
+          id: 2,
+          roleTag: 'all',
+          badge: 'Perfis de Acesso & Papéis',
+          title: 'Quem Faz o Quê no DentalCare? Perfis Sob Medida para a Clínica',
+          subtitle: 'O sistema organiza os menus lateralmente de acordo com a função de cada profissional, mantendo a tela limpa e focada no que importa.',
+          presenterNotes: 'Mostre para a equipe que cada usuário tem seu próprio login individual no DentalCare. A secretária vê ferramentas de atendimento ao vivo e anamnese; o dentista vê sua disponibilidade e os prontuários clínicos; o administrador gerencia configurações, upload de fotos em lote e importação; e todos compartilham a visão sincronizada da Agenda e do Contas a Receber.',
+          accent: 'slate',
+          primaryLinks: [
+            { label: 'Abrir Dashboard', path: '/dashboard' },
+            { label: 'Abrir Configurações de Equipe', path: '/settings' }
+          ],
+          highlights: [
+            {
+              icon: '🦷',
+              tag: 'Perfil: dentist (Dentista)',
+              path: '/medical-records',
+              linkLabel: 'Acessar Prontuários (/medical-records)',
+              title: 'Foco Clínico, Planejamento e Produtividade',
+              desc: 'Acessa ' + routeLink('/dashboard', 'Dashboard') + ', ' + routeLink('/patients', 'Pacientes') + ', ' + routeLink('/appointments', 'Agendamentos') + ', ' + routeLink('/availability', 'Disponibilidade') + ', ' + routeLink('/medical-records', 'Prontuários e Tratamentos') + ', ' + routeLink('/receivables', 'Contas a Receber') + ' e ' + routeLink('/communications', 'Comunicação Ativa') + '.'
+            },
+            {
+              icon: '🎧',
+              tag: 'Perfil: secretary (Secretária / Recepção)',
+              path: '/support',
+              linkLabel: 'Acessar Atendimento (/support)',
+              title: 'Foco no Acolhimento, Agenda, WhatsApp e Financeiro',
+              desc: 'Acessa ' + routeLink('/dashboard', 'Dashboard') + ', ' + routeLink('/patients', 'Pacientes') + ', ' + routeLink('/appointments', 'Agendamentos') + ', ' + routeLink('/anamnesis', 'Anamnese') + ', ' + routeLink('/support', 'Atendimento ao Vivo') + ', ' + routeLink('/receivables', 'Contas a Receber') + ' e ' + routeLink('/communications', 'Comunicação Ativa') + '.'
+            },
+            {
+              icon: '⚙️',
+              tag: 'Perfil: admin (Gestor da Clínica)',
+              path: '/settings',
+              linkLabel: 'Acessar Configurações (/settings)',
+              title: 'Configuração da Clínica, Equipe, Upload de Fotos e Importação',
+              desc: 'Além de todos os módulos clínicos e de recepção, gerencia ' + routeLink('/settings', 'Configurações da Clínica') + ', horários de funcionamento, feriados, pareamento QR Code do WhatsApp, ' + routeLink('/batch-upload', 'Upload de Fotos') + ' e ' + routeLink('/import-data', 'Importação de Dados CSV') + '.'
+            },
+            {
+              icon: '🤝',
+              tag: 'Trabalho Colaborativo em Tempo Real',
+              path: '/appointments',
+              linkLabel: 'Acessar Agenda Sincronizada (/appointments)',
+              title: 'Sem Papelada ou Recados Soltos entre Recepção e Sala Clínica',
+              desc: 'Quando a secretária muda o status da consulta em ' + routeLink('/appointments', 'Agendamentos') + ' para "Confirmado" ou "Em Atendimento", o dentista vê na hora. Quando o dentista aprova o orçamento, as parcelas já aparecem prontas em ' + routeLink('/receivables', 'Contas a Receber') + '.'
+            }
+          ],
+          footerCallout: 'Todos os links acima abrem diretamente as páginas em produção do DentalCare.'
+        },
+        {
+          id: 3,
+          roleTag: 'all',
+          badge: 'Fluxo Ponta a Ponta',
+          title: 'A Jornada Completa do Paciente Dentro do DentalCare',
+          subtitle: 'Veja como o trabalho da Secretária e do Dentista se conecta em 6 etapas simples, desde o primeiro "Oi" no WhatsApp até o retorno semestral.',
+          presenterNotes: 'Passe pelas 6 etapas mostrando a passagem de bastão entre IA, Secretária e Dentista no DentalCare. Clique nos links de cada etapa caso queira mostrar a tela real aberta durante a explicação.',
+          accent: 'teal',
+          primaryLinks: [
+            { label: '1. Atendimento', path: '/support' },
+            { label: '2. Pacientes', path: '/patients' },
+            { label: '3. Agenda', path: '/appointments' },
+            { label: '4. Prontuários', path: '/medical-records' },
+            { label: '5. Recebíveis', path: '/receivables' },
+            { label: '6. Comunicação', path: '/communications' }
+          ],
+          highlights: [
+            {
+              icon: '1️⃣',
+              tag: 'Etapa 1 • WhatsApp & IA',
+              path: '/support',
+              linkLabel: 'Abrir Atendimento (/support)',
+              title: 'Captação Automática ou Atendimento Humano',
+              desc: 'O paciente envia mensagem no WhatsApp da clínica. A IA tira dúvidas iniciais ou agenda no horário disponível do dentista. Se precisar de ajuda humana, aciona o alerta de Handoff em ' + routeLink('/support', 'Atendimento (/support)') + '.'
+            },
+            {
+              icon: '2️⃣',
+              tag: 'Etapa 2 • Recepção',
+              path: '/patients',
+              linkLabel: 'Abrir Pacientes (/patients)',
+              title: 'Revisão Cadastral, Vínculo e Anamnese',
+              desc: 'A secretária confere a fila "Revisão da Secretária" em ' + routeLink('/patients', 'Pacientes (/patients)') + ', completa CEP/CPF/Responsável legal e registra o questionário em ' + routeLink('/anamnesis', 'Anamnese (/anamnesis)') + ' antes de o paciente entrar no consultório.'
+            },
+            {
+              icon: '3️⃣',
+              tag: 'Etapa 3 • Sala de Espera',
+              path: '/appointments',
+              linkLabel: 'Abrir Agendamentos (/appointments)',
+              title: 'Confirmação e Entrada em Atendimento',
+              desc: 'Na grade do calendário em ' + routeLink('/appointments', 'Agendamentos (/appointments)') + ', a secretária acompanha os status: Pendente → Agendado → Confirmado (via WhatsApp) → Em Atendimento.'
+            },
+            {
+              icon: '4️⃣',
+              tag: 'Etapa 4 • Consultório',
+              path: '/medical-records',
+              linkLabel: 'Abrir Prontuários (/medical-records)',
+              title: 'Prontuário, Evolução por Dente e Orçamento',
+              desc: 'Em ' + routeLink('/medical-records', 'Prontuários (/medical-records)') + ', o dentista verifica alertas da anamnese, cria o Plano de Tratamento, registra evoluções por dente e região, anexa radiografias e monta o orçamento.'
+            },
+            {
+              icon: '5️⃣',
+              tag: 'Etapa 5 • Fechamento',
+              path: '/receivables',
+              linkLabel: 'Abrir Contas a Receber (/receivables)',
+              title: 'Aprovação do Orçamento e Contas a Receber',
+              desc: 'Ao aprovar o orçamento, o sistema gera automaticamente as parcelas em ' + routeLink('/receivables', 'Contas a Receber (/receivables)') + '. A secretária registra pagamentos, envia lembretes e copia dados para Nota Fiscal.'
+            },
+            {
+              icon: '6️⃣',
+              tag: 'Etapa 6 • Fidelização',
+              path: '/communications',
+              linkLabel: 'Abrir Comunicação Ativa (/communications)',
+              title: 'Pós-Atendimento, Aniversariantes e Retorno 6 Meses',
+              desc: 'A régua de ' + routeLink('/communications', 'Comunicação Ativa (/communications)') + ' permite enviar mensagens para pacientes concluídos, aniversariantes e inativos há mais de 6 meses.'
+            }
+          ],
+          footerCallout: 'Cada etapa possui atalho direto para a página correspondente do DentalCare.'
+        },
+        {
+          id: 4,
+          roleTag: 'secretary',
+          badge: 'Guia da Secretária • Módulo 1',
+          title: 'Cadastro Inteligente de Pacientes, Fila da IA e Anamnese',
+          subtitle: 'Telas: Pacientes (/patients) e Anamnese (/anamnesis) — organização impecável desde o primeiro contato.',
+          presenterNotes: 'Este slide é dedicado às secretárias. Destaque três recursos que economizam muito tempo na recepção: 1) a fila de revisão de cadastros feitos pela IA; 2) o botão de vincular um número de WhatsApp desconhecido a um paciente já existente; e 3) o autopreenchimento de endereço por CEP e campos de responsável para pacientes menores de idade.',
+          accent: 'purple',
+          primaryLinks: [
+            { label: 'Abrir Pacientes (/patients)', path: '/patients' },
+            { label: 'Abrir Anamnese (/anamnesis)', path: '/anamnesis' }
+          ],
+          highlights: [
+            {
+              icon: '📋',
+              tag: 'Cadastro Completo',
+              path: '/patients',
+              linkLabel: 'Abrir Cadastro de Pacientes (/patients)',
+              title: 'Dados Pessoais, CEP Automático e Menores de Idade',
+              desc: 'Em ' + routeLink('/patients', 'Pacientes (/patients)') + ', registre Nome, CPF, RG, Telefones, Data de Nascimento, Estado Civil, endereço automático via CEP, foto de perfil, canal de captação e dados do Responsável Legal para menores.'
+            },
+            {
+              icon: '🤖',
+              tag: 'Fila de Revisão da IA',
+              path: '/patients',
+              linkLabel: 'Revisar Cadastros da IA (/patients)',
+              title: 'Revisão de Pacientes Cadastrados pela IA no WhatsApp',
+              desc: 'Quando a IA cria um pré-cadastro durante uma conversa no WhatsApp, o paciente recebe um selo de revisão em ' + routeLink('/patients', 'Pacientes (/patients)') + ' para a secretária validar os documentos na chegada à clínica.'
+            },
+            {
+              icon: '🔗',
+              tag: 'Unificação de Contatos',
+              path: '/patients',
+              linkLabel: 'Vincular Número em Pacientes (/patients)',
+              title: 'Vinculação Rápida de Números do WhatsApp',
+              desc: 'Se um paciente antigo mandar mensagem de um número novo no WhatsApp, a secretária pode vincular aquele número diretamente à ficha clínica existente em ' + routeLink('/patients', 'Pacientes (/patients)') + ' sem duplicar cadastros.'
+            },
+            {
+              icon: '🩺',
+              tag: 'Questionário de Saúde',
+              path: '/anamnesis',
+              linkLabel: 'Abrir Anamnese (/anamnesis)',
+              title: 'Anamnese Configurável (Texto, Sim/Não e Múltipla Escolha)',
+              desc: 'Preenchimento rápido na recepção em ' + routeLink('/anamnesis', 'Anamnese (/anamnesis)') + ' com perguntas personalizadas pela clínica. As respostas ficam visíveis no prontuário para alertar o dentista.'
+            }
+          ],
+          footerCallout: 'Boas práticas para a Recepção: sempre vincular o "Dentista Responsável" na ficha do paciente em /patients.'
+        },
+        {
+          id: 5,
+          roleTag: 'secretary',
+          badge: 'Guia da Secretária • Módulo 2',
+          title: 'Domínio da Agenda, Status em Tempo Real e Confirmações no WhatsApp',
+          subtitle: 'Telas: Agendamentos (/appointments) e Impressão da Agenda (/print-schedule).',
+          presenterNotes: 'Mostre para a secretária como a agenda funciona com visões Diária, Semanal e Mensal. Explique que o envio de confirmação pelo WhatsApp fica gravado em um log de auditoria, então toda a equipe sabe exatamente quando o paciente foi avisado.',
+          accent: 'purple',
+          primaryLinks: [
+            { label: 'Abrir Agendamentos (/appointments)', path: '/appointments' },
+            { label: 'Imprimir Agenda (/print-schedule)', path: '/print-schedule' }
+          ],
+          highlights: [
+            {
+              icon: '📅',
+              tag: 'Calendário Interativo',
+              path: '/appointments',
+              linkLabel: 'Abrir Calendário (/appointments)',
+              title: 'Visões Dia, Semana e Mês com Ajuste Automático',
+              desc: 'Crie agendamentos em segundos em ' + routeLink('/appointments', 'Agendamentos (/appointments)') + ' filtrando por dentista ou visualizando toda a clínica. O sistema respeita os horários de funcionamento e feriados cadastrados.'
+            },
+            {
+              icon: '🔄',
+              tag: 'Status em Tempo Real',
+              path: '/appointments',
+              linkLabel: 'Gerenciar Status na Agenda (/appointments)',
+              title: 'Controle Visual de Cada Etapa da Consulta',
+              desc: 'Acompanhe e atualize o status com 1 clique em ' + routeLink('/appointments', 'Agendamentos (/appointments)') + ': Pendente → Agendado → Confirmado → Em Atendimento → Concluído (ou Cancelado).'
+            },
+            {
+              icon: '📲',
+              tag: 'Confirmação Auditada no WhatsApp',
+              path: '/appointments',
+              linkLabel: 'Disparar Confirmações (/appointments)',
+              title: 'Disparo Direto pelo Card da Consulta + Histórico de Envio',
+              desc: 'Envie lembretes de confirmação pelo WhatsApp diretamente da tela de ' + routeLink('/appointments', 'Agendamentos (/appointments)') + ' e consulte o registro de auditoria com data, hora e status de entrega.'
+            },
+            {
+              icon: '🖨️',
+              tag: 'Impressão Rápida da Grade',
+              path: '/print-schedule',
+              linkLabel: 'Abrir Impressão da Agenda (/print-schedule)',
+              title: 'Lista Diária e Semanal Pronta para Impressão',
+              desc: 'Precisa disponibilizar a agenda em papel para apoio na recepção ou nos consultórios? Acesse ' + routeLink('/print-schedule', 'Impressão da Agenda (/print-schedule)') + ' com layout limpo por profissional.'
+            }
+          ],
+          footerCallout: 'Precisa de uma versão impressa da agenda do dia? Clique em "Imprimir Agenda (/print-schedule)" no rodapé deste slide.'
+        },
+        {
+          id: 6,
+          roleTag: 'secretary',
+          badge: 'Guia da Secretária • Módulo 3',
+          title: 'Central de Atendimento ao Vivo (Live Chat) e Handoff da IA',
+          subtitle: 'Tela: Atendimento (/support) — a parceria entre a Inteligência Artificial e o atendimento humano da Secretária.',
+          presenterNotes: 'Explique com tranquilidade como funciona o botão de Handoff em /support. A IA responde dúvidas comuns e agenda horários padrão sozinha. Mas quando o paciente pede algo delicado (ex.: dor aguda, dúvida sobre cirurgia, negociação financeira), os Guardrails de segurança transferem a conversa para a secretária com um alerta visual no menu.',
+          accent: 'purple',
+          primaryLinks: [
+            { label: 'Abrir Central de Atendimento (/support)', path: '/support' },
+            { label: 'Configurar Instância WhatsApp (/settings)', path: '/settings' }
+          ],
+          highlights: [
+            {
+              icon: '💬',
+              tag: 'Interface Estilo WhatsApp Web',
+              path: '/support',
+              linkLabel: 'Abrir Chat ao Vivo (/support)',
+              title: 'Todas as Conversas da Clínica Centralizadas no Navegador',
+              desc: 'Sem precisar disputar um aparelho celular na recepção: acompanhe todas as mensagens trocadas com os pacientes diretamente na tela de ' + routeLink('/support', 'Atendimento (/support)') + '.'
+            },
+            {
+              icon: '🤝',
+              tag: 'Controle de Handoff (IA ↔ Humano)',
+              path: '/support',
+              linkLabel: 'Gerenciar Handoff em Atendimento (/support)',
+              title: 'Assuma ou Devolva a Conversa para a IA com 1 Clique',
+              desc: 'Quando a secretária assume o atendimento em ' + routeLink('/support', 'Atendimento (/support)') + ', a IA pausa as respostas automáticas naquela conversa para não interromper o diálogo humano. Ao finalizar, basta devolver para a IA.'
+            },
+            {
+              icon: '🔔',
+              tag: 'Badge de Alerta no Menu Lateral',
+              path: '/support',
+              linkLabel: 'Ver Fila de Espera (/support)',
+              title: 'Notificação Imediata de Pacientes Aguardando Recepção',
+              desc: 'O menu lateral exibe um contador em destaque para ' + routeLink('/support', 'Atendimento (/support)') + ' sempre que uma conversa entra em fila de espera humana, garantindo que nenhum paciente fique sem resposta.'
+            },
+            {
+              icon: '🛡️',
+              tag: 'Guardrails de Segurança Clínica',
+              path: '/support',
+              linkLabel: 'Acompanhar Alertas da IA (/support)',
+              title: 'Proteção Automática contra Agendamentos Fora de Regra',
+              desc: 'A IA identifica automaticamente dúvidas clínicas complexas ou pedidos fora da grade do dentista e aciona a recepção em ' + routeLink('/support', 'Atendimento (/support)') + ' em vez de improvisar respostas.'
+            }
+          ],
+          footerCallout: 'O pareamento de QR Code das instâncias do WhatsApp da clínica é gerenciado em Configurações (/settings).'
+        },
+        {
+          id: 7,
+          roleTag: 'dentist',
+          badge: 'Guia do Dentista • Módulo 1',
+          title: 'Agenda do Profissional e Configuração de Disponibilidade',
+          subtitle: 'Telas: Agendamentos (/appointments), Disponibilidade (/availability) e Impressão (/print-schedule).',
+          presenterNotes: 'Agora fale diretamente com os dentistas. Mostre que a agenda da IA e da secretária só agenda dentro dos horários que o próprio dentista habilita na tela de Disponibilidade (/availability), respeitando a duração padrão de consulta de cada especialista.',
+          accent: 'blue',
+          primaryLinks: [
+            { label: 'Abrir Disponibilidade (/availability)', path: '/availability' },
+            { label: 'Abrir Agendamentos (/appointments)', path: '/appointments' },
+            { label: 'Imprimir Agenda (/print-schedule)', path: '/print-schedule' }
+          ],
+          highlights: [
+            {
+              icon: '🗓️',
+              tag: 'Grade Semanal por Período',
+              path: '/availability',
+              linkLabel: 'Configurar Disponibilidade (/availability)',
+              title: 'Defina Seus Dias e Turnos de Atendimento (Manhã, Tarde e Noite)',
+              desc: 'Configure em ' + routeLink('/availability', 'Disponibilidade (/availability)') + ' em quais dias da semana e períodos você atende na clínica. Tanto a recepção quanto o agendamento via IA no WhatsApp seguem estritamente essa grade.'
+            },
+            {
+              icon: '⏱️',
+              tag: 'Tempo de Consulta Personalizado',
+              path: '/availability',
+              linkLabel: 'Definir Duração Padrão (/availability)',
+              title: 'Duração Padrão por Profissional',
+              desc: 'Cada especialidade tem seu ritmo: defina em ' + routeLink('/availability', 'Disponibilidade (/availability)') + ' a duração padrão das suas consultas (ex.: 30 min, 45 min, 60 min) para que os encaixes na agenda tenham o tempo exato.'
+            },
+            {
+              icon: '🔍',
+              tag: 'Visão Individual ou Compartilhada',
+              path: '/appointments',
+              linkLabel: 'Filtrar Minha Agenda (/appointments)',
+              title: 'Filtro Rápido por Dentista e Impressão do Dia',
+              desc: 'Visualize apenas os seus pacientes do dia/semana na tela de ' + routeLink('/appointments', 'Agendamentos (/appointments)') + ' ou imprima sua lista diária de atendimentos em ' + routeLink('/print-schedule', 'Impressão de Agenda (/print-schedule)') + '.'
+            },
+            {
+              icon: '🏖️',
+              tag: 'Bloqueio de Feriados e Recessos',
+              path: '/settings',
+              linkLabel: 'Ver Calendário de Feriados (/settings)',
+              title: 'Sincronização com o Calendário da Clínica',
+              desc: 'Feriados nacionais, locais e recessos cadastrados em ' + routeLink('/settings', 'Configurações (/settings)') + ' ficam bloqueados visualmente no calendário, evitando agendamentos acidentais em dias sem expediente.'
+            }
+          ],
+          footerCallout: 'Qualquer ajuste salvo em Disponibilidade (/availability) já atualiza instantaneamente os horários ofertados pela IA no WhatsApp!'
+        },
+        {
+          id: 8,
+          roleTag: 'dentist',
+          badge: 'Guia do Dentista • Módulo 2',
+          title: 'Prontuário Eletrônico, Planos de Tratamento por Dente e Exames',
+          subtitle: 'Telas: Prontuários (/medical-records) e Pacientes (/patients) — documentação clínica completa, visual e segura.',
+          presenterNotes: 'Este é o coração do DentalCare para o dentista. Destaque a organização estruturada em /medical-records: 1) Prontuário com linha do tempo por consulta; 2) Planos de Tratamento separados por status; e 3) Registro de movimentações especificando exatamente o número do dente, a região/face e a foto da atividade executada.',
+          accent: 'blue',
+          primaryLinks: [
+            { label: 'Abrir Prontuários (/medical-records)', path: '/medical-records' },
+            { label: 'Abrir Pacientes (/patients)', path: '/patients' },
+            { label: 'Ver Anamnese (/anamnesis)', path: '/anamnesis' }
+          ],
+          highlights: [
+            {
+              icon: '🦷',
+              tag: 'Planos de Tratamento & Movimentações',
+              path: '/medical-records',
+              linkLabel: 'Abrir Planos de Tratamento (/medical-records)',
+              title: 'Registro Preciso por Número do Dente e Região',
+              desc: 'Em ' + routeLink('/medical-records', 'Prontuários (/medical-records)') + ', crie planos de tratamento (Em andamento, Concluído, Cancelado) e lance cada evolução informando o dente trabalhado, a face/região e a foto clínica da atividade.'
+            },
+            {
+              icon: '📝',
+              tag: 'Evolução Clínica na Linha do Tempo',
+              path: '/medical-records',
+              linkLabel: 'Registrar Evolução Clínica (/medical-records)',
+              title: 'Anotações Clínicas Vinculadas à Consulta',
+              desc: 'Registre detalhadamente em ' + routeLink('/medical-records', 'Prontuários (/medical-records)') + ' o procedimento executado, observações técnicas e valores associados diretamente vinculados ao agendamento do dia.'
+            },
+            {
+              icon: '📸',
+              tag: 'Galeria de Radiografias e Fotos Clínicas',
+              path: '/medical-records',
+              linkLabel: 'Anexar Imagens no Prontuário (/medical-records)',
+              title: 'Anexos de Mídia com Segurança e Isolamento por Clínica',
+              desc: 'Anexe radiografias periapicais, panorâmicas e fotos intraorais de antes/depois diretamente na evolução em ' + routeLink('/medical-records', 'Prontuários (/medical-records)') + '.'
+            },
+            {
+              icon: '✅',
+              tag: 'Conclusão e Avaliação Formal',
+              path: '/medical-records',
+              linkLabel: 'Concluir e Avaliar Tratamento (/medical-records)',
+              title: 'Fechamento Técnico do Tratamento',
+              desc: 'Ao finalizar todas as etapas clínicas previstas no plano em ' + routeLink('/medical-records', 'Prontuários (/medical-records)') + ', marque o tratamento como concluído e avaliado, habilitando o paciente na régua de pós-tratamento.'
+            }
+          ],
+          footerCallout: 'Antes de iniciar o procedimento, consulte sempre os alertas de alergias e medicamentos registrados na Anamnese.'
+        },
+        {
+          id: 9,
+          roleTag: 'all',
+          badge: 'Dentista + Secretária • Fluxo Financeiro',
+          title: 'Do Orçamento Clínico ao Contas a Receber e Nota Fiscal',
+          subtitle: 'Telas: Prontuários (/medical-records) e Contas a Receber (/receivables) — transparência financeira sem planilhas paralelas.',
+          presenterNotes: 'Mostre como o Dentista e a Secretária atuam juntos aqui: o dentista monta os itens do orçamento durante a avaliação clínica (podendo aplicar desconto autorizado), e assim que o orçamento é aprovado, as parcelas nascem prontas na tela de Contas a Receber para a secretária acompanhar.',
+          accent: 'teal',
+          primaryLinks: [
+            { label: 'Abrir Contas a Receber (/receivables)', path: '/receivables' },
+            { label: 'Abrir Orçamentos no Prontuário (/medical-records)', path: '/medical-records' }
+          ],
+          highlights: [
+            {
+              icon: '🧮',
+              tag: 'Elaboração de Orçamentos',
+              path: '/medical-records',
+              linkLabel: 'Elaborar Orçamento (/medical-records)',
+              title: 'Itens Detalhados, Subtotal e Aplicação de Desconto',
+              desc: 'No prontuário do paciente em ' + routeLink('/medical-records', 'Prontuários (/medical-records)') + ', adicione os procedimentos planejados com seus valores, aplique descontos negociados e apresente o valor final claro ao paciente.'
+            },
+            {
+              icon: '⚡',
+              tag: 'Conversão Automática em Recebíveis',
+              path: '/receivables',
+              linkLabel: 'Ver Parcelas Geradas (/receivables)',
+              title: 'Aprovação Gera Parcelas Vinculadas ao Tratamento e Dentista',
+              desc: 'Ao aprovar o orçamento, o DentalCare cria automaticamente os títulos em ' + routeLink('/receivables', 'Contas a Receber (/receivables)') + ' vinculados ao paciente, ao tratamento e ao dentista executor.'
+            },
+            {
+              icon: '💳',
+              tag: 'Gestão de Status e Cobrança via WhatsApp',
+              path: '/receivables',
+              linkLabel: 'Cobrar / Dar Baixa em Parcelas (/receivables)',
+              title: 'Controle de Parcelas: Pendente, Pago, Vencido, Acordo e Cancelado',
+              desc: 'Envie lembretes de vencimento ou cobranças amigáveis via WhatsApp diretamente pela tela de ' + routeLink('/receivables', 'Contas a Receber (/receivables)') + '.'
+            },
+            {
+              icon: '🧾',
+              tag: 'Agilidade Fiscal (Nota Fiscal)',
+              path: '/receivables',
+              linkLabel: 'Copiar Dados p/ NFS-e (/receivables)',
+              title: 'Cópia Rápida de Dados para Emissão de Nota Fiscal',
+              desc: 'Com 1 clique no modal de cópia fiscal em ' + routeLink('/receivables', 'Contas a Receber (/receivables)') + ', a secretária copia os dados cadastrais do paciente (CPF, endereço, valor e descrição) para colar no emissor da prefeitura.'
+            }
+          ],
+          footerCallout: 'Tudo fica vinculado: você sabe exatamente qual orçamento, tratamento e dentista gerou cada parcela recebida.'
+        },
+        {
+          id: 10,
+          roleTag: 'all',
+          badge: 'Fidelização & Indicadores',
+          title: 'Comunicação Ativa no WhatsApp e Dashboard de Resultados',
+          subtitle: 'Telas: Comunicação Ativa (/communications) e Dashboard (/dashboard) — agenda cheia o ano inteiro com pacientes fidelizados.',
+          presenterNotes: 'Encerre a apresentação mostrando que o DentalCare também ajuda a clínica a crescer. A tela de Comunicação Ativa mostra automaticamente quem faz aniversário, quem terminou o tratamento e quem sumiu há mais de 6 meses para profilaxia/retorno.',
+          accent: 'teal',
+          primaryLinks: [
+            { label: 'Abrir Comunicação Ativa (/communications)', path: '/communications' },
+            { label: 'Abrir Dashboard Executivo (/dashboard)', path: '/dashboard' }
+          ],
+          highlights: [
+            {
+              icon: '🎂',
+              tag: 'Aniversariantes do Dia e Mês',
+              path: '/communications',
+              linkLabel: 'Ver Aniversariantes (/communications)',
+              title: 'Mensagens de Parabéns que Encantam e Fidelizam',
+              desc: 'Em ' + routeLink('/communications', 'Comunicação Ativa (/communications)') + ', o sistema lista os aniversariantes do dia e do mês para que a equipe envie felicitações personalizadas pelo WhatsApp com 1 clique.'
+            },
+            {
+              icon: '🔄',
+              tag: 'Resgate de Pacientes Inativos (+6 Meses)',
+              path: '/communications',
+              linkLabel: 'Resgatar Pacientes Inativos (/communications)',
+              title: 'Recuperação Automática de Pacientes sem Consulta há +6 Meses',
+              desc: 'Identifique imediatamente em ' + routeLink('/communications', 'Comunicação Ativa (/communications)') + ' pacientes que não retornam há mais de 6 meses e dispare convites de revisão preventiva e profilaxia pelo WhatsApp.'
+            },
+            {
+              icon: '🌟',
+              tag: 'Pós-Tratamento Concluído',
+              path: '/communications',
+              linkLabel: 'Acompanhar Pós-Tratamento (/communications)',
+              title: 'Acompanhamento de Pacientes com Alta Clínica Recente',
+              desc: 'Envie orientações pós-procedimento e mensagens de acompanhamento em ' + routeLink('/communications', 'Comunicação Ativa (/communications)') + ' para pacientes que acabaram de concluir seus planos de tratamento.'
+            },
+            {
+              icon: '📊',
+              tag: 'Dashboard Executivo',
+              path: '/dashboard',
+              linkLabel: 'Abrir Dashboard (/dashboard)',
+              title: 'Visão em Tempo Real de Consultas, Confirmações e Recebíveis',
+              desc: 'Acompanhe no início do dia em ' + routeLink('/dashboard', 'Dashboard (/dashboard)') + ' o total de pacientes ativos, volume de consultas do mês, taxa de confirmação da agenda e resumo financeiro.'
+            }
+          ],
+          footerCallout: 'Clique na aba "2. Rotina & Acessos" no topo para consultar o checklist diário da equipe e a tabela completa de links do DentalCare.'
+        }
+      ];
+
+      // ==================== STATE ====================
+      var currentView = 'slides'; // 'slides' | 'matrix'
+      var currentSlideIndex = 0;
+      var currentRoleFilter = 'all'; // 'all' | 'dentist' | 'secretary'
+      var showPresenterNotes = false;
+
+      var secChecklist = [
+        { id: 's1', path: '/support', linkLabel: 'Abrir /support', title: 'Checar alertas de Handoff no Atendimento ao Vivo', desc: 'Responder pacientes no WhatsApp que solicitaram atendente humano ou relataram urgência.', done: false },
+        { id: 's2', path: '/patients', linkLabel: 'Abrir /patients', title: 'Validar fila "Revisão da Secretária" em Pacientes', desc: 'Conferir CPF, CEP e responsável legal dos cadastros criados pela IA durante a noite.', done: false },
+        { id: 's3', path: '/appointments', linkLabel: 'Abrir /appointments', title: 'Confirmar a agenda do dia e do dia seguinte', desc: 'Disparar mensagens de confirmação via WhatsApp e atualizar os cards para "Confirmado".', done: false },
+        { id: 's4', path: '/anamnesis', linkLabel: 'Abrir /anamnesis', title: 'Preencher Anamnese dos novos pacientes na chegada', desc: 'Garantir que alergias e histórico médico estejam salvos antes de mudar status para "Em Atendimento".', done: false },
+        { id: 's5', path: '/receivables', linkLabel: 'Abrir /receivables', title: 'Conferir Contas a Receber do dia e emitir dados de NFS-e', desc: 'Dar baixa em pagamentos, enviar lembretes de parcelas vencidas e copiar dados fiscais.', done: false },
+        { id: 's6', path: '/communications', linkLabel: 'Abrir /communications', title: 'Disparar mensagens de Aniversariantes e Inativos +6 meses', desc: 'Usar a régua de Comunicação Ativa para fidelizar pacientes e preencher horários livres.', done: false }
+      ];
+
+      var dentChecklist = [
+        { id: 'd1', path: '/appointments', linkLabel: 'Abrir /appointments', title: 'Conferir agenda do dia filtrada pelo seu perfil', desc: 'Visualizar pacientes confirmados, procedimentos previstos e se necessário imprimir a grade (/print-schedule).', done: false },
+        { id: 'd2', path: '/medical-records', linkLabel: 'Abrir /medical-records', title: 'Revisar alertas de Anamnese ao chamar o paciente', desc: 'Checar alergias medicamentosas, hipertensão, diabetes ou condições especiais registradas.', done: false },
+        { id: 'd3', path: '/medical-records', linkLabel: 'Abrir /medical-records', title: 'Registrar evolução no Plano de Tratamento por Dente e Região', desc: 'Informar dente, região e observações clínicas em todas as sessões para manter o histórico íntegro.', done: false },
+        { id: 'd4', path: '/medical-records', linkLabel: 'Abrir /medical-records', title: 'Anexar radiografias e fotos intraorais da sessão', desc: 'Subir fotos da atividade executada diretamente na movimentação do tratamento ou evolução.', done: false },
+        { id: 'd5', path: '/receivables', linkLabel: 'Abrir /receivables', title: 'Elaborar e aprovar Orçamentos com o paciente', desc: 'Lançar itens de orçamento no prontuário e aprovar para que as parcelas sigam automaticamente para Contas a Receber.', done: false },
+        { id: 'd6', path: '/availability', linkLabel: 'Abrir /availability', title: 'Manter a grade de Disponibilidade atualizada', desc: 'Revisar turnos de atendimento (Manhã, Tarde, Noite) e duração padrão de consulta.', done: false }
+      ];
+
+      var systemMatrix = [
+        { menu: 'Dashboard', route: '/dashboard', dentist: true, secretary: true, admin: true, desc: 'Visão geral de pacientes ativos, consultas no mês, taxa de confirmação e resumo financeiro.' },
+        { menu: 'Pacientes', route: '/patients', dentist: true, secretary: true, admin: true, desc: 'Cadastro completo (CEP, CPF, menor/responsável), fila de revisão da IA e vínculo de número do WhatsApp.' },
+        { menu: 'Agendamentos', route: '/appointments', dentist: true, secretary: true, admin: true, desc: 'Calendário Dia/Semana/Mês, atualização de status em tempo real e confirmação auditada via WhatsApp.' },
+        { menu: 'Impressão da Agenda', route: '/print-schedule', dentist: true, secretary: true, admin: true, desc: 'Visualização limpa e otimizada para impressão da agenda diária ou semanal dos profissionais.' },
+        { menu: 'Disponibilidade', route: '/availability', dentist: true, secretary: false, admin: true, desc: 'Configuração dos dias e turnos de atendimento do dentista (Manhã, Tarde, Noite) e duração padrão da consulta.' },
+        { menu: 'Prontuários', route: '/medical-records', dentist: true, secretary: false, admin: true, desc: 'Linha do tempo clínica, planos de tratamento, evolução por dente e região, anexos radiográficos e orçamentos.' },
+        { menu: 'Anamnese', route: '/anamnesis', dentist: false, secretary: true, admin: true, desc: 'Questionário configurável de saúde (texto, sim/não, múltipla escolha) integrado à ficha do paciente.' },
+        { menu: 'Contas a Receber', route: '/receivables', dentist: true, secretary: true, admin: true, desc: 'Gestão de parcelas geradas pelos orçamentos, baixa de pagamentos, cobrança via WhatsApp e cópia para Nota Fiscal.' },
+        { menu: 'Atendimento (Chat)', route: '/support', dentist: false, secretary: true, admin: true, desc: 'Chat ao vivo do WhatsApp, transição de atendimento IA ↔ Humano (handoff) e alertas de segurança.' },
+        { menu: 'Comunicação Ativa', route: '/communications', dentist: true, secretary: true, admin: true, desc: 'Disparo de mensagens no WhatsApp para aniversariantes, tratamentos concluídos e pacientes inativos há +6 meses.' },
+        { menu: 'Upload Fotos em Lote', route: '/batch-upload', dentist: false, secretary: false, admin: true, desc: 'Exclusivo Admin: envio drag-and-drop em massa de fotografias clínicas e radiografias para associação aos pacientes.' },
+        { menu: 'Importar Dados', route: '/import-data', dentist: false, secretary: false, admin: true, desc: 'Importação em lote de planilhas CSV/Excel com cadastros legados de pacientes e histórico.' },
+        { menu: 'Configurações', route: '/settings', dentist: false, secretary: false, admin: true, desc: 'Dados da clínica, equipe/usuários, horários de funcionamento, feriados e conexão QR Code do WhatsApp.' }
+      ];
+
+      function getFilteredSlides() {
+        if (currentRoleFilter === 'all') return slidesData;
+        return slidesData.filter(function (s) {
+          return s.roleTag === 'all' || s.roleTag === currentRoleFilter;
+        });
+      }
+
+      // ==================== RENDER SLIDES ====================
+      function renderSlideView() {
+        var visibleSlides = getFilteredSlides();
+        if (currentSlideIndex >= visibleSlides.length) {
+          currentSlideIndex = 0;
+        }
+        var slide = visibleSlides[currentSlideIndex];
+
+        // Counter & Badges
+        var counterBadge = document.getElementById('slide-counter-badge');
+        var audienceBadge = document.getElementById('slide-audience-badge');
+        counterBadge.textContent = 'Slide ' + (currentSlideIndex + 1) + ' de ' + visibleSlides.length;
+
+        if (slide.roleTag === 'dentist') {
+          audienceBadge.textContent = '🦷 Foco: Dentistas';
+          audienceBadge.className = 'px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 text-xs font-bold';
+        } else if (slide.roleTag === 'secretary') {
+          audienceBadge.textContent = '🎧 Foco: Secretárias / Recepção';
+          audienceBadge.className = 'px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 text-xs font-bold';
+        } else {
+          audienceBadge.textContent = '🤝 Toda a Equipe (Dentistas & Secretárias)';
+          audienceBadge.className = 'px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 text-xs font-bold';
+        }
+
+        // Prev / Next buttons
+        document.getElementById('btn-prev-slide').disabled = (currentSlideIndex === 0);
+        document.getElementById('btn-next-slide').disabled = (currentSlideIndex === visibleSlides.length - 1);
+
+        // Pills
+        var pillsContainer = document.getElementById('slide-pills-container');
+        pillsContainer.innerHTML = '';
+        visibleSlides.forEach(function (s, idx) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          var isCurrent = (idx === currentSlideIndex);
+          btn.className = 'h-8 rounded-lg text-xs font-bold transition-all px-2 truncate ' +
+            (isCurrent
+              ? 'bg-teal-600 text-white shadow-sm ring-2 ring-teal-200'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200');
+          btn.textContent = (idx + 1) + '. ' + s.badge.split('•')[0].trim();
+          btn.title = s.title;
+          btn.addEventListener('click', function () {
+            currentSlideIndex = idx;
+            renderSlideView();
+          });
+          pillsContainer.appendChild(btn);
+        });
+
+        // Header gradient based on accent
+        var headerGradient = 'from-teal-700 via-teal-600 to-cyan-600';
+        var cardBorder = 'border-teal-100 hover:border-teal-300';
+        var tagStyle = 'bg-teal-50 text-teal-800 border-teal-200';
+        var btnStyle = 'bg-teal-600 hover:bg-teal-700 text-white';
+        if (slide.accent === 'blue') {
+          headerGradient = 'from-blue-700 via-blue-600 to-indigo-600';
+          cardBorder = 'border-blue-100 hover:border-blue-300';
+          tagStyle = 'bg-blue-50 text-blue-800 border-blue-200';
+          btnStyle = 'bg-blue-600 hover:bg-blue-700 text-white';
+        } else if (slide.accent === 'purple') {
+          headerGradient = 'from-purple-700 via-purple-600 to-fuchsia-600';
+          cardBorder = 'border-purple-100 hover:border-purple-300';
+          tagStyle = 'bg-purple-50 text-purple-800 border-purple-200';
+          btnStyle = 'bg-purple-600 hover:bg-purple-700 text-white';
+        } else if (slide.accent === 'slate') {
+          headerGradient = 'from-slate-800 via-slate-700 to-slate-900';
+          cardBorder = 'border-slate-200 hover:border-slate-300';
+          tagStyle = 'bg-slate-100 text-slate-800 border-slate-200';
+          btnStyle = 'bg-slate-800 hover:bg-slate-900 text-white';
+        }
+
+        var gridCols = slide.highlights.length === 6 ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-2';
+
+        var cardsHtml = slide.highlights.map(function (h) {
+          var targetHref = appUrl(h.path);
+          return (
+            '<div class="bg-slate-50/70 rounded-2xl p-4 sm:p-5 border ' + cardBorder + ' transition-all flex flex-col justify-between gap-3">' +
+              '<div>' +
+                '<div class="flex items-center justify-between gap-2 mb-2.5">' +
+                  '<a href="' + targetHref + '" target="_blank" rel="noopener noreferrer" class="text-xs font-bold px-2.5 py-1 rounded-full border ' + tagStyle + ' hover:opacity-80 transition-opacity">' + h.tag + ' ↗</a>' +
+                  '<span class="text-xl" aria-hidden="true">' + h.icon + '</span>' +
+                '</div>' +
+                '<h3 class="text-base font-extrabold text-slate-900 mb-1.5">' +
+                  '<a href="' + targetHref + '" target="_blank" rel="noopener noreferrer" class="hover:text-teal-700 transition-colors underline decoration-slate-300 hover:decoration-teal-600 underline-offset-4">' +
+                    h.title +
+                  '</a>' +
+                '</h3>' +
+                '<p class="text-xs sm:text-sm text-slate-600 leading-relaxed">' + h.desc + '</p>' +
+              '</div>' +
+              '<div class="pt-2 border-t border-slate-200/70 flex items-center justify-end">' +
+                '<a href="' + targetHref + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm transition-all ' + btnStyle + '">' +
+                  '<span>' + h.linkLabel + '</span>' +
+                  '<span aria-hidden="true">↗</span>' +
+                '</a>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join('');
+
+        var footerLinksHtml = (slide.primaryLinks || []).map(function (pl) {
+          return (
+            '<a href="' + appUrl(pl.path) + '" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:border-teal-600 text-xs font-bold text-teal-700 hover:bg-teal-50 transition-all shadow-sm inline-flex items-center gap-1">' +
+              '<span>' + pl.label + '</span>' +
+              '<span aria-hidden="true">↗</span>' +
+            '</a>'
+          );
+        }).join('');
+
+        var stage = document.getElementById('slide-stage');
+        stage.innerHTML =
+          '<div>' +
+            '<div class="bg-gradient-to-r ' + headerGradient + ' p-6 sm:p-8 text-white">' +
+              '<div class="flex flex-wrap items-center justify-between gap-2 mb-3">' +
+                '<span class="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm">' + slide.badge + '</span>' +
+                '<a href="' + BASE_URL + '/" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-white/90 hover:text-white underline">DentalCare • Abrir Sistema ↗</a>' +
+              '</div>' +
+              '<h1 class="text-xl sm:text-3xl font-extrabold tracking-tight leading-snug">' + slide.title + '</h1>' +
+              '<p class="text-sm sm:text-base text-white/90 mt-2 max-w-4xl">' + slide.subtitle + '</p>' +
+            '</div>' +
+            '<div class="p-5 sm:p-8">' +
+              '<div class="grid grid-cols-1 ' + gridCols + ' gap-4">' +
+                cardsHtml +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="bg-slate-50 border-t border-slate-200 px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">' +
+            '<p class="text-xs font-medium text-slate-600">💡 ' + slide.footerCallout + '</p>' +
+            '<div class="flex flex-wrap items-center gap-2">' +
+              footerLinksHtml +
+            '</div>' +
+          '</div>';
+
+        // Presenter Notes
+        var notesBox = document.getElementById('presenter-notes-box');
+        var notesText = document.getElementById('presenter-notes-text');
+        notesText.textContent = slide.presenterNotes;
+        if (showPresenterNotes) {
+          notesBox.classList.remove('hidden');
+        } else {
+          notesBox.classList.add('hidden');
+        }
+      }
+
+      // ==================== RENDER CHECKLISTS & MATRIX ====================
+      function renderChecklistsAndMatrix() {
+        // Secretary Checklist
+        var secContainer = document.getElementById('sec-checklist-container');
+        secContainer.innerHTML = '';
+        var secDoneCount = 0;
+        secChecklist.forEach(function (item) {
+          if (item.done) secDoneCount++;
+          var div = document.createElement('div');
+          div.className = 'flex items-start justify-between gap-3 p-3 rounded-2xl border transition-all ' +
+            (item.done ? 'bg-purple-50/60 border-purple-200 text-slate-500' : 'bg-slate-50 hover:bg-purple-50/30 border-slate-200');
+          div.innerHTML =
+            '<label class="flex items-start gap-3 cursor-pointer flex-1">' +
+              '<input type="checkbox" data-sec-id="' + item.id + '" class="mt-1 rounded text-purple-600 focus:ring-purple-500" ' + (item.done ? 'checked' : '') + ' />' +
+              '<div>' +
+                '<div class="text-xs sm:text-sm font-bold text-slate-900 ' + (item.done ? 'line-through' : '') + '">' + item.title + '</div>' +
+                '<div class="text-xs text-slate-500 mt-0.5">' + item.desc + '</div>' +
+              '</div>' +
+            '</label>' +
+            '<a href="' + appUrl(item.path) + '" target="_blank" rel="noopener noreferrer" class="shrink-0 px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-bold transition-colors">' +
+              item.linkLabel + ' ↗' +
+            '</a>';
+          secContainer.appendChild(div);
+        });
+        document.getElementById('sec-progress-text').textContent = secDoneCount + '/' + secChecklist.length + ' concluídos';
+
+        secContainer.querySelectorAll('input[type="checkbox"]').forEach(function (chk) {
+          chk.addEventListener('change', function (e) {
+            var id = e.target.getAttribute('data-sec-id');
+            secChecklist.forEach(function (c) {
+              if (c.id === id) c.done = e.target.checked;
+            });
+            renderChecklistsAndMatrix();
+          });
+        });
+
+        // Dentist Checklist
+        var dentContainer = document.getElementById('dent-checklist-container');
+        dentContainer.innerHTML = '';
+        var dentDoneCount = 0;
+        dentChecklist.forEach(function (item) {
+          if (item.done) dentDoneCount++;
+          var div = document.createElement('div');
+          div.className = 'flex items-start justify-between gap-3 p-3 rounded-2xl border transition-all ' +
+            (item.done ? 'bg-blue-50/60 border-blue-200 text-slate-500' : 'bg-slate-50 hover:bg-blue-50/30 border-slate-200');
+          div.innerHTML =
+            '<label class="flex items-start gap-3 cursor-pointer flex-1">' +
+              '<input type="checkbox" data-dent-id="' + item.id + '" class="mt-1 rounded text-blue-600 focus:ring-blue-500" ' + (item.done ? 'checked' : '') + ' />' +
+              '<div>' +
+                '<div class="text-xs sm:text-sm font-bold text-slate-900 ' + (item.done ? 'line-through' : '') + '">' + item.title + '</div>' +
+                '<div class="text-xs text-slate-500 mt-0.5">' + item.desc + '</div>' +
+              '</div>' +
+            '</label>' +
+            '<a href="' + appUrl(item.path) + '" target="_blank" rel="noopener noreferrer" class="shrink-0 px-2.5 py-1 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs font-bold transition-colors">' +
+              item.linkLabel + ' ↗' +
+            '</a>';
+          dentContainer.appendChild(div);
+        });
+        document.getElementById('dent-progress-text').textContent = dentDoneCount + '/' + dentChecklist.length + ' concluídos';
+
+        dentContainer.querySelectorAll('input[type="checkbox"]').forEach(function (chk) {
+          chk.addEventListener('change', function (e) {
+            var id = e.target.getAttribute('data-dent-id');
+            dentChecklist.forEach(function (c) {
+              if (c.id === id) c.done = e.target.checked;
+            });
+            renderChecklistsAndMatrix();
+          });
+        });
+
+        // Matrix Table
+        var searchVal = (document.getElementById('matrix-search-input').value || '').toLowerCase();
+        var tbody = document.getElementById('matrix-table-body');
+        tbody.innerHTML = '';
+
+        systemMatrix.filter(function (row) {
+          if (currentRoleFilter === 'dentist' && !row.dentist) return false;
+          if (currentRoleFilter === 'secretary' && !row.secretary) return false;
+          if (!searchVal) return true;
+          return (
+            row.menu.toLowerCase().indexOf(searchVal) !== -1 ||
+            row.route.toLowerCase().indexOf(searchVal) !== -1 ||
+            row.desc.toLowerCase().indexOf(searchVal) !== -1
+          );
+        }).forEach(function (row) {
+          var fullLink = appUrl(row.route);
+          var tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-50 transition-colors';
+          tr.innerHTML =
+            '<td class="py-3 px-3 font-bold text-slate-900">' +
+              '<a href="' + fullLink + '" target="_blank" rel="noopener noreferrer" class="hover:text-teal-700 underline decoration-slate-300 hover:decoration-teal-600 underline-offset-4">' +
+                row.menu +
+              '</a>' +
+            '</td>' +
+            '<td class="py-3 px-3">' +
+              '<a href="' + fullLink + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 font-mono text-xs px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold transition-colors">' +
+                '<span>' + row.route + '</span>' +
+                '<span aria-hidden="true">↗</span>' +
+              '</a>' +
+            '</td>' +
+            '<td class="py-3 px-3 text-center">' + (row.dentist ? '<span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">Sim</span>' : '<span class="text-slate-300">—</span>') + '</td>' +
+            '<td class="py-3 px-3 text-center">' + (row.secretary ? '<span class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-xs font-bold">Sim</span>' : '<span class="text-slate-300">—</span>') + '</td>' +
+            '<td class="py-3 px-3 text-center">' + (row.admin ? '<span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 text-xs font-bold">Sim</span>' : '<span class="text-slate-300">—</span>') + '</td>' +
+            '<td class="py-3 px-3 text-slate-600 text-xs">' + row.desc + '</td>';
+          tbody.appendChild(tr);
+        });
+      }
+
+      // ==================== VIEW & FILTER SWITCHING ====================
+      function switchMainView(viewName) {
+        currentView = viewName;
+        var views = {
+          slides: document.getElementById('view-slides'),
+          matrix: document.getElementById('view-matrix')
+        };
+        var tabs = {
+          slides: document.getElementById('tab-slides'),
+          matrix: document.getElementById('tab-matrix')
+        };
+
+        Object.keys(views).forEach(function (k) {
+          if (k === viewName) {
+            views[k].classList.remove('hidden');
+            tabs[k].className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-white text-teal-700 shadow-sm';
+          } else {
+            views[k].classList.add('hidden');
+            tabs[k].className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-600 hover:text-slate-900';
+          }
+        });
+
+        if (viewName === 'slides') renderSlideView();
+        if (viewName === 'matrix') renderChecklistsAndMatrix();
+      }
+
+      function setRoleFilter(role) {
+        currentRoleFilter = role;
+        currentSlideIndex = 0;
+
+        var btnAll = document.getElementById('role-all');
+        var btnDent = document.getElementById('role-dentist');
+        var btnSec = document.getElementById('role-secretary');
+        var banner = document.getElementById('role-banner');
+        var bannerText = document.getElementById('role-banner-text');
+
+        btnAll.className = role === 'all'
+          ? 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white transition-all'
+          : 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all';
+
+        btnDent.className = role === 'dentist'
+          ? 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-600 text-white shadow-sm transition-all'
+          : 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-all';
+
+        btnSec.className = role === 'secretary'
+          ? 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-600 text-white shadow-sm transition-all'
+          : 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-all';
+
+        if (role === 'all') {
+          banner.classList.add('hidden');
+        } else {
+          banner.classList.remove('hidden');
+          bannerText.textContent = role === 'dentist'
+            ? '🦷 Exibindo os slides e módulos relevantes para DENTISTAS (visão clínica, agenda, prontuário e orçamentos).'
+            : '🎧 Exibindo os slides e módulos relevantes para SECRETÁRIAS / RECEPÇÃO (pacientes, agenda, WhatsApp IA e recebíveis).';
+        }
+
+        renderSlideView();
+        renderChecklistsAndMatrix();
+      }
+
+      // ==================== EVENT LISTENERS ====================
+      document.getElementById('tab-slides').addEventListener('click', function () { switchMainView('slides'); });
+      document.getElementById('tab-matrix').addEventListener('click', function () { switchMainView('matrix'); });
+
+      document.getElementById('role-all').addEventListener('click', function () { setRoleFilter('all'); });
+      document.getElementById('role-dentist').addEventListener('click', function () { setRoleFilter('dentist'); });
+      document.getElementById('role-secretary').addEventListener('click', function () { setRoleFilter('secretary'); });
+      document.getElementById('role-banner-reset').addEventListener('click', function () { setRoleFilter('all'); });
+
+      document.getElementById('btn-prev-slide').addEventListener('click', function () {
+        if (currentSlideIndex > 0) {
+          currentSlideIndex--;
+          renderSlideView();
+        }
+      });
+      document.getElementById('btn-next-slide').addEventListener('click', function () {
+        var visibleSlides = getFilteredSlides();
+        if (currentSlideIndex < visibleSlides.length - 1) {
+          currentSlideIndex++;
+          renderSlideView();
+        }
+      });
+
+      document.getElementById('btn-toggle-notes').addEventListener('click', function () {
+        showPresenterNotes = !showPresenterNotes;
+        renderSlideView();
+      });
+      document.getElementById('btn-close-notes').addEventListener('click', function () {
+        showPresenterNotes = false;
+        renderSlideView();
+      });
+
+      // Keyboard navigation for slides
+      document.addEventListener('keydown', function (e) {
+        if (currentView !== 'slides') return;
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA')) return;
+        var visibleSlides = getFilteredSlides();
+        if (e.key === 'ArrowRight' && currentSlideIndex < visibleSlides.length - 1) {
+          currentSlideIndex++;
+          renderSlideView();
+        } else if (e.key === 'ArrowLeft' && currentSlideIndex > 0) {
+          currentSlideIndex--;
+          renderSlideView();
+        }
+      });
+
+      document.getElementById('matrix-search-input').addEventListener('input', function () {
+        renderChecklistsAndMatrix();
+      });
+
+      // Initial Render
+      renderSlideView();
+      renderChecklistsAndMatrix();
+    })();
+  </script>
+</body>
+</html>
