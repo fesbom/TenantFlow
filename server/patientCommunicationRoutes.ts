@@ -12,6 +12,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { sendEvolutionMessageForClinic, type ClinicEvolutionConfig } from "./evolutionService";
+import { normalizeWhatsappPhone } from "@shared/phone";
 import { authenticateToken, requireRole, type AuthenticatedRequest } from "./middleware/auth";
 import { storage } from "./storage";
 
@@ -28,7 +29,10 @@ const reasonPayloadSchema = z.object({
   triggerType: z.enum(triggerTypes),
   messageTemplate: z.string().trim().min(1).max(4000),
   isActive: z.boolean().optional(),
+  sendMode: z.enum(["automatic", "manual"]).optional(),
 });
+
+const automationSettingsSchema = z.object({ enabled: z.boolean() });
 
 const dispatchSchema = z.object({
   patientIds: z.array(z.string().min(1)).min(1).max(1000),
@@ -48,8 +52,31 @@ function renderTemplate(template: string, patientName: string, clinicName: strin
     .replaceAll("{clinica}", clinicName);
 }
 
-function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, "");
+// Janela em que o mesmo motivo não pode ser enviado de novo ao mesmo paciente.
+async function alreadyCommunicated(params: {
+  clinicId: string;
+  patientId: string;
+  category: string;
+  treatmentId?: string | null;
+}): Promise<boolean> {
+  const now = new Date();
+  let since: Date | null = null;
+  if (params.category === "birthday") since = new Date(now.getFullYear(), 0, 1);
+  else if (params.category === "inactivity_6m") since = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+  else if (params.category !== "treatment_completed") return false;
+
+  const filters = [
+    eq(communicationLogs.clinicId, params.clinicId),
+    eq(communicationLogs.patientId, params.patientId),
+    eq(communicationLogs.category, params.category),
+    sql`${communicationLogs.status} IN ('pending', 'sent', 'simulated')`,
+  ];
+  if (since) filters.push(gte(communicationLogs.createdAt, since));
+  if (params.category === "treatment_completed" && params.treatmentId) {
+    filters.push(eq(communicationLogs.treatmentId, params.treatmentId));
+  }
+  const [row] = await db.select({ id: communicationLogs.id }).from(communicationLogs).where(and(...filters)).limit(1);
+  return !!row;
 }
 
 function delay(milliseconds: number): Promise<void> {
@@ -157,10 +184,17 @@ async function sendCommunication(params: {
   category: "birthday" | "inactivity_6m" | "treatment_completed" | "manual";
   origin: "automatic" | "manual";
   template: string;
-}): Promise<{ status: "sent" | "failed" | "simulated"; error?: string }> {
+}): Promise<{ status: "sent" | "failed" | "simulated" | "skipped"; error?: string }> {
+  const validPhone = normalizeWhatsappPhone(params.patient.phone);
+  if (!validPhone) {
+    return { status: "skipped", error: "O telefone cadastrado não é um número de WhatsApp válido." };
+  }
+  if (await alreadyCommunicated({ clinicId: params.clinicId, patientId: params.patient.id, category: params.category, treatmentId: params.treatmentId })) {
+    return { status: "skipped", error: "Esta mensagem já foi enviada a este paciente pelo mesmo motivo." };
+  }
   const [clinic] = await db.select({ name: clinics.name }).from(clinics).where(eq(clinics.id, params.clinicId)).limit(1);
   if (!clinic) throw new Error("Clínica não encontrada.");
-  const phone = normalizePhone(params.patient.phone);
+  const phone = validPhone;
   const text = renderTemplate(params.template, params.patient.fullName, clinic.name);
   const [log] = await db.insert(communicationLogs).values({
     clinicId: params.clinicId,
@@ -215,41 +249,44 @@ async function getActiveReason(clinicId: string, triggerType: (typeof triggerTyp
   return reason;
 }
 
-async function hasSuccessfulLog(clinicId: string, patientId: string, reasonId: string, since: Date): Promise<boolean> {
-  const [row] = await db.select({ id: communicationLogs.id }).from(communicationLogs).where(and(
-    eq(communicationLogs.clinicId, clinicId),
-    eq(communicationLogs.patientId, patientId),
-    eq(communicationLogs.reasonId, reasonId),
-    gte(communicationLogs.sentAt, since),
-    sql`${communicationLogs.status} IN ('sent', 'simulated')`,
-  )).limit(1);
-  return !!row;
+async function ensureAutomationColumns(): Promise<void> {
+  await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS auto_communications_enabled boolean NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE communication_reasons ADD COLUMN IF NOT EXISTS send_mode text NOT NULL DEFAULT 'manual'`);
 }
 
+let automaticRunInProgress = false;
+
 async function runAutomaticCommunications(): Promise<void> {
-  const clinicRows = await db.select({ id: clinics.id }).from(clinics);
+  if (automaticRunInProgress) return;
+  automaticRunInProgress = true;
+  try {
+    await runAutomaticCommunicationsUnlocked();
+  } finally {
+    automaticRunInProgress = false;
+  }
+}
+
+async function runAutomaticCommunicationsUnlocked(): Promise<void> {
+  const clinicRows = await db.select({ id: clinics.id }).from(clinics).where(eq(clinics.autoCommunicationsEnabled, true));
   const now = new Date();
-  const startOfYear = new Date(now.getFullYear(), 0, 1);
   const inactivityCutoff = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
 
   for (const { id: clinicId } of clinicRows) {
     await ensureSystemReasons(clinicId);
     const birthdayReason = await getActiveReason(clinicId, "birthday");
-    if (birthdayReason) {
+    if (birthdayReason?.sendMode === "automatic") {
       const birthdayPatients = await db.select().from(patients).where(and(
         eq(patients.clinicId, clinicId),
         sql`EXTRACT(MONTH FROM ${patients.birthDate}) = ${now.getMonth() + 1}`,
         sql`EXTRACT(DAY FROM ${patients.birthDate}) = ${now.getDate()}`,
       ));
       for (const patient of birthdayPatients) {
-        if (!(await hasSuccessfulLog(clinicId, patient.id, birthdayReason.id, startOfYear))) {
-          await sendCommunication({ clinicId, patient, reasonId: birthdayReason.id, category: "birthday", origin: "automatic", template: birthdayReason.messageTemplate });
-        }
+        await sendCommunication({ clinicId, patient, reasonId: birthdayReason.id, category: "birthday", origin: "automatic", template: birthdayReason.messageTemplate });
       }
     }
 
     const inactivityReason = await getActiveReason(clinicId, "inactivity_6m");
-    if (inactivityReason) {
+    if (inactivityReason?.sendMode === "automatic") {
       const inactivePatients = await db.execute(sql`
         SELECT p.id, p.full_name AS "fullName", p.phone
         FROM patients p
@@ -264,14 +301,12 @@ async function runAutomaticCommunications(): Promise<void> {
           ) <= ${inactivityCutoff}
       `);
       for (const patient of inactivePatients.rows as Array<{ id: string; fullName: string; phone: string }>) {
-        if (!(await hasSuccessfulLog(clinicId, patient.id, inactivityReason.id, inactivityCutoff))) {
-          await sendCommunication({ clinicId, patient, reasonId: inactivityReason.id, category: "inactivity_6m", origin: "automatic", template: inactivityReason.messageTemplate });
-        }
+        await sendCommunication({ clinicId, patient, reasonId: inactivityReason.id, category: "inactivity_6m", origin: "automatic", template: inactivityReason.messageTemplate });
       }
     }
 
     const treatmentReason = await getActiveReason(clinicId, "treatment_completed");
-    if (treatmentReason) {
+    if (treatmentReason?.sendMode === "automatic") {
       const rows = await db.select({ treatment: treatments, patient: patients }).from(treatments)
         .innerJoin(patients, eq(patients.id, treatments.patientId))
         .where(and(
@@ -298,6 +333,51 @@ async function runAutomaticCommunications(): Promise<void> {
 }
 
 export function registerPatientCommunicationRoutes(app: Express): void {
+  app.get("/api/communications/automation", authenticateToken, requireRole(STAFF_ROLES), async (req, res) => {
+    const clinicId = (req as AuthenticatedRequest).user!.clinicId;
+    const [clinic] = await db.select({ enabled: clinics.autoCommunicationsEnabled }).from(clinics).where(eq(clinics.id, clinicId)).limit(1);
+    res.json({ enabled: clinic?.enabled ?? false });
+  });
+
+  app.put("/api/communications/automation", authenticateToken, requireRole(["admin"]), async (req, res) => {
+    const parsed = automationSettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Dados inválidos." });
+    const clinicId = (req as AuthenticatedRequest).user!.clinicId;
+    await db.update(clinics).set({ autoCommunicationsEnabled: parsed.data.enabled }).where(eq(clinics.id, clinicId));
+    res.json({ enabled: parsed.data.enabled });
+  });
+
+  app.post("/api/whatsapp/conversations/start", authenticateToken, requireRole(["admin", "secretary"]), async (req, res) => {
+    const parsed = z.object({ patientId: z.string().min(1), instanceName: z.string().optional() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Paciente é obrigatório." });
+    const clinicId = (req as AuthenticatedRequest).user!.clinicId;
+    const [patient] = await db.select({ id: patients.id, phone: patients.phone }).from(patients)
+      .where(and(eq(patients.id, parsed.data.patientId), eq(patients.clinicId, clinicId))).limit(1);
+    if (!patient) return res.status(404).json({ message: "Paciente não encontrado." });
+    const phone = normalizeWhatsappPhone(patient.phone);
+    if (!phone) return res.status(400).json({ message: "O telefone cadastrado não é um número de WhatsApp válido." });
+
+    const instances = await storage.getWhatsappInstancesByClinic(clinicId);
+    const candidates = parsed.data.instanceName
+      ? instances.filter((instance) => instance.instanceName === parsed.data.instanceName)
+      : instances;
+    for (const instance of candidates) {
+      const existing = await storage.getWhatsappConversationByPhone(clinicId, phone, instance.instanceName);
+      if (existing) return res.json({ conversationId: existing.id });
+    }
+    const instance = candidates.find((item) => item.connectedPhone) ?? candidates[0];
+    if (!instance) return res.status(409).json({ message: "Nenhuma instância de WhatsApp configurada para esta clínica." });
+    // Fechada: a primeira mensagem do atendente reativa o atendimento como humano.
+    const conversation = await storage.createWhatsappConversation({
+      clinicId,
+      patientId: patient.id,
+      phone,
+      instanceName: instance.instanceName,
+      status: "closed",
+    });
+    res.status(201).json({ conversationId: conversation.id });
+  });
+
   app.get("/api/communications/reasons", authenticateToken, requireRole(STAFF_ROLES), async (req, res) => {
     const clinicId = (req as AuthenticatedRequest).user!.clinicId;
     await ensureSystemReasons(clinicId);
@@ -378,9 +458,11 @@ export function registerPatientCommunicationRoutes(app: Express): void {
       if (!parsed.success) return res.status(400).json({ message: "Dados de envio inválidos.", errors: parsed.error.flatten() });
       const clinicId = (req as AuthenticatedRequest).user!.clinicId;
       const reasonId: string | null = parsed.data.reasonId ?? null;
+      let category: "birthday" | "inactivity_6m" | "manual" = "manual";
       if (reasonId) {
-        const [reason] = await db.select({ id: communicationReasons.id }).from(communicationReasons).where(and(eq(communicationReasons.id, reasonId), eq(communicationReasons.clinicId, clinicId), isNull(communicationReasons.deletedAt))).limit(1);
+        const [reason] = await db.select({ id: communicationReasons.id, triggerType: communicationReasons.triggerType }).from(communicationReasons).where(and(eq(communicationReasons.id, reasonId), eq(communicationReasons.clinicId, clinicId), isNull(communicationReasons.deletedAt))).limit(1);
         if (!reason) return res.status(400).json({ message: "Motivo inválido para esta clínica." });
+        if (reason.triggerType === "birthday" || reason.triggerType === "inactivity_6m") category = reason.triggerType;
       }
       const selectedPatients = await db.select({ id: patients.id, fullName: patients.fullName, phone: patients.phone }).from(patients)
         .where(and(eq(patients.clinicId, clinicId), inArray(patients.id, parsed.data.patientIds)));
@@ -389,7 +471,7 @@ export function registerPatientCommunicationRoutes(app: Express): void {
       const results: Array<{ patientId: string; status: string; error?: string }> = [];
       for (let index = 0; index < selectedPatients.length; index += 1) {
         const patient = selectedPatients[index];
-        const result = await sendCommunication({ clinicId, patient, reasonId, category: "manual", origin: "manual", template: parsed.data.message });
+        const result = await sendCommunication({ clinicId, patient, reasonId, category, origin: "manual", template: parsed.data.message });
         results.push({ patientId: patient.id, ...result });
         if (index < selectedPatients.length - 1) await delay((parsed.data.delaySeconds ?? 2) * 1000);
       }
@@ -433,6 +515,8 @@ export function registerPatientCommunicationRoutes(app: Express): void {
     })));
   });
 
-  void runAutomaticCommunications().catch((error) => console.error("[COMUNICAÇÕES] Falha na execução inicial:", error));
+  void ensureAutomationColumns()
+    .then(() => runAutomaticCommunications())
+    .catch((error) => console.error("[COMUNICAÇÕES] Falha na execução inicial:", error));
   setInterval(() => void runAutomaticCommunications().catch((error) => console.error("[COMUNICAÇÕES] Falha na rotina diária:", error)), 24 * 60 * 60 * 1000);
 }

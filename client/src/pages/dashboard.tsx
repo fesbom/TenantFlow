@@ -284,8 +284,7 @@ export default function Dashboard() {
                         {(appointment.status === "pending" || appointment.status === "scheduled") && <Clock className="h-3 w-3" />}
                         {appointment.status === "confirmed" && <CheckCircle2 className="h-3 w-3" />}
                         {appointment.status === "cancelled" && <XCircle className="h-3 w-3" />}
-                        {appointment.status === "pending" && "Aguardando confirmação"}
-                        {appointment.status === "scheduled" && "Agendado"}
+                        {(appointment.status === "pending" || appointment.status === "scheduled") && "Agendado"}
                         {appointment.status === "confirmed" && "Confirmado"}
                         {appointment.status === "in_progress" && "Em atendimento"}
                         {appointment.status === "completed" && "Concluído"}

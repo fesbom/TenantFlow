@@ -19,6 +19,7 @@ import { formatDateBR } from "@/lib/date-formatter";
 import { User, Clinic } from "@/types";
 import { Settings, Plus, Edit, Pencil, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2, FileText } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FEATURES, sanitizeFeatureAccess, type FeatureAccess, type FeatureKey } from "@shared/features";
 import { ALL_INVOICE_FIELDS, DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
 import { ProtectedImage } from "@/components/ui/protected-image";
 
@@ -39,6 +40,7 @@ export default function SettingsPage() {
     password: "",
     role: "secretary" as "admin" | "dentist" | "secretary",
     defaultAppointmentDuration: undefined as number | undefined,
+    featureAccess: {} as FeatureAccess,
   });
   const isEditingCurrentUser = selectedUser?.id === currentUser?.id;
 
@@ -451,6 +453,7 @@ export default function SettingsPage() {
       password: "",
       role: "secretary",
       defaultAppointmentDuration: undefined,
+      featureAccess: {},
     });
     setSelectedUser(null);
   };
@@ -464,6 +467,7 @@ export default function SettingsPage() {
       password: "", // Don't pre-fill password for security
       role: user.role as "admin" | "dentist" | "secretary",
       defaultAppointmentDuration: (user as any).defaultAppointmentDuration || undefined,
+      featureAccess: sanitizeFeatureAccess((user as any).featureAccess),
     });
     setIsModalOpen(true);
   };
@@ -557,7 +561,7 @@ export default function SettingsPage() {
                           Novo Usuário
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
+                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle>
                             {selectedUser ? "Editar Usuário" : "Criar Novo Usuário"}
@@ -663,6 +667,42 @@ export default function SettingsPage() {
                                 />
                               </div>
                             )}
+
+                            <div className="space-y-2 border-t pt-4">
+                              <Label>Acesso às funcionalidades</Label>
+                              <p className="text-xs text-gray-500">
+                                "Padrão" segue a função do usuário. "Permitir" libera e "Bloquear" nega o acesso, independente da função.
+                              </p>
+                              {isEditingCurrentUser && (
+                                <p className="text-xs text-amber-600">Você não pode alterar as próprias permissões.</p>
+                              )}
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                {FEATURES.map((feature) => (
+                                  <div key={feature.key} className="flex items-center justify-between gap-2 rounded-md border px-3 py-1.5">
+                                    <span className="text-sm">{feature.label}</span>
+                                    <Select
+                                      value={formData.featureAccess[feature.key as FeatureKey] ?? "default"}
+                                      disabled={isEditingCurrentUser}
+                                      onValueChange={(value) => {
+                                        const next = { ...formData.featureAccess };
+                                        if (value === "default") delete next[feature.key as FeatureKey];
+                                        else next[feature.key as FeatureKey] = value as "allow" | "deny";
+                                        setFormData({ ...formData, featureAccess: next });
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-8 w-32" data-testid={`select-access-${feature.key}`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="default">Padrão</SelectItem>
+                                        <SelectItem value="allow">Permitir</SelectItem>
+                                        <SelectItem value="deny">Bloquear</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
 
                           <div className="flex justify-end space-x-3 pt-4 border-t">

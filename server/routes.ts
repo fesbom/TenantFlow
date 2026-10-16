@@ -11,6 +11,7 @@ import { Readable } from "stream";
 import { storage } from "./storage";
 import { applyOutOfHoursNotice } from "./clinicBusinessHoursService";
 import { DEFAULT_BOOKING_MESSAGE, renderBookingMessage } from "@shared/booking-message";
+import { sanitizeFeatureAccess } from "@shared/features";
 import {
   authenticateToken,
   requireRole,
@@ -301,6 +302,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS simulation_updated_at timestamp`);
   await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS simulation_updated_by varchar`);
   await db.execute(sql`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS is_simulated boolean NOT NULL DEFAULT false`);
+  // Controles de comunicação automática e permissões por usuário (ver migrations/0015)
+  await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS auto_communications_enabled boolean NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_access jsonb NOT NULL DEFAULT '{}'::jsonb`);
+  await db.execute(sql`ALTER TABLE communication_reasons ADD COLUMN IF NOT EXISTS send_mode text NOT NULL DEFAULT 'manual'`);
   registerPatientCommunicationRoutes(app);
 
   await db.execute(sql`
@@ -491,12 +496,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fullName: user.fullName,
           role: user.role,
           clinicId: user.clinicId,
+          featureAccess: sanitizeFeatureAccess(user.featureAccess),
         },
       });
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
+  });
+
+  app.get("/api/auth/permissions", authenticateToken, (req: AuthenticatedRequest, res) => {
+    res.json({ role: req.user!.role, featureAccess: req.user!.featureAccess ?? {} });
   });
 
   app.post("/api/webhooks/brevo/email", handleBrevoEmailWebhook);
@@ -766,6 +776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const userData = insertUserSchema.parse({
           ...req.body,
+          featureAccess: sanitizeFeatureAccess(req.body?.featureAccess),
           clinicId: req.user!.clinicId,
         });
 
@@ -831,6 +842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { clinicId: _ignoredClinic, tokenVersion: _ignoredVersion, ...safeBody } = req.body || {};
         const parsedData = insertUserSchema.partial().parse(safeBody);
         const updateData = { ...parsedData };
+        if ("featureAccess" in safeBody) updateData.featureAccess = sanitizeFeatureAccess(safeBody.featureAccess) as Record<string, "allow" | "deny">;
 
         if (updateData.password && updateData.password.trim() !== "") {
           updateData.password = await bcrypt.hash(updateData.password, 10);
@@ -3274,12 +3286,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             let csvContent: string;
             try {
-              csvContent = fileBuffer.toString("utf8");
-              if (csvContent.includes(""))
-                throw new Error("UTF-8 decoding failed");
+              csvContent = new TextDecoder("utf-8", { fatal: true }).decode(
+                fileBuffer,
+              );
             } catch (error) {
               csvContent = fileBuffer.toString("latin1");
             }
+            // Aspas soltas no meio de um texto (ex.: SANT"ANA) fariam o parser
+            // juntar várias linhas em um único registro.
+            csvContent = csvContent.replace(/(?<=[^,"\r\n])"(?=[^,"\r\n])/g, "'");
             const stream = Readable.from(csvContent);
             stream
               .pipe(csv({ separator: "," }))
@@ -3316,7 +3331,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   const existing = await db
                     .select()
                     .from(patients)
-                    .where(eq(patients.externalId, row.cd_paciente.toString()))
+                    .where(
+                      and(
+                        eq(patients.externalId, row.cd_paciente.toString()),
+                        eq(patients.clinicId, req.user!.clinicId),
+                      ),
+                    )
                     .limit(1);
                   if (existing.length > 0) {
                     idMapping.set(`patient_${row.cd_paciente}`, existing[0].id);

@@ -12,7 +12,9 @@ import { apiRequest } from "@/lib/api";
 import PatientModal from "@/components/modals/patient-modal";
 import InvoiceCopyModal, { DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
 import { Patient, User as AppUser } from "@/types";
-import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User, FileText, SlidersHorizontal, ChevronDown, X, CircleCheck } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Phone, Mail, ChevronLeft, ChevronRight, User, FileText, SlidersHorizontal, ChevronDown, X, CircleCheck, MessageCircle, AlertTriangle } from "lucide-react";
+import { useLocation } from "wouter";
+import { isValidWhatsappPhone } from "@shared/phone";
 import { formatDateBR } from "@/lib/date-formatter";
 import { ProtectedImage } from "@/components/ui/protected-image";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -41,7 +43,17 @@ export default function Patients() {
   const [prefillData, setPrefillData] = useState<{ phone?: string; fullName?: string } | undefined>();
   const [invoicePatient, setInvoicePatient] = useState<Patient | null>(null);
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+
+  const startConversationMutation = useMutation({
+    mutationFn: async (patientId: string) => {
+      const response = await apiRequest("POST", "/api/whatsapp/conversations/start", { patientId });
+      return response.json() as Promise<{ conversationId: string }>;
+    },
+    onSuccess: ({ conversationId }) => setLocation(`/support?conversation=${conversationId}`),
+    onError: (error: Error) => toast({ title: "Não foi possível iniciar a conversa", description: error.message, variant: "destructive" }),
+  });
 
   // Debounce search term
   useEffect(() => {
@@ -366,6 +378,30 @@ export default function Patients() {
                                 <div className="flex items-center text-sm">
                                   <Phone className="h-3 w-3 mr-1 text-gray-400" />
                                   {patient.phone}
+                                  {isValidWhatsappPhone(patient.phone) ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="ml-2 h-6 px-2 text-emerald-600 hover:text-emerald-700"
+                                      title="Iniciar conversa no WhatsApp pelo módulo de Atendimento"
+                                      disabled={startConversationMutation.isPending}
+                                      onClick={() => startConversationMutation.mutate(patient.id)}
+                                      data-testid={`button-start-conversation-${patient.id}`}
+                                    >
+                                      <MessageCircle className="h-4 w-4 mr-1" />
+                                      Conversar
+                                    </Button>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="ml-2 border-amber-400 text-amber-700"
+                                      title="O telefone cadastrado não é um celular com WhatsApp válido (DDD + 9 + 8 dígitos). Corrija o cadastro."
+                                      data-testid={`badge-invalid-whatsapp-${patient.id}`}
+                                    >
+                                      <AlertTriangle className="h-3 w-3 mr-1" />
+                                      Sem WhatsApp válido
+                                    </Badge>
+                                  )}
                                 </div>
                                 {patient.email && (
                                   <div className="flex items-center text-sm text-gray-500">

@@ -155,7 +155,7 @@ export default function AppointmentModal({
             setFormData({
                 patientId: appointment.patientId, dentistId: appointment.dentistId, scheduledDate: formattedDateTime,
                 duration: appointment.duration || 60, procedure: appointment.procedure || "", notes: appointment.notes || "",
-                status: appointment.status || "scheduled",
+                status: !appointment.status || appointment.status === "pending" ? "scheduled" : appointment.status,
             });
         } else {
             let formattedDateTime = "";
@@ -442,10 +442,9 @@ export default function AppointmentModal({
               <Select value={formData.status} onValueChange={(value) => handleInputChange("status", value)}>
                 <SelectTrigger id="status" data-testid="select-appointment-status"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Aguardando confirmação</SelectItem>
+                  <SelectItem value="scheduled">Agendado (aguardando confirmação)</SelectItem>
                   <SelectItem value="confirmed">Confirmado</SelectItem>
                   <SelectItem value="cancelled">Cancelado / desmarcado</SelectItem>
-                  <SelectItem value="scheduled">Agendado</SelectItem>
                 </SelectContent>
               </Select>
             </div>

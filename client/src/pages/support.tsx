@@ -133,6 +133,15 @@ export default function Support() {
     return () => clearInterval(id);
   }, []);
 
+  // Abre a conversa indicada via /support?conversation=<id> (ex.: iniciada pela lista de pacientes)
+  useEffect(() => {
+    const conversationId = new URLSearchParams(window.location.search).get("conversation");
+    if (conversationId) {
+      setFilterTab("all");
+      setSelectedConversationId(conversationId);
+    }
+  }, []);
+
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<ConversationWithPatient[]>({
     queryKey: ["/api/conversations"],
     refetchInterval: CONVERSATIONS_POLL_INTERVAL,

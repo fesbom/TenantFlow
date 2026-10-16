@@ -31,6 +31,8 @@ export const clinics = pgTable("clinics", {
   invoiceFields: text("invoice_fields"),
   // Modo Simulação do WhatsApp: quando ativo, nenhuma chamada HTTP é feita à Evolution API
   simulationMode: boolean("simulation_mode").default(false).notNull(),
+  // Envio automático de comunicações (aniversário, retorno, pós-tratamento). Desabilitado por padrão.
+  autoCommunicationsEnabled: boolean("auto_communications_enabled").default(false).notNull(),
   simulationUpdatedAt: timestamp("simulation_updated_at"),
   simulationUpdatedBy: varchar("simulation_updated_by"),
   status: text("status").default("active").notNull(), // active | suspended
@@ -55,6 +57,8 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").default(true).notNull(),
   tokenVersion: integer("token_version").default(0).notNull(),
   defaultAppointmentDuration: integer("default_appointment_duration"), // Default duration in minutes for dentist appointments
+  // Exceções por usuário sobre o perfil: { "<funcionalidade>": "allow" | "deny" }
+  featureAccess: jsonb("feature_access").$type<Record<string, "allow" | "deny">>().default({}).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -250,6 +254,7 @@ export const communicationReasons = pgTable("communication_reasons", {
   triggerType: text("trigger_type").notNull(), // birthday | inactivity_6m | treatment_completed | manual
   messageTemplate: text("message_template").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  sendMode: text("send_mode").default("manual").notNull(), // automatic | manual
   isSystemDefault: boolean("is_system_default").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { storage } from "../storage";
+import { API_DENY_ENFORCED, featureForPath, sanitizeFeatureAccess, type FeatureAccess } from "../../shared/features";
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET || process.env.SESSION_SECRET;
@@ -15,6 +16,7 @@ export interface AuthenticatedRequest extends Request {
     role: string;
     clinicId: string;
     fullName: string;
+    featureAccess?: FeatureAccess;
   };
 }
 
@@ -62,7 +64,13 @@ export const authenticateToken = async (
       role: user.role,
       clinicId: user.clinicId || "",
       fullName: user.fullName,
+      featureAccess: sanitizeFeatureAccess(user.featureAccess),
     };
+
+    const feature = featureForPath(req.originalUrl);
+    if (feature && user.role !== "superadmin" && req.user.featureAccess?.[feature] === "deny" && API_DENY_ENFORCED.has(feature)) {
+      return res.status(403).json({ code: "RECURSO_BLOQUEADO", message: "Acesso a esta funcionalidade foi bloqueado para o seu usuário." });
+    }
 
     next();
   } catch (error) {
@@ -77,6 +85,9 @@ export const requireRole = (roles: string[]) => {
     }
 
     if (!roles.includes(req.user.role)) {
+      const feature = featureForPath(req.originalUrl);
+      // Liberação explícita por usuário vale independentemente do perfil, exceto rotas fora do mapa de funcionalidades.
+      if (feature && req.user.featureAccess?.[feature] === "allow") return next();
       return res.status(403).json({ code: "PERMISSAO_INSUFICIENTE", message: "Permissão insuficiente." });
     }
 

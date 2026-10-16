@@ -19,22 +19,22 @@ import {
   MessageSquare,
   Clock,
   Send,
-  CircleHelp,
 } from "lucide-react";
+import { usePermissions } from "@/hooks/use-permissions";
+import type { FeatureKey } from "@shared/features";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: BarChart3, roles: ["admin", "dentist", "secretary"] },
-  { name: "Pacientes", href: "/patients", icon: Users, roles: ["admin", "dentist", "secretary"] },
-  { name: "Agendamentos", href: "/appointments", icon: Calendar, roles: ["admin", "dentist", "secretary"] },
-  { name: "Disponibilidade", href: "/availability", icon: Clock, roles: ["admin", "dentist"] },
-  { name: "Prontuários", href: "/medical-records", icon: FileText, roles: ["admin", "dentist"] },
-  { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"] },
-  { name: "Contas a Receber", href: "/receivables", icon: DollarSign, roles: ["admin", "dentist", "secretary"] },
-  { name: "Atendimento", href: "/support", icon: MessageSquare, roles: ["admin", "secretary"], badge: true },
-  { name: "Ajuda do Sistema", href: "/help", icon: CircleHelp, roles: ["admin", "dentist", "secretary"] },
-  { name: "Comunicação Ativa", href: "/communications", icon: Send, roles: ["admin", "dentist", "secretary"] },
-  { name: "Importar Dados", href: "/import-data", icon: Upload, roles: ["admin"] },
-  { name: "Upload Fotos", href: "/batch-upload", icon: Images, roles: ["admin", "secretary"] },
+const navigation: Array<{ name: string; href: string; icon: typeof BarChart3; roles: string[]; feature?: FeatureKey; badge?: boolean }> = [
+  { name: "Dashboard", href: "/dashboard", icon: BarChart3, roles: ["admin", "dentist", "secretary"], feature: "dashboard" },
+  { name: "Pacientes", href: "/patients", icon: Users, roles: ["admin", "dentist", "secretary"], feature: "patients" },
+  { name: "Agendamentos", href: "/appointments", icon: Calendar, roles: ["admin", "dentist", "secretary"], feature: "appointments" },
+  { name: "Disponibilidade", href: "/availability", icon: Clock, roles: ["admin", "dentist"], feature: "availability" },
+  { name: "Prontuários", href: "/medical-records", icon: FileText, roles: ["admin", "dentist"], feature: "medical-records" },
+  { name: "Anamnese", href: "/anamnesis", icon: ClipboardList, roles: ["admin", "secretary"], feature: "anamnesis" },
+  { name: "Contas a Receber", href: "/receivables", icon: DollarSign, roles: ["admin", "dentist", "secretary"], feature: "receivables" },
+  { name: "Atendimento", href: "/support", icon: MessageSquare, roles: ["admin", "secretary"], feature: "support", badge: true },
+  { name: "Comunicação Ativa", href: "/communications", icon: Send, roles: ["admin", "dentist", "secretary"], feature: "communications" },
+  { name: "Importar Dados", href: "/import-data", icon: Upload, roles: ["admin"], feature: "import-data" },
+  { name: "Upload Fotos", href: "/batch-upload", icon: Images, roles: ["admin", "secretary"], feature: "batch-upload" },
   { name: "Configurações", href: "/settings", icon: Settings, roles: ["admin"] },
 ];
 
@@ -51,12 +51,14 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
   const user = authContext?.user;
   const logout = authContext?.logout;
 
+  const { can } = usePermissions();
+
   // Polling de conversas para o badge de não lidas (10s).
   // TanStack Query deduplica com a mesma query do support.tsx — sem requisição dupla.
   const { data: conversations = [] } = useQuery<any[]>({
     queryKey: ["/api/conversations"],
     refetchInterval: 10_000,
-    enabled: !!user,
+    enabled: !!user && can("support"),
   });
 
   // "Não lida" = conversa onde o paciente enviou a última mensagem e ainda não foi encerrada
@@ -65,7 +67,7 @@ export default function Sidebar({ isOpen, onClose, isExpanded = true, onToggleEx
   ).length;
 
   const filteredNavigation = navigation.filter((item) =>
-    item.roles.includes(user?.role || "")
+    item.feature ? can(item.feature) : item.roles.includes(user?.role || "")
   );
 
   return (
