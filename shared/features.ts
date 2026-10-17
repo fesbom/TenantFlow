@@ -9,7 +9,8 @@ export type FeatureKey =
   | "support"
   | "communications"
   | "batch-upload"
-  | "import-data";
+  | "import-data"
+  | "settings";
 
 export type FeatureOverride = "allow" | "deny";
 export type FeatureAccess = Partial<Record<FeatureKey, FeatureOverride>>;
@@ -26,6 +27,7 @@ export const FEATURES: ReadonlyArray<{ key: FeatureKey; label: string; roles: re
   { key: "communications", label: "Comunicação Ativa", roles: ["admin", "dentist", "secretary"] },
   { key: "batch-upload", label: "Upload Fotos", roles: ["admin", "secretary"] },
   { key: "import-data", label: "Importar Dados", roles: ["admin"] },
+  { key: "settings", label: "Configurações", roles: ["admin"] },
 ];
 
 const FEATURE_KEYS = new Set<string>(FEATURES.map((feature) => feature.key));
@@ -40,6 +42,7 @@ export const FEATURE_API_PREFIXES: Partial<Record<FeatureKey, string[]>> = {
   support: ["/api/conversations", "/api/whatsapp/conversations"],
   communications: ["/api/communications"],
   "import-data": ["/api/import-csv"],
+  settings: ["/api/users", "/api/clinic", "/api/whatsapp/instances", "/api/whatsapp/connect", "/api/whatsapp/simulation"],
 };
 
 // Funcionalidades cujo bloqueio é imposto também na API (as demais têm endpoints usados por outras telas).

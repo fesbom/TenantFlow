@@ -28,7 +28,7 @@ import {
   clinics,
   communicationLogs,
 } from "@shared/schema";
-import { eq, and, or, isNotNull, sql } from "drizzle-orm";
+import { eq, and, or, isNotNull, sql, inArray } from "drizzle-orm";
 import { upload, uploadCSV, uploadPatientPhoto } from "./middleware/upload";
 import {
   sendEmail,
@@ -721,7 +721,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.user!.clinicId,
           today,
         );
-        res.json(appointments);
+        const patientIds = Array.from(new Set(appointments.map((a) => a.patientId)));
+        const nameRows = patientIds.length
+          ? await db
+              .select({ id: patients.id, fullName: patients.fullName })
+              .from(patients)
+              .where(and(eq(patients.clinicId, req.user!.clinicId), inArray(patients.id, patientIds)))
+          : [];
+        const nameById = new Map(nameRows.map((row) => [row.id, row.fullName]));
+        res.json(appointments.map((a) => ({ ...a, patientName: nameById.get(a.patientId) ?? null })));
       } catch (error) {
         console.error("Today appointments error:", error);
         res.status(500).json({ message: "Internal server error" });
@@ -1623,7 +1631,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const appointments = await storage.getAppointmentsByClinic(
           req.user!.clinicId,
         );
-        res.json(appointments);
+        const patientIds = Array.from(new Set(appointments.map((a) => a.patientId)));
+        const nameRows = patientIds.length
+          ? await db
+              .select({ id: patients.id, fullName: patients.fullName })
+              .from(patients)
+              .where(and(eq(patients.clinicId, req.user!.clinicId), inArray(patients.id, patientIds)))
+          : [];
+        const nameById = new Map(nameRows.map((row) => [row.id, row.fullName]));
+        res.json(appointments.map((a) => ({ ...a, patientName: nameById.get(a.patientId) ?? null })));
       } catch (error) {
         console.error("Get appointments error:", error);
         res.status(500).json({ message: "Internal server error" });

@@ -184,7 +184,9 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
 
   const getPatientName = (patientId: string) => {
     const patient = patients.find(p => p.id === patientId);
-    return patient ? patient.fullName : `Paciente #${patientId.slice(-6)}`;
+    if (patient) return patient.fullName;
+    const fromAppointment = appointments.find(a => a.patientId === patientId) as (Appointment & { patientName?: string | null }) | undefined;
+    return fromAppointment?.patientName || `Paciente #${patientId.slice(-6)}`;
   };
 
   const getDentistName = (dentistId: string) => {

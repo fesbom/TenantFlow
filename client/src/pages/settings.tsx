@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermissions } from "@/hooks/use-permissions";
 import { apiRequest } from "@/lib/api";
 import { formatDateBR } from "@/lib/date-formatter";
 import { User, Clinic } from "@/types";
@@ -65,16 +66,17 @@ export default function SettingsPage() {
   const [instanceToDelete, setInstanceToDelete] = useState<WppInstance | null>(null);
   const qrPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const canViewSettings = usePermissions().can("settings");
   // Fetch users
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
-    enabled: currentUser?.role === "admin",
+    enabled: canViewSettings,
   });
 
   // Fetch clinic data
   const { data: clinic, isLoading: clinicLoading } = useQuery<Clinic>({
     queryKey: ["/api/clinic"],
-    enabled: currentUser?.role === "admin",
+    enabled: canViewSettings,
   });
 
   // Load clinic data into form when it's fetched
@@ -194,14 +196,14 @@ export default function SettingsPage() {
   // WhatsApp instances query
   const { data: wppInstances = [], isLoading: instancesLoading, refetch: refetchInstances } = useQuery<(any & { dentistIds: string[] })[]>({
     queryKey: ["/api/whatsapp/instances"],
-    enabled: currentUser?.role === "admin",
+    enabled: canViewSettings,
     refetchInterval: 20000,
   });
 
   // Simulation mode status (clinic admin can only turn it off)
   const { data: simulationStatus } = useQuery<{ simulationMode: boolean; updatedAt: string | null; updatedByName: string | null }>({
     queryKey: ["/api/whatsapp/simulation"],
-    enabled: currentUser?.role === "admin",
+    enabled: canViewSettings,
     refetchInterval: 15000,
     staleTime: 0,
   });
@@ -359,7 +361,7 @@ export default function SettingsPage() {
   // Invoice fields query
   const { data: invoiceFieldsData } = useQuery<{ fields: string[] }>({
     queryKey: ["/api/clinic/invoice-fields"],
-    enabled: currentUser?.role === "admin",
+    enabled: canViewSettings,
     queryFn: async () => {
       const res = await fetch("/api/clinic/invoice-fields", {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
@@ -531,7 +533,7 @@ export default function SettingsPage() {
         <Header title="Configurações" onMenuClick={() => setSidebarOpen(true)} />
         
         <main className="p-4 lg:p-6 flex-grow">
-          {currentUser?.role !== "admin" ? (
+          {!canViewSettings ? (
             <Card>
               <CardContent className="p-8 text-center text-gray-500">
                 <Shield className="h-12 w-12 mx-auto mb-4 text-gray-300" />
@@ -676,10 +678,10 @@ export default function SettingsPage() {
                               {isEditingCurrentUser && (
                                 <p className="text-xs text-amber-600">Você não pode alterar as próprias permissões.</p>
                               )}
-                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              <div className="max-h-64 divide-y overflow-y-auto rounded-md border">
                                 {FEATURES.map((feature) => (
-                                  <div key={feature.key} className="flex items-center justify-between gap-2 rounded-md border px-3 py-1.5">
-                                    <span className="text-sm">{feature.label}</span>
+                                  <div key={feature.key} className="flex items-center justify-between gap-3 px-3 py-2">
+                                    <span className="min-w-0 flex-1 text-sm">{feature.label}</span>
                                     <Select
                                       value={formData.featureAccess[feature.key as FeatureKey] ?? "default"}
                                       disabled={isEditingCurrentUser}
@@ -690,7 +692,7 @@ export default function SettingsPage() {
                                         setFormData({ ...formData, featureAccess: next });
                                       }}
                                     >
-                                      <SelectTrigger className="h-8 w-32" data-testid={`select-access-${feature.key}`}>
+                                      <SelectTrigger className="h-8 w-32 shrink-0" data-testid={`select-access-${feature.key}`}>
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
@@ -976,7 +978,7 @@ export default function SettingsPage() {
                   )}
                 </CardContent>
               </Card>
-              {currentUser?.role === "admin" && simulationStatus?.simulationMode && (
+              {canViewSettings && simulationStatus?.simulationMode && (
                 <Card className="border-amber-300 bg-amber-50">
                   <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
                     <div>

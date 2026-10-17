@@ -72,6 +72,11 @@ export const authenticateToken = async (
       return res.status(403).json({ code: "RECURSO_BLOQUEADO", message: "Acesso a esta funcionalidade foi bloqueado para o seu usuário." });
     }
 
+    // Liberação de Configurações: nas rotas da tela, o usuário passa a ser tratado como admin (várias rotas checam o perfil diretamente).
+    if (feature === "settings" && req.user.role !== "superadmin" && req.user.featureAccess?.settings === "allow") {
+      req.user.role = "admin";
+    }
+
     next();
   } catch (error) {
     return res.status(403).json({ code: "TOKEN_INVALIDO", message: "Token inválido ou expirado." });

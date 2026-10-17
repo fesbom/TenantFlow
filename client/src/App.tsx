@@ -110,7 +110,7 @@ function Router() {
           <Route path="/anamnesis" component={() => <ProtectedRoute component={Anamnesis} feature="anamnesis" />} />
           <Route path="/budgets" component={() => <ProtectedRoute component={Budgets} />} />
           <Route path="/receivables" component={() => <ProtectedRoute component={Receivables} feature="receivables" />} />
-          <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+          <Route path="/settings" component={() => <ProtectedRoute component={Settings} feature="settings" />} />
           <Route path="/import-data" component={() => <ProtectedRoute component={ImportData} feature="import-data" />} />
           <Route path="/batch-upload" component={() => <ProtectedRoute component={BatchUpload} feature="batch-upload" />} />
           <Route path="/support" component={() => <ProtectedRoute component={Support} feature="support" />} />

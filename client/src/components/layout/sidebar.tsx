@@ -35,7 +35,7 @@ const navigation: Array<{ name: string; href: string; icon: typeof BarChart3; ro
   { name: "Comunicação Ativa", href: "/communications", icon: Send, roles: ["admin", "dentist", "secretary"], feature: "communications" },
   { name: "Importar Dados", href: "/import-data", icon: Upload, roles: ["admin"], feature: "import-data" },
   { name: "Upload Fotos", href: "/batch-upload", icon: Images, roles: ["admin", "secretary"], feature: "batch-upload" },
-  { name: "Configurações", href: "/settings", icon: Settings, roles: ["admin"] },
+  { name: "Configurações", href: "/settings", icon: Settings, roles: ["admin"], feature: "settings" },
 ];
 
 interface SidebarProps {

@@ -260,7 +260,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">Paciente #{appointment.patientId.slice(-6)}</p>
+                        <p className="text-sm font-medium text-gray-900">{(appointment as { patientName?: string | null }).patientName || `Paciente #${appointment.patientId.slice(-6)}`}</p>
                         <p className="text-xs text-gray-600">{appointment.procedure || "Consulta"}</p>
                       </div>
                       <Badge
