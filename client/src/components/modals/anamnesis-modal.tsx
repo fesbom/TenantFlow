@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Treatment, AnamnesisQuestion, AnamnesisResponse } from "@/types";
+import { Treatment, AnamnesisQuestion } from "@/types";
 
 interface AnamnesisModalProps {
   isOpen: boolean;
@@ -31,23 +31,26 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
 
 
   // Fetch existing responses for this treatment
-  const { data: existingResponses = [] } = useQuery<AnamnesisResponse[]>({
-    queryKey: ["/api/anamnesis/responses/treatment", treatment?.id],
+  const { data: existingResponses } = useQuery<Array<{
+    questionId: string;
+    response: string | null;
+  }>>({
+    queryKey: ["/api/anamnesis-responses/treatment", treatment?.id],
     enabled: isOpen && !!treatment,
   });
 
   useEffect(() => {
-    if (existingResponses.length > 0) {
-      const responseMap = existingResponses.reduce((acc, response) => {
-        acc[response.questionId] = {
-          response: response.response || "",
-          observations: response.observations || "",
-        };
-        return acc;
-      }, {} as Record<string, { response: string; observations: string }>);
-      setResponses(responseMap);
-    }
-  }, [existingResponses]);
+    if (!isOpen) return;
+
+    const responseMap = (existingResponses || []).reduce((acc, response) => {
+      acc[response.questionId] = {
+        response: response.response || "",
+        observations: "",
+      };
+      return acc;
+    }, {} as Record<string, { response: string; observations: string }>);
+    setResponses(responseMap);
+  }, [existingResponses, isOpen, treatment?.id]);
 
   const saveResponsesMutation = useMutation({
     mutationFn: async () => {
@@ -64,7 +67,8 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
       await apiRequest("POST", "/api/anamnesis/responses", { responses: responsesToSave });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/anamnesis/responses/treatment", treatment?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/anamnesis-responses/treatment", treatment?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/anamnesis/treatment", treatment?.id] });
       toast({
         title: "Anamnese salva",
         description: "Respostas da anamnese salvas com sucesso",
@@ -90,7 +94,8 @@ export default function AnamnesisModal({ isOpen, onClose, treatment }: Anamnesis
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/anamnesis/responses/treatment", treatment?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/anamnesis-responses/treatment", treatment?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/anamnesis/treatment", treatment?.id] });
       setResponses({}); // Clear local state
       toast({
         title: "Respostas removidas",

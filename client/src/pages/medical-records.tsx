@@ -160,7 +160,14 @@ export default function MedicalRecords() {
   };
 
   const handleOpenAnamnesis = () => setIsAnamnesisModalOpen(true);
-  const handleCreateBudgetItem = () => setIsBudgetItemModalOpen(true);
+  const handleCreateBudgetItem = () => {
+    setSelectedBudgetItem(null);
+    setIsBudgetItemModalOpen(true);
+  };
+  const handleEditBudgetItem = (budgetItem: BudgetItem) => {
+    setSelectedBudgetItem(budgetItem);
+    setIsBudgetItemModalOpen(true);
+  };
   const handleCreateMovement = () => {
     setSelectedMovement(null);
     setIsTreatmentMovementModalOpen(true);
@@ -168,6 +175,106 @@ export default function MedicalRecords() {
   const handleEditMovement = (movement: TreatmentMovement) => {
     setSelectedMovement(movement);
     setIsTreatmentMovementModalOpen(true);
+  };
+
+  const deleteBudgetItemMutation = useMutation({
+    mutationFn: async (data: {
+      itemId: string;
+      treatmentId: string;
+      discount: string;
+      paymentCondition: string;
+    }) => {
+      await apiRequest("DELETE", `/api/budget-items/${data.itemId}`);
+      return data;
+    },
+    onSuccess: async ({ treatmentId, discount, paymentCondition }) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/budget-items/treatment", treatmentId],
+      });
+
+      try {
+        const response = await apiRequest(
+          "GET",
+          `/api/budget-items/treatment/${treatmentId}`,
+        );
+        const items = (await response.json()) as BudgetItem[];
+        const subtotalInCents = items.reduce(
+          (subtotal, item) =>
+            subtotal + Math.round(Number(item.valorOrcamento) * 100),
+          0,
+        );
+        const discountInCents = Math.round(Number(discount || 0) * 100);
+
+        await apiRequest("POST", "/api/budget-summary", {
+          treatmentId,
+          subtotalOrcamento: (subtotalInCents / 100).toFixed(2),
+          descontoOrcamento: (discountInCents / 100).toFixed(2),
+          totalOrcamento: ((subtotalInCents - discountInCents) / 100).toFixed(2),
+          condicaoPagamento: paymentCondition,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["/api/budget-summary/treatment", treatmentId],
+        });
+        toast({
+          title: "Item removido",
+          description: "Item do orçamento removido com sucesso",
+        });
+      } catch (error) {
+        console.error("Error updating budget summary after item deletion:", error);
+        toast({
+          title: "Item removido, mas o resumo não foi atualizado",
+          description: "Não foi possível recalcular o total do orçamento.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Erro ao remover item",
+        description: "Não foi possível remover o item do orçamento",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteBudgetItem = (item: BudgetItem) => {
+    if (!selectedTreatment) return;
+    if (!window.confirm(`Tem certeza que deseja excluir "${item.descricaoOrcamento}"?`)) return;
+
+    deleteBudgetItemMutation.mutate({
+      itemId: item.id,
+      treatmentId: selectedTreatment.id,
+      discount: budgetSummary?.descontoOrcamento || "0",
+      paymentCondition: budgetSummary?.condicaoPagamento || "À vista",
+    });
+  };
+
+  const deleteMovementMutation = useMutation({
+    mutationFn: async (movement: TreatmentMovement) => {
+      await apiRequest("DELETE", `/api/treatment-movements/${movement.id}`);
+      return movement;
+    },
+    onSuccess: (movement) => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/treatment-movements/treatment", movement.treatmentId],
+      });
+      toast({
+        title: "Movimentação removida",
+        description: "Movimentação do tratamento removida com sucesso",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Erro ao remover movimentação",
+        description: "Não foi possível remover a movimentação",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteMovement = (movement: TreatmentMovement) => {
+    if (!window.confirm("Tem certeza que deseja excluir esta movimentação?")) return;
+    deleteMovementMutation.mutate(movement);
   };
 
   const handleImageClick = (imageUrl: string, e: React.MouseEvent) => {
@@ -330,7 +437,39 @@ export default function MedicalRecords() {
                                 <TableHeader><TableRow><TableHead>Descrição</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {budgetItems.map(item => (
-                                        <TableRow key={item.id}><TableCell>{item.descricaoOrcamento}</TableCell><TableCell className="text-right">{formatCurrency(item.valorOrcamento)}</TableCell></TableRow>
+                                        <TableRow key={item.id}>
+                                          <TableCell>{item.descricaoOrcamento}</TableCell>
+                                          <TableCell className="text-right">
+                                            <div className="flex flex-col items-end gap-1">
+                                              <span>{formatCurrency(item.valorOrcamento)}</span>
+                                              <div className="inline-flex gap-1">
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  aria-label={`Editar item ${item.descricaoOrcamento}`}
+                                                  title="Editar item"
+                                                  data-testid={`button-edit-budget-item-${item.id}`}
+                                                  onClick={() => handleEditBudgetItem(item)}
+                                                >
+                                                  <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  aria-label={`Excluir item ${item.descricaoOrcamento}`}
+                                                  title="Excluir item"
+                                                  data-testid={`button-delete-budget-item-${item.id}`}
+                                                  disabled={deleteBudgetItemMutation.isPending}
+                                                  onClick={() => handleDeleteBudgetItem(item)}
+                                                >
+                                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
@@ -392,6 +531,37 @@ export default function MedicalRecords() {
                                                 <ImageIcon className="h-8 w-8 text-gray-400" />
                                               </div>
                                             )}
+                                            <div className="mt-1 flex justify-center gap-1">
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                aria-label="Editar movimentação"
+                                                title="Editar movimentação"
+                                                data-testid={`button-edit-movement-${mov.id}`}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleEditMovement(mov);
+                                                }}
+                                              >
+                                                <Edit className="h-4 w-4" />
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                aria-label="Excluir movimentação"
+                                                title="Excluir movimentação"
+                                                data-testid={`button-delete-movement-${mov.id}`}
+                                                disabled={deleteMovementMutation.isPending}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleDeleteMovement(mov);
+                                                }}
+                                              >
+                                                <Trash2 className="h-4 w-4 text-red-600" />
+                                              </Button>
+                                            </div>
                                           </TableCell>
                                       </TableRow>
                                     ))}
@@ -410,7 +580,7 @@ export default function MedicalRecords() {
         </main>
       </div>
       <TreatmentModal isOpen={isTreatmentModalOpen} onClose={() => setIsTreatmentModalOpen(false)} patient={selectedPatient} treatment={selectedTreatment} />
-      <BudgetItemModal isOpen={isBudgetItemModalOpen} onClose={() => setIsBudgetItemModalOpen(false)} treatment={selectedTreatment} budgetItem={selectedBudgetItem} />
+      <BudgetItemModal isOpen={isBudgetItemModalOpen} onClose={() => { setIsBudgetItemModalOpen(false); setSelectedBudgetItem(null); }} treatment={selectedTreatment} budgetItem={selectedBudgetItem} />
       <TreatmentMovementModal isOpen={isTreatmentMovementModalOpen} onClose={() => setIsTreatmentMovementModalOpen(false)} treatment={selectedTreatment} movement={selectedMovement} />
       <AnamnesisModal isOpen={isAnamnesisModalOpen} onClose={() => setIsAnamnesisModalOpen(false)} treatment={selectedTreatment} />
       <BudgetDiscountModal isOpen={isBudgetDiscountModalOpen} onClose={() => setIsBudgetDiscountModalOpen(false)} treatment={selectedTreatment} budgetSummary={budgetSummary || null} />

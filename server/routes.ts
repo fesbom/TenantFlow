@@ -3075,15 +3075,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete(
     "/api/treatment-movements/:id",
     authenticateToken,
-    async (req, res) => {
+    async (req: AuthenticatedRequest, res) => {
       try {
         const { id } = req.params;
+        const movement = await storage.getTreatmentMovementById(id);
+        if (!movement) {
+          return res
+            .status(404)
+            .json({ message: "Treatment movement not found" });
+        }
+
         const deleted = await storage.deleteTreatmentMovement(id);
         if (!deleted) {
           return res
             .status(404)
             .json({ message: "Treatment movement not found" });
         }
+
+        if (
+          movement.fotoAtividade?.startsWith("gcs://") ||
+          movement.fotoAtividade?.startsWith("http")
+        ) {
+          try {
+            const objectStorageService = new ObjectStorageService();
+            await objectStorageService.deleteFile(
+              movement.fotoAtividade,
+              req.user!.clinicId,
+            );
+          } catch (deleteError) {
+            console.error(
+              "Error deleting movement photo from object storage:",
+              deleteError,
+            );
+          }
+        } else if (movement.fotoAtividade?.startsWith("/uploads/")) {
+          try {
+            const filePath = path.join(
+              process.cwd(),
+              movement.fotoAtividade.replace(/^\//, ""),
+            );
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          } catch (deleteError) {
+            console.error(
+              "Error deleting movement photo from filesystem:",
+              deleteError,
+            );
+          }
+        }
+
         res.json({ message: "Treatment movement deleted successfully" });
       } catch (error) {
         console.error("Delete treatment movement error:", error);
