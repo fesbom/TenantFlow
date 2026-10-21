@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Patient, Treatment, User } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
+import { ZoomPhoto } from "@/components/ui/zoom-photo";
 
 interface TreatmentModalProps {
   isOpen: boolean;
@@ -155,6 +156,13 @@ export default function TreatmentModal({ isOpen, onClose, patient, treatment }: 
             {treatment ? "Editar Tratamento" : "Novo Tratamento"}
           </DialogTitle>
         </DialogHeader>
+
+        {patient && (
+          <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+            <ZoomPhoto src={patient.photoUrl} alt={patient.fullName} className="w-14 h-14" iconClassName="w-7 h-7" />
+            <div className="text-sm font-medium text-gray-900">{patient.fullName}</div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

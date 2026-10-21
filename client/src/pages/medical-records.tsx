@@ -21,6 +21,7 @@ import { Patient, Treatment, BudgetItem, BudgetSummary, TreatmentMovement } from
 import { Search, Plus, FileText, Calendar, DollarSign, Activity, Edit, Trash2, ChevronLeft, ChevronRight, Image as ImageIcon, HandCoins } from "lucide-react";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { ProtectedImage } from "@/components/ui/protected-image";
+import { ZoomPhoto } from "@/components/ui/zoom-photo";
 
 interface PaginatedPatientsResponse {
   data: Patient[];
@@ -322,9 +323,12 @@ export default function MedicalRecords() {
                   ) : (
                     <div className="space-y-2">
                       {patients.map((patient) => (
-                        <div key={patient.id} className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedPatient?.id === patient.id ? "bg-primary/10 border-primary" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`} onClick={() => setSelectedPatient(patient)}>
-                          <div className="font-medium text-sm">{patient.fullName}</div>
-                          <div className="text-xs text-gray-500">{patient.phone}</div>
+                        <div key={patient.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedPatient?.id === patient.id ? "bg-primary/10 border-primary" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`} onClick={() => setSelectedPatient(patient)}>
+                          <ZoomPhoto src={patient.photoUrl} alt={patient.fullName} className="w-10 h-10" />
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm">{patient.fullName}</div>
+                            <div className="text-xs text-gray-500">{patient.phone}</div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -356,7 +360,13 @@ export default function MedicalRecords() {
                         {sortedTreatments.map((treatment) => (
                           <div key={treatment.id} className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedTreatment?.id === treatment.id ? "bg-primary/10 border-primary" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`} onClick={() => handleSelectTreatment(treatment)}>
                             <div className="font-medium text-sm mb-1">{treatment.tituloTratamento}</div>
-                            <div className="text-xs text-gray-500 mb-2">Início: {formatDateBR(treatment.dataInicio)}</div>
+                            <div className="text-xs text-gray-500 mb-1">Início: {formatDateBR(treatment.dataInicio)}</div>
+                            <div className="text-xs text-gray-500 mb-2" data-testid={`text-treatment-dentist-${treatment.id}`}>
+                              {(() => {
+                                const name = (treatment as Treatment & { dentistName?: string | null }).dentistName;
+                                return name ? `Dentista: ${name}` : "Sem dentista";
+                              })()}
+                            </div>
                             {getStatusBadge(treatment.situacaoTratamento)}
                           </div>
                         ))}

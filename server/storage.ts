@@ -282,7 +282,9 @@ export interface IStorage {
     todayAppointments: number;
     monthlyRevenue: number;
     attendanceRate: number;
+    confirmationRate: number;
   }>;
+  getTreatmentMovementCountsByDay(clinicId: string, startDate: string, endDate: string): Promise<Record<string, number>>;
 
   // Patient lookup by contact identifiers
   getPatientByPhone(clinicId: string, phone: string): Promise<Patient | undefined>;
@@ -910,6 +912,7 @@ export class DatabaseStorage implements IStorage {
     todayAppointments: number;
     monthlyRevenue: number;
     attendanceRate: number;
+    confirmationRate: number;
   }> {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -950,28 +953,28 @@ export class DatabaseStorage implements IStorage {
       return sum + (record.cost ? parseFloat(record.cost) : 0);
     }, 0);
 
-    // Calculate attendance rate (simplified)
-    const completedAppointments = await db
+    // Taxa de presença: movimentações de tratamento do dia / agendamentos do dia
+    const todayStr = this.formatLocalDate(today);
+    const movementsByDay = await this.getTreatmentMovementCountsByDay(clinicId, todayStr, todayStr);
+    const todayMovements = movementsByDay[todayStr] ?? 0;
+
+    const attendanceRate = todayAppointments > 0
+      ? Math.min(100, (todayMovements / todayAppointments) * 100)
+      : 0;
+
+    // Taxa de confirmação: agendamentos confirmados / total de agendamentos do dia
+    const [{ count: confirmedToday }] = await db
       .select({ count: count() })
       .from(appointments)
       .where(and(
         eq(appointments.clinicId, clinicId),
-        eq(appointments.status, 'completed'),
-        gte(appointments.scheduledDate, startOfMonth),
-        lte(appointments.scheduledDate, endOfMonth)
+        inArray(appointments.status, ['confirmed', 'in_progress', 'completed']),
+        gte(appointments.scheduledDate, startOfDay),
+        lte(appointments.scheduledDate, endOfDay)
       ));
 
-    const totalAppointments = await db
-      .select({ count: count() })
-      .from(appointments)
-      .where(and(
-        eq(appointments.clinicId, clinicId),
-        gte(appointments.scheduledDate, startOfMonth),
-        lte(appointments.scheduledDate, endOfMonth)
-      ));
-
-    const attendanceRate = totalAppointments[0].count > 0 
-      ? (completedAppointments[0].count / totalAppointments[0].count) * 100 
+    const confirmationRate = todayAppointments > 0
+      ? Math.min(100, (confirmedToday / todayAppointments) * 100)
       : 0;
 
     return {
@@ -979,7 +982,35 @@ export class DatabaseStorage implements IStorage {
       todayAppointments,
       monthlyRevenue,
       attendanceRate: Math.round(attendanceRate),
+      confirmationRate: Math.round(confirmationRate),
     };
+  }
+
+  private formatLocalDate(d: Date): string {
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+
+  async getTreatmentMovementCountsByDay(
+    clinicId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<Record<string, number>> {
+    const rows = await db
+      .select({ day: treatmentMovements.dataMovimentacao, count: count() })
+      .from(treatmentMovements)
+      .innerJoin(treatments, eq(treatmentMovements.treatmentId, treatments.id))
+      .where(and(
+        eq(treatments.clinicId, clinicId),
+        gte(treatmentMovements.dataMovimentacao, startDate),
+        lte(treatmentMovements.dataMovimentacao, endDate)
+      ))
+      .groupBy(treatmentMovements.dataMovimentacao);
+
+    const result: Record<string, number> = {};
+    for (const r of rows) result[String(r.day)] = Number(r.count);
+    return result;
   }
 
   // Treatment methods

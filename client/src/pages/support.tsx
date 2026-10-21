@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
+import { ZoomPhoto } from "@/components/ui/zoom-photo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -59,6 +60,7 @@ type FilterTab = "all" | "active" | "waiting_staff" | "waiting_patient" | "close
 
 type ConversationWithPatient = WhatsappConversation & {
   patientName?: string | null;
+  patientPhotoUrl?: string | null;
   lastMessageSender?: string | null;
   guardrailAlert: boolean;
   guardrailReason: string | null;
@@ -710,7 +712,16 @@ export default function Support() {
                           >
                             <div className="flex items-center justify-between gap-1">
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <Phone className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                {conversation.patientPhotoUrl ? (
+                                  <ZoomPhoto
+                                    src={conversation.patientPhotoUrl}
+                                    alt={(conversation as any).patientName || conversation.phone}
+                                    className="h-6 w-6"
+                                    zoomSize={224}
+                                  />
+                                ) : (
+                                  <Phone className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                )}
                                 <span className="font-medium text-[13px] truncate">
                                   {(conversation as any).patientName || conversation.phone}
                                 </span>
@@ -777,9 +788,18 @@ export default function Support() {
                   <CardHeader className="py-2 px-3 border-b shrink-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className="h-8 w-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                          <User className="h-4 w-4 text-primary" />
-                        </div>
+                        {selectedConversation?.patientPhotoUrl ? (
+                          <ZoomPhoto
+                            src={selectedConversation.patientPhotoUrl}
+                            alt={(selectedConversation as any)?.patientName || selectedConversation.phone}
+                            className="h-10 w-10"
+                            zoomSize={256}
+                          />
+                        ) : (
+                          <div className="h-8 w-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+                            <User className="h-4 w-4 text-primary" />
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <h3 className="font-medium text-sm truncate">
                             {(selectedConversation as any)?.patientName || selectedConversation?.phone}

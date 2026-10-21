@@ -712,6 +712,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   app.get(
+    "/api/dashboard/weekly-attendances",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const startParam = String(req.query.start || "");
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startParam);
+        if (!m) {
+          return res.status(400).json({ message: "Invalid start date" });
+        }
+        const fmt = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const first = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        const days: string[] = [];
+        for (let i = 0; i < 7; i++) {
+          days.push(fmt(new Date(first.getFullYear(), first.getMonth(), first.getDate() + i)));
+        }
+        const counts = await storage.getTreatmentMovementCountsByDay(
+          req.user!.clinicId,
+          days[0],
+          days[6],
+        );
+        res.json(days.map((date) => ({ date, count: counts[date] ?? 0 })));
+      } catch (error) {
+        console.error("Weekly attendances error:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  app.get(
     "/api/dashboard/today-appointments",
     authenticateToken,
     async (req: AuthenticatedRequest, res) => {
@@ -2718,7 +2748,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           patientId,
           authReq.user!.clinicId,
         );
-        res.json(treatmentsData);
+        const dentistIds = Array.from(new Set(treatmentsData.map((t) => t.dentistId)));
+        const dentistRows = dentistIds.length
+          ? await db
+              .select({ id: users.id, fullName: users.fullName })
+              .from(users)
+              .where(and(inArray(users.id, dentistIds), eq(users.role, "dentist")))
+          : [];
+        const dentistNameById = new Map(dentistRows.map((d) => [d.id, d.fullName]));
+        res.json(
+          treatmentsData.map((t) => ({ ...t, dentistName: dentistNameById.get(t.dentistId) ?? null })),
+        );
       } catch (error) {
         console.error("Get treatments error:", error);
         res.status(500).json({ message: "Internal server error" });
@@ -5884,14 +5924,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const enriched = await Promise.all(
           conversationsList.map(async (conv) => {
             let patientName: string | null = null;
+            let patientPhotoUrl: string | null = null;
             if (conv.patientId) {
               const patient = await storage.getPatientById(
                 conv.patientId,
                 req.user!.clinicId,
               );
               patientName = patient?.fullName || null;
+              patientPhotoUrl = patient?.photoUrl || null;
             }
-            return { ...conv, patientName };
+            return { ...conv, patientName, patientPhotoUrl };
           }),
         );
         res.json(enriched);

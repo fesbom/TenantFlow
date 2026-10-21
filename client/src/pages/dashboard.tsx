@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import Sidebar from "@/components/layout/sidebar";
@@ -32,6 +33,7 @@ interface DashboardStats {
   todayAppointments: number;
   monthlyRevenue: number;
   attendanceRate: number;
+  confirmationRate: number;
 }
 
 interface PaginatedBirthdayResponse {
@@ -48,6 +50,42 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [birthdayPage, setBirthdayPage] = useState(1);
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const weekStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - d.getDay() + weekOffset * 7);
+    return d;
+  }, [weekOffset]);
+  const weekEnd = useMemo(() => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + 6);
+    return d;
+  }, [weekStart]);
+  const toIso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const weekLabel = `${weekStart.toLocaleDateString("pt-BR")} a ${weekEnd.toLocaleDateString("pt-BR")}`;
+
+  const { data: weeklyData = [], isLoading: weeklyLoading } = useQuery<{ date: string; count: number }[]>({
+    queryKey: ["/api/dashboard/weekly-attendances", toIso(weekStart)],
+    queryFn: async () => {
+      const response = await fetch(`/api/dashboard/weekly-attendances?start=${toIso(weekStart)}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
+      });
+      if (!response.ok) throw new Error("Falha ao carregar atendimentos");
+      return response.json();
+    },
+  });
+
+  const weekdayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const chartData = weeklyData.map((item) => {
+    const [y, m, d] = item.date.split("-").map(Number);
+    return {
+      label: `${weekdayNames[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`,
+      count: item.count,
+    };
+  });
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
 
@@ -144,10 +182,18 @@ export default function Dashboard() {
     {
       title: "Taxa de Presença",
       value: `${stats?.attendanceRate ?? 0}%`,
-      change: "+3%",
+      caption: "Movimentações ÷ agendamentos de hoje",
       icon: TrendingUp,
       color: "text-amber-600",
       bgColor: "bg-amber-100",
+    },
+    {
+      title: "Taxa de Confirmação",
+      value: `${stats?.confirmationRate ?? 0}%`,
+      caption: "Confirmados ÷ agendamentos de hoje",
+      icon: CheckCircle2,
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-100",
     },
   ];
 
@@ -203,8 +249,14 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="mt-4 flex items-center text-sm">
-                    <span className="text-green-600 font-medium">{stat.change}</span>
-                    <span className="text-gray-600 ml-1">vs mês anterior</span>
+                    {"change" in stat ? (
+                      <>
+                        <span className="text-green-600 font-medium">{stat.change}</span>
+                        <span className="text-gray-600 ml-1">vs mês anterior</span>
+                      </>
+                    ) : (
+                      <span className="text-gray-600">{stat.caption}</span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -314,35 +366,38 @@ export default function Dashboard() {
                         className="flex items-center space-x-3 p-3 bg-pink-50 rounded-lg border border-pink-200"
                       >
                         {/* Patient Photo or Birthday Icon */}
-                        <div className="relative h-10 w-10 rounded-full overflow-hidden border-2 border-pink-300 bg-pink-100 flex items-center justify-center flex-shrink-0">
-                          {patient.photoUrl ? (
-                            <ProtectedImage
-                              src={patient.photoUrl}
-                              alt={patient.fullName}
-                              className="w-full h-full object-cover"
-                              data-testid={`img-birthday-photo-${patient.id}`}
-                            />
-                          ) : (
-                            <User className="h-5 w-5 text-pink-600" />
-                          )}
+                        <div className="group relative h-10 w-10 flex-shrink-0">
+                          <div className="relative h-full w-full rounded-full overflow-hidden border-2 border-pink-300 bg-pink-100 flex items-center justify-center">
+                            {patient.photoUrl ? (
+                              <ProtectedImage
+                                src={patient.photoUrl}
+                                alt={patient.fullName}
+                                className="w-full h-full object-cover"
+                                data-testid={`img-birthday-photo-${patient.id}`}
+                              />
+                            ) : (
+                              <User className="h-5 w-5 text-pink-600" />
+                            )}
+                          </div>
                           {/* Birthday Badge Overlay */}
                           <div className="absolute -bottom-1 -right-1 bg-pink-500 rounded-full p-0.5">
                             <Cake className="h-3 w-3 text-white" />
                           </div>
+                          {patient.photoUrl && (
+                            <div className="pointer-events-none absolute left-0 top-0 z-50 hidden h-48 w-48 overflow-hidden rounded-xl border-2 border-pink-300 bg-white shadow-xl group-hover:block">
+                              <ProtectedImage
+                                src={patient.photoUrl}
+                                alt={patient.fullName}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          )}
                         </div>
                         <div className="flex-1">
                           <p className="text-sm font-medium text-gray-900">{patient.fullName}</p>
                           <p className="text-xs text-gray-600">Aniversário hoje</p>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleSendBirthdayMessage(patient)}
-                          className="text-primary hover:text-primary/80"
-                          data-testid={`birthday-message-${patient.id}`}
-                        >
-                          <MessageCircle className="h-4 w-4" />
-                        </Button>
+                        {/* Birthday message button removed: handled in Comunicação Ativa */}
                       </div>
                     ))}
 
@@ -388,15 +443,51 @@ export default function Dashboard() {
             {/* Appointments Chart */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg font-semibold">Atendimentos por Período</CardTitle>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-lg font-semibold">Atendimentos por Período</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setWeekOffset((w) => w - 1)}
+                      data-testid="button-prev-week"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-gray-700 min-w-[170px] text-center" data-testid="text-week-period">
+                      {weekLabel}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setWeekOffset((w) => w + 1)}
+                      data-testid="button-next-week"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    {weekOffset !== 0 && (
+                      <Button variant="ghost" size="sm" onClick={() => setWeekOffset(0)}>
+                        Hoje
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                  <div className="text-center text-gray-500">
-                    <TrendingUp className="h-12 w-12 mx-auto mb-2" />
-                    <p>Gráfico de Atendimentos</p>
-                    <p className="text-sm">(Em desenvolvimento)</p>
-                  </div>
+                <div className="h-64">
+                  {weeklyLoading ? (
+                    <div className="h-full flex items-center justify-center text-gray-500">Carregando...</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip formatter={(v: number) => [v, "Atendimentos"]} />
+                        <Bar dataKey="count" fill="#0f766e" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </CardContent>
             </Card>

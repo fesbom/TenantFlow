@@ -13,6 +13,7 @@ import { Camera, X, Upload, User } from "lucide-react";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { TreatmentPhotoUpload } from "@/components/treatment/treatment-photo-upload";
 import { ProtectedImage } from "@/components/ui/protected-image";
+import { ZoomPhoto } from "@/components/ui/zoom-photo";
 
 interface MedicalRecordModalProps {
   isOpen: boolean;
@@ -175,18 +176,13 @@ export default function MedicalRecordModal({ isOpen, onClose, patient, record }:
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
             <div className="flex items-start gap-4">
               {/* Patient Photo */}
-              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-gray-200 bg-gray-100 flex items-center justify-center flex-shrink-0">
-                {patient.photoUrl ? (
-                  <ProtectedImage
-                    src={patient.photoUrl}
-                    alt={patient.fullName}
-                    className="w-full h-full object-cover"
-                    data-testid="img-medical-record-patient-photo"
-                  />
-                ) : (
-                  <User className="w-8 h-8 text-gray-400" />
-                )}
-              </div>
+              <ZoomPhoto
+                src={patient.photoUrl}
+                alt={patient.fullName}
+                className="w-16 h-16"
+                iconClassName="w-8 h-8"
+                data-testid="img-medical-record-patient-photo"
+              />
               
               {/* Patient Info */}
               <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">

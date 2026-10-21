@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Cropper, ReactCropperElement } from "react-cropper";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,16 @@ export function PhotoUpload({
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [zoomPos, setZoomPos] = useState<{ top: number; left: number } | null>(null);
 
+  const showZoom = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!currentPhotoUrl) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setZoomPos({
+      top: Math.min(Math.max(8, rect.top), window.innerHeight - 256 - 8),
+      left: Math.min(Math.max(8, rect.right + 8), window.innerWidth - 256 - 8),
+    });
+  };
   const cropperRef = useRef<ReactCropperElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -254,6 +264,7 @@ export function PhotoUpload({
           className="relative group"
           data-testid="button-open-photo-options"
         >
+          <div className="relative w-24 h-24" onMouseEnter={showZoom} onMouseLeave={() => setZoomPos(null)}>
           <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-gray-200 bg-gray-100 flex items-center justify-center hover:border-blue-500 transition-colors">
             {currentPhotoUrl ? (
               <ProtectedImage
@@ -263,6 +274,17 @@ export function PhotoUpload({
               />
             ) : (
               <User className="w-12 h-12 text-gray-400" />
+            )}
+          </div>
+          {currentPhotoUrl && zoomPos &&
+            createPortal(
+              <div
+                className="pointer-events-none fixed z-[100] h-64 w-64 overflow-hidden rounded-xl border-2 border-white bg-white shadow-2xl"
+                style={{ top: zoomPos.top, left: zoomPos.left }}
+              >
+                <ProtectedImage src={currentPhotoUrl} alt={patientName} className="w-full h-full object-cover" />
+              </div>,
+              document.body,
             )}
           </div>
           <div className="absolute inset-0 rounded-full bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity flex items-center justify-center">

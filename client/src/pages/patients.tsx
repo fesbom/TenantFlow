@@ -17,6 +17,7 @@ import { useLocation } from "wouter";
 import { isValidWhatsappPhone } from "@shared/phone";
 import { formatDateBR } from "@/lib/date-formatter";
 import { ProtectedImage } from "@/components/ui/protected-image";
+import { ZoomPhoto } from "@/components/ui/zoom-photo";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface PaginatedResponse {
@@ -346,18 +347,11 @@ export default function Patients() {
                             <TableCell>
                               <div className="flex items-center gap-3">
                                 {/* Patient Photo */}
-                                <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                  {patient.photoUrl ? (
-                                    <ProtectedImage
-                                      src={patient.photoUrl}
-                                      alt={patient.fullName}
-                                      className="w-full h-full object-cover"
-                                      data-testid={`img-patient-photo-${patient.id}`}
-                                    />
-                                  ) : (
-                                    <User className="w-5 h-5 text-gray-400" />
-                                  )}
-                                </div>
+                                <ZoomPhoto
+                                  src={patient.photoUrl}
+                                  alt={patient.fullName}
+                                  data-testid={`img-patient-photo-${patient.id}`}
+                                />
 
                                 {/* Patient Info */}
                                 <div>
