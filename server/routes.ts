@@ -26,6 +26,7 @@ import {
   budgetItems,
   treatmentMovements,
   clinics,
+  whatsappConversations,
   communicationLogs,
 } from "@shared/schema";
 import { eq, and, or, isNotNull, sql, inArray } from "drizzle-orm";
@@ -304,6 +305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await db.execute(sql`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS is_simulated boolean NOT NULL DEFAULT false`);
   // Controles de comunicação automática e permissões por usuário (ver migrations/0015)
   await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS auto_communications_enabled boolean NOT NULL DEFAULT false`);
+  await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS ai_attendance_enabled boolean NOT NULL DEFAULT true`);
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_access jsonb NOT NULL DEFAULT '{}'::jsonb`);
   await db.execute(sql`ALTER TABLE communication_reasons ADD COLUMN IF NOT EXISTS send_mode text NOT NULL DEFAULT 'manual'`);
   registerPatientCommunicationRoutes(app);
@@ -4391,7 +4393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               clinicId,
               phone: normalizedPhone,
               patientId: patientByPhone?.id || null,
-              status: "ai",
+              status: clinic.aiAttendanceEnabled ? "ai" : "human",
               instanceName: conversationInstanceKey,
             });
           } catch (err: any) {
@@ -4412,9 +4414,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // REATIVAÇÃO PELO PACIENTE: Se conversa estava encerrada, reinicia o fluxo de IA
           if (conversation.status === "closed") {
-            convUpdates.status = "ai";
+            convUpdates.status = clinic.aiAttendanceEnabled ? "ai" : "human";
             console.log(
-              `[REATIVAÇÃO] Conversa ${conversation.id} reativada (closed → ai) pelo paciente ${normalizedPhone}`,
+              `[REATIVAÇÃO] Conversa ${conversation.id} reativada (closed → ${convUpdates.status}) pelo paciente ${normalizedPhone}`,
             );
           }
 
@@ -5957,6 +5959,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.getWhatsappMessagesByConversation(id);
         res.json({ conversation, messages: messagesList });
       } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/ai-attendance",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const clinic = await storage.getClinicById(req.user!.clinicId);
+        res.json({ enabled: clinic?.aiAttendanceEnabled ?? true });
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // Liga/desliga a IA para a clínica. Ao desligar, conversas em atendimento por IA passam para humano;
+  // ao ligar, apenas novas conversas (ou reativadas) voltam a ser atendidas pela IA.
+  app.patch(
+    "/api/ai-attendance",
+    authenticateToken,
+    requireRole(["admin", "secretary"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { enabled } = req.body;
+        if (typeof enabled !== "boolean") {
+          return res.status(400).json({ message: "Valor inválido." });
+        }
+        const clinicId = req.user!.clinicId;
+        await db.update(clinics).set({ aiAttendanceEnabled: enabled }).where(eq(clinics.id, clinicId));
+
+        let transferred = 0;
+        if (!enabled) {
+          const aiConversations = await db
+            .select({ id: whatsappConversations.id })
+            .from(whatsappConversations)
+            .where(and(eq(whatsappConversations.clinicId, clinicId), eq(whatsappConversations.status, "ai")));
+          if (aiConversations.length > 0) {
+            await db
+              .update(whatsappConversations)
+              .set({ status: "human", assignedUserId: null })
+              .where(inArray(whatsappConversations.id, aiConversations.map((c) => c.id)));
+          }
+          transferred = aiConversations.length;
+        }
+        res.json({ enabled, transferred });
+      } catch (error) {
+        console.error("AI attendance toggle error:", error);
         res.status(500).json({ message: "Internal server error" });
       }
     },

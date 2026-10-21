@@ -33,6 +33,8 @@ export const clinics = pgTable("clinics", {
   simulationMode: boolean("simulation_mode").default(false).notNull(),
   // Envio automático de comunicações (aniversário, retorno, pós-tratamento). Desabilitado por padrão.
   autoCommunicationsEnabled: boolean("auto_communications_enabled").default(false).notNull(),
+  // Atendimento por IA no WhatsApp: quando desligado, novas conversas já entram como atendimento humano.
+  aiAttendanceEnabled: boolean("ai_attendance_enabled").default(true).notNull(),
   simulationUpdatedAt: timestamp("simulation_updated_at"),
   simulationUpdatedBy: varchar("simulation_updated_by"),
   status: text("status").default("active").notNull(), // active | suspended

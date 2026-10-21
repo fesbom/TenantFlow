@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { ZoomPhoto } from "@/components/ui/zoom-photo";
+import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/hooks/use-auth";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -121,6 +123,35 @@ export default function Support() {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [showDisableAiConfirm, setShowDisableAiConfirm] = useState(false);
+  const { user: authUser } = useAuth();
+  const canToggleAi = authUser?.role === "admin" || authUser?.role === "secretary";
+
+  const { data: aiSettings } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/ai-attendance"],
+  });
+  const aiEnabled = aiSettings?.enabled ?? true;
+
+  const aiToggleMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/ai-attendance", { enabled });
+      return (await res.json()) as { enabled: boolean; transferred: number };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ai-attendance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      setShowDisableAiConfirm(false);
+      toast({
+        title: data.enabled ? "Atendimento por IA ativado" : "Atendimento por IA desativado",
+        description: data.enabled
+          ? "Apenas as novas conversas serão atendidas pela IA."
+          : `${data.transferred} conversa(s) em andamento passaram para atendimento humano.`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Não foi possível alterar o atendimento por IA", variant: "destructive" });
+    },
+  });
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -527,6 +558,21 @@ export default function Support() {
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-sm text-gray-600 truncate">Gerencie conversas do WhatsApp com pacientes</p>
             <div className="flex items-center gap-2 shrink-0">
+              <div
+                className={`flex items-center gap-2 text-xs font-medium rounded-full border px-3 py-1 ${
+                  aiEnabled ? "text-purple-700 bg-purple-50 border-purple-200" : "text-gray-600 bg-gray-50 border-gray-200"
+                }`}
+              >
+                <Bot className="h-3 w-3" />
+                <span>{aiEnabled ? "IA ativa" : "IA desativada"}</span>
+                <Switch
+                  checked={aiEnabled}
+                  disabled={!canToggleAi || aiToggleMutation.isPending || aiSettings === undefined}
+                  onCheckedChange={(checked) => (checked ? aiToggleMutation.mutate(true) : setShowDisableAiConfirm(true))}
+                  className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
+                  data-testid="switch-ai-attendance"
+                />
+              </div>
               {(() => {
                 const connected = wppInstances.filter((i) => !!i.connectedPhone);
                 if (wppInstances.length === 0) return null;
@@ -1087,6 +1133,31 @@ export default function Support() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showDisableAiConfirm} onOpenChange={setShowDisableAiConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desativar atendimento por IA?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todas as conversas em andamento com a IA passarão para atendimento humano e novas conversas
+              também entrarão como atendimento humano. Ao reativar, apenas novas conversas voltarão a ser
+              atendidas pela IA.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                aiToggleMutation.mutate(false);
+              }}
+              data-testid="button-confirm-disable-ai"
+            >
+              Desativar IA
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
