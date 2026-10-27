@@ -62,9 +62,20 @@ export default function PrintSchedule() {
     queryFn: () => fetchWithAuth("/api/users"),
   });
 
+  const patientIds = useMemo(
+    () => Array.from(new Set(appointments.map((a) => a.patientId))).sort(),
+    [appointments],
+  );
+
   const { data: patientsResp } = useQuery<{ data: Patient[] }>({
-    queryKey: ["/api/patients", { page: 1, pageSize: 5000 }],
-    queryFn: () => fetchWithAuth("/api/patients?page=1&pageSize=5000"),
+    queryKey: ["/api/patients", "print-by-id", patientIds],
+    enabled: patientIds.length > 0,
+    queryFn: async () => {
+      const list = await Promise.all(
+        patientIds.map((id) => fetchWithAuth(`/api/patients/${id}`).catch(() => null)),
+      );
+      return { data: list.filter((p): p is Patient => !!p?.id) };
+    },
   });
 
   const { data: clinicData } = useQuery<{ name: string }>({
@@ -130,7 +141,9 @@ export default function PrintSchedule() {
     procedure: a.procedure ?? "—",
     dentist: dentistMap.get(a.dentistId) ?? "—",
     status: STATUS_LABELS[a.status] ?? a.status,
-    duration: a.duration ? `${a.duration}min` : "",
+    duration: a.duration
+      ? fmtTime(new Date(new Date(a.scheduledDate).getTime() + a.duration * 60000))
+      : "",
   });
 
   const printTitle =
@@ -162,6 +175,7 @@ export default function PrintSchedule() {
         .print-table thead th { border-bottom: 2px solid #111; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
         .print-table tbody tr { border-bottom: 1px solid #ddd; }
         .print-table tbody tr:last-child { border-bottom: 2px solid #111; }
+        .print-table tbody tr:last-child td { border-bottom: 2px solid #111 !important; }
         .week-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .week-grid th { border: 1px solid #333; background: #f0f0f0; padding: 4px 6px; font-size: 10px; text-align: center; }
         .week-grid td { border: 1px solid #ccc; vertical-align: top; padding: 3px 5px; min-height: 24px; font-size: 10px; }
@@ -374,11 +388,10 @@ function DailyView({
     <table className="print-table" style={{ width: "100%", borderCollapse: "collapse" }}>
       <thead>
         <tr>
-          <th style={{ width: 60, textAlign: "left" }}>Hora</th>
+          <th style={{ width: 110, textAlign: "left" }}>Horário</th>
           <th style={{ textAlign: "left" }}>Paciente</th>
           <th style={{ textAlign: "left" }}>Procedimento</th>
           {!selectedDentistName && <th style={{ width: 140, textAlign: "left" }}>Dentista</th>}
-          <th style={{ width: 80, textAlign: "left" }}>Duração</th>
           <th style={{ width: 80, textAlign: "left" }}>Status</th>
           <th className="print-obs-col" style={{ textAlign: "left" }}>Obs.</th>
         </tr>
@@ -388,11 +401,12 @@ function DailyView({
           const r = apptRow(a);
           return (
             <tr key={a.id} style={{ opacity: a.status === "cancelled" ? 0.45 : 1 }}>
-              <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{r.time}</td>
-              <td>{r.patient}</td>
+              <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                {r.duration ? `${r.time} - ${r.duration}` : r.time}
+              </td>
+              <td style={{ fontSize: 12 }}>{r.patient}</td>
               <td style={{ color: "#444" }}>{r.procedure}</td>
               {!selectedDentistName && <td style={{ fontSize: 12, color: "#555" }}>{r.dentist}</td>}
-              <td style={{ fontSize: 12, color: "#666" }}>{r.duration}</td>
               <td style={{ fontSize: 11, color: a.status === "cancelled" ? "#e55" : "#555" }}>
                 {r.status}
               </td>
