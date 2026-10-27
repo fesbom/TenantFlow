@@ -792,7 +792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get(
     "/api/users",
     authenticateToken,
-    requireRole(["admin"]),
+    requireRole(["admin", "dentist", "secretary"]),
     async (req: AuthenticatedRequest, res) => {
       try {
         const users = await storage.getUsersByClinic(req.user!.clinicId);

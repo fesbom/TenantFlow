@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { Appointment, Patient, User } from "@/types";
 import AppointmentModal from "@/components/modals/appointment-modal";
 import { Calendar as CalendarIcon, Filter, Maximize2, Minimize2, Clock, CheckCircle2, XCircle } from "lucide-react";
@@ -104,9 +105,11 @@ function currentTimeWithinBoundaries(dayStart: string, dayEnd: string): string {
 
 export default function CalendarView({ className = "" }: CalendarViewProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [selectedDentist, setSelectedDentist] = useState<string>("all");
+  const dentistFilterChangedByUser = useRef(false);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [selectedAppointmentPatientName, setSelectedAppointmentPatientName] = useState<string | null>(null);
@@ -127,6 +130,12 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
   });
   const appointmentsRef = useRef<Appointment[]>(appointments);
   const selectedDentistRef = useRef(selectedDentist);
+
+  useEffect(() => {
+    if (user?.role === "dentist" && !dentistFilterChangedByUser.current) {
+      setSelectedDentist(user.id);
+    }
+  }, [user]);
 
   useEffect(() => {
     appointmentsRef.current = appointments;
@@ -311,7 +320,13 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
           </CardTitle>
           <div className="flex items-center gap-1.5">
             <Filter className="h-3.5 w-3.5 text-gray-500" />
-            <Select value={selectedDentist} onValueChange={setSelectedDentist}>
+            <Select
+              value={selectedDentist}
+              onValueChange={(value) => {
+                dentistFilterChangedByUser.current = true;
+                setSelectedDentist(value);
+              }}
+            >
               <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder="Filtrar dentista..." /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os Dentistas</SelectItem>
