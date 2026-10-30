@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { handleAuthFailure } from "@/lib/session";
 import { useToast } from "@/hooks/use-toast";
 import { formatDateBR } from "@/lib/date-formatter";
 import Sidebar from "@/components/layout/sidebar";
@@ -38,6 +39,7 @@ const fetchData = async (url: string) => {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
   });
   if (!response.ok) {
+    if (await handleAuthFailure(response)) return new Promise<never>(() => {});
     throw new Error('A resposta da rede não foi bem-sucedida');
   }
   return response.json();

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { handleAuthFailure } from "@/lib/session";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +27,8 @@ export default function BookingMessageCard({ dentistId, dentistName }: { dentist
       const res = await fetch(`/api/availability/booking-message/${dentistId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
+
+      if (!res.ok && (await handleAuthFailure(res))) return new Promise<never>(() => {});
       return res.json();
     },
     enabled: !!dentistId,

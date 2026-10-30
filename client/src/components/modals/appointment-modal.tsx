@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient"; // Supondo que você ainda use isso para mutações
+import { handleAuthFailure } from "@/lib/session";
 import { Appointment, Patient, User } from "@/types";
 import { Search, Loader2, MessageSquareText, CheckCircle2, XCircle, History } from "lucide-react";
 
@@ -16,7 +17,10 @@ const fetchData = async (url: string) => {
     const response = await fetch(url, {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
     });
-    if (!response.ok) throw new Error('A resposta da rede não foi bem-sucedida');
+    if (!response.ok) {
+        if (await handleAuthFailure(response)) return new Promise<never>(() => {});
+        throw new Error('A resposta da rede não foi bem-sucedida');
+    }
     return response.json();
 };
 

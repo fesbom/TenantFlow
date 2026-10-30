@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -12,9 +12,16 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Printer, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { Appointment, Patient, User } from "@/types";
+import { handleAuthFailure } from "@/lib/session";
 
-const fetchWithAuth = (url: string) =>
-  fetch(url, { headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` } }).then((r) => r.json());
+const fetchWithAuth = async (url: string) => {
+  const token = localStorage.getItem("dental_token");
+  const response = await fetch(url, { headers: token ? { Authorization: "Bearer " + token } : {} });
+  if (!response.ok && (await handleAuthFailure(response))) {
+    return new Promise<never>(() => {});
+  }
+  return response.json();
+};
 
 const STATUS_LABELS: Record<string, string> = {
   scheduled: "Agendado",
@@ -22,6 +29,11 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Concluído",
   cancelled: "Cancelado",
 };
+
+interface ClinicalSummary {
+  realizado: string;
+  expectativa: string;
+}
 
 // Mesma lógica da visão normal: trata o UTC do banco como horário local (sem conversão)
 function toLocalDate(date: Date | string): Date {
@@ -50,6 +62,7 @@ export default function PrintSchedule() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedDentist, setSelectedDentist] = useState("all");
   const [hideCancel, setHideCancel] = useState(true);
+  const [showAiSummary, setShowAiSummary] = useState(true);
 
   // ── Queries ──────────────────────────────────────────────
   const { data: appointments = [] } = useQuery<Appointment[]>({
@@ -82,6 +95,14 @@ export default function PrintSchedule() {
     queryKey: ["/api/clinic"],
     queryFn: () => fetchWithAuth("/api/clinic"),
   });
+
+  // Configuração da clínica: se o resumo de IA estiver desativado nas Configurações,
+  // a opção nem aparece aqui na agenda.
+  const { data: aiPrintSummarySettings } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/clinic/ai-print-summary"],
+    queryFn: () => fetchWithAuth("/api/clinic/ai-print-summary"),
+  });
+  const aiPrintSummaryEnabled = aiPrintSummarySettings?.enabled ?? true;
 
   const dentists = usersData.filter((u) => u.role === "dentist");
   const patientMap = useMemo(() => {
@@ -123,6 +144,38 @@ export default function PrintSchedule() {
     () => filtered.filter((a) => isSameDay(toLocalDate(a.scheduledDate), selectedDate)),
     [filtered, selectedDate],
   );
+
+  // ── Resumos clínicos (IA) — apenas visão diária ─────────
+  const dailyPatientIds = useMemo(
+    () => Array.from(new Set(dailyAppts.map((a) => a.patientId))).sort(),
+    [dailyAppts],
+  );
+
+  const { data: clinicalSummaries, isFetching: summariesLoading } = useQuery<
+    Map<string, ClinicalSummary | null>
+  >({
+    queryKey: ["clinical-summary", format(selectedDate, "yyyy-MM-dd"), dailyPatientIds],
+    enabled: view === "daily" && aiPrintSummaryEnabled && showAiSummary && dailyPatientIds.length > 0,
+    queryFn: async () => {
+      const firstApptByPatient = new Map<string, Appointment>();
+      dailyAppts.forEach((a) => {
+        if (!firstApptByPatient.has(a.patientId)) firstApptByPatient.set(a.patientId, a);
+      });
+      const entries = await Promise.all(
+        dailyPatientIds.map(async (pid) => {
+          try {
+            const appt = firstApptByPatient.get(pid);
+            const url = `/api/patients/${pid}/clinical-summary${appt ? `?appointmentId=${appt.id}` : ""}`;
+            const data = await fetchWithAuth(url);
+            return [pid, (data?.summary ?? null) as ClinicalSummary | null] as const;
+          } catch {
+            return [pid, null] as const;
+          }
+        }),
+      );
+      return new Map(entries);
+    },
+  });
 
   const weeklyByDay = useMemo(() => {
     const map = new Map<string, Appointment[]>();
@@ -262,6 +315,19 @@ export default function PrintSchedule() {
                 Ocultar cancelados
               </label>
 
+              {/* AI clinical summary (daily only, se habilitado nas Configurações) */}
+              {view === "daily" && aiPrintSummaryEnabled && (
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showAiSummary}
+                    onChange={(e) => setShowAiSummary(e.target.checked)}
+                    className="rounded"
+                  />
+                  Resumo clínico (IA)
+                </label>
+              )}
+
               <div className="ml-auto">
                 <Button
                   onClick={() => {
@@ -291,6 +357,8 @@ export default function PrintSchedule() {
                 weekDays={weekDays}
                 weeklyByDay={weeklyByDay}
                 apptRow={apptRow}
+                clinicalSummaries={view === "daily" && aiPrintSummaryEnabled && showAiSummary ? clinicalSummaries : undefined}
+                summariesLoading={summariesLoading}
               />
             </div>
           </main>
@@ -308,6 +376,8 @@ export default function PrintSchedule() {
           weekDays={weekDays}
           weeklyByDay={weeklyByDay}
           apptRow={apptRow}
+          clinicalSummaries={view === "daily" && aiPrintSummaryEnabled && showAiSummary ? clinicalSummaries : undefined}
+          summariesLoading={summariesLoading}
         />
       </div>
     </>
@@ -327,11 +397,14 @@ interface PrintContentProps {
     time: string; patient: string; procedure: string;
     dentist: string; status: string; duration: string;
   };
+  clinicalSummaries?: Map<string, ClinicalSummary | null>;
+  summariesLoading?: boolean;
 }
 
 function PrintContent({
   view, printTitle, clinicName, selectedDentistName,
   dailyAppts, weekDays, weeklyByDay, apptRow,
+  clinicalSummaries, summariesLoading,
 }: PrintContentProps) {
   return (
     <div style={{ fontFamily: "Arial, sans-serif", color: "#111" }}>
@@ -360,7 +433,13 @@ function PrintContent({
       </div>
 
       {view === "daily" ? (
-        <DailyView dailyAppts={dailyAppts} apptRow={apptRow} selectedDentistName={selectedDentistName} />
+        <DailyView
+          dailyAppts={dailyAppts}
+          apptRow={apptRow}
+          selectedDentistName={selectedDentistName}
+          clinicalSummaries={clinicalSummaries}
+          summariesLoading={summariesLoading}
+        />
       ) : (
         <WeeklyView weekDays={weekDays} weeklyByDay={weeklyByDay} apptRow={apptRow} />
       )}
@@ -370,11 +449,13 @@ function PrintContent({
 
 // ── Daily view ────────────────────────────────────────────────────────────────
 function DailyView({
-  dailyAppts, apptRow, selectedDentistName,
+  dailyAppts, apptRow, selectedDentistName, clinicalSummaries, summariesLoading,
 }: {
   dailyAppts: Appointment[];
   apptRow: (a: Appointment) => any;
   selectedDentistName: string | null;
+  clinicalSummaries?: Map<string, ClinicalSummary | null>;
+  summariesLoading?: boolean;
 }) {
   if (dailyAppts.length === 0) {
     return (
@@ -383,6 +464,8 @@ function DailyView({
       </p>
     );
   }
+
+  const colSpan = selectedDentistName ? 5 : 6;
 
   return (
     <table className="print-table" style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -399,19 +482,81 @@ function DailyView({
       <tbody>
         {dailyAppts.map((a) => {
           const r = apptRow(a);
+          const summary = clinicalSummaries?.get(a.patientId);
+          const rowOpacity = a.status === "cancelled" ? 0.45 : 1;
           return (
-            <tr key={a.id} style={{ opacity: a.status === "cancelled" ? 0.45 : 1 }}>
-              <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                {r.duration ? `${r.time} - ${r.duration}` : r.time}
-              </td>
-              <td style={{ fontSize: 12 }}>{r.patient}</td>
-              <td style={{ color: "#444" }}>{r.procedure}</td>
-              {!selectedDentistName && <td style={{ fontSize: 12, color: "#555" }}>{r.dentist}</td>}
-              <td style={{ fontSize: 11, color: a.status === "cancelled" ? "#e55" : "#555" }}>
-                {r.status}
-              </td>
-              <td style={{ borderBottom: "1px solid #bbb", minWidth: 120 }}>&nbsp;</td>
-            </tr>
+            <Fragment key={a.id}>
+              <tr
+                style={{
+                  opacity: rowOpacity,
+                  borderBottom: clinicalSummaries ? "none" : undefined,
+                }}
+              >
+                <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                  {r.duration ? `${r.time} - ${r.duration}` : r.time}
+                </td>
+                <td style={{ fontSize: 12 }}>{r.patient}</td>
+                <td style={{ color: "#444" }}>{r.procedure}</td>
+                {!selectedDentistName && <td style={{ fontSize: 12, color: "#555" }}>{r.dentist}</td>}
+                <td style={{ fontSize: 11, color: a.status === "cancelled" ? "#e55" : "#555" }}>
+                  {r.status}
+                </td>
+                <td style={{ borderBottom: "1px solid #bbb", minWidth: 120 }}>&nbsp;</td>
+              </tr>
+              {clinicalSummaries && (
+                <tr style={{ opacity: rowOpacity }}>
+                  <td colSpan={colSpan} style={{ paddingTop: 0, paddingBottom: 10 }}>
+                    <div
+                      style={{
+                        border: "1px solid #94a3b8",
+                        borderLeft: "4px solid #2563eb",
+                        background: "#f8fafc",
+                        padding: "6px 10px",
+                        fontSize: 10.5,
+                        lineHeight: 1.45,
+                        color: "#1e293b",
+                        WebkitPrintColorAdjust: "exact",
+                        printColorAdjust: "exact",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          color: "#2563eb",
+                          marginBottom: 3,
+                        }}
+                      >
+                        Resumo clínico (IA)
+                      </div>
+                      {summary === undefined && summariesLoading ? (
+                        <span style={{ color: "#64748b", fontStyle: "italic" }}>
+                          Gerando resumo clínico com IA…
+                        </span>
+                      ) : summary ? (
+                        <>
+                          <div>
+                            <strong>Já realizado:</strong> {summary.realizado}
+                          </div>
+                          {summary.expectativa && (
+                            <div style={{ marginTop: 3 }}>
+                              <strong>Expectativa / próximos passos:</strong> {summary.expectativa}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ color: "#64748b" }}>
+                          Sem histórico clínico ou conversas de WhatsApp registradas para este
+                          paciente.
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           );
         })}
       </tbody>

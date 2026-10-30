@@ -16,9 +16,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { apiRequest } from "@/lib/api";
+import { handleAuthFailure } from "@/lib/session";
 import { formatDateBR } from "@/lib/date-formatter";
 import { User, Clinic } from "@/types";
-import { Settings, Plus, Edit, Pencil, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2, FileText } from "lucide-react";
+import { Settings, Plus, Edit, Pencil, Trash2, Users, Shield, Building2, Upload, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2, FileText, Sparkles } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FEATURES, sanitizeFeatureAccess, type FeatureAccess, type FeatureKey } from "@shared/features";
 import { ALL_INVOICE_FIELDS, DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
@@ -283,6 +284,7 @@ export default function SettingsPage() {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });
+        if (!res.ok && (await handleAuthFailure(res))) return;
         const data = await res.json();
         console.log(`[QR Poll] tentativa ${attempts}:`, data);
         if (data.connected) {
@@ -366,7 +368,10 @@ export default function SettingsPage() {
       const res = await fetch("/api/clinic/invoice-fields", {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
-      if (!res.ok) return { fields: DEFAULT_INVOICE_FIELDS };
+      if (!res.ok) {
+        if (await handleAuthFailure(res)) return new Promise<never>(() => {});
+        return { fields: DEFAULT_INVOICE_FIELDS };
+      }
       return res.json();
     },
   });
@@ -405,6 +410,32 @@ export default function SettingsPage() {
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   };
+
+  // Resumo clínico por IA na impressão diária da agenda (liga/desliga por clínica)
+  const { data: aiPrintSummarySettings } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/clinic/ai-print-summary"],
+    enabled: canViewSettings,
+  });
+  const aiPrintSummaryEnabled = aiPrintSummarySettings?.enabled ?? true;
+
+  const aiPrintSummaryMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/clinic/ai-print-summary", { enabled });
+      return (await res.json()) as { enabled: boolean };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clinic/ai-print-summary"] });
+      toast({
+        title: data.enabled ? "Resumo de IA ativado" : "Resumo de IA desativado",
+        description: data.enabled
+          ? "A opção de resumo clínico por IA voltará a aparecer na impressão da agenda."
+          : "A opção de resumo clínico por IA não aparecerá mais na impressão da agenda.",
+      });
+    },
+    onError: () => {
+      toast({ title: "Erro", description: "Não foi possível alterar a configuração", variant: "destructive" });
+    },
+  });
 
   // Upload logo mutation
   const uploadLogoMutation = useMutation({
@@ -1230,6 +1261,33 @@ export default function SettingsPage() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+
+              {/* ── Agenda — Resumo Clínico por IA ── */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Sparkles className="h-5 w-5" />
+                    <span>Agenda — Resumo Clínico por IA</span>
+                  </CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Quando ativo, a impressão diária da agenda exibe a opção de incluir um resumo clínico
+                    gerado por IA para cada paciente. Ao desativar, a opção deixa de aparecer na agenda.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <Checkbox
+                      checked={aiPrintSummaryEnabled}
+                      onCheckedChange={(checked) => aiPrintSummaryMutation.mutate(checked === true)}
+                      disabled={aiPrintSummaryMutation.isPending}
+                      id="ai-print-summary"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Permitir resumo clínico por IA na impressão da agenda
+                    </span>
+                  </label>
+                </CardContent>
+              </Card>
 
               {/* ── Nota Fiscal — Campos para Cópia Rápida ── */}
               <Card>

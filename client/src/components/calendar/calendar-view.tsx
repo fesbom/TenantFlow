@@ -26,6 +26,7 @@ import {
   ScheduleXAppointmentEvent,
 } from "./schedule-x-event-card";
 import { getAppointmentStartSuggestion } from "@/lib/appointment-time";
+import { handleAuthFailure } from "@/lib/session";
 
 // Configura o moment para o Português (Brasil)
 moment.locale('pt-br');
@@ -38,13 +39,31 @@ moment.locale('pt-br');
  */
 const APPOINTMENTS_TIME_ZONE = "America/Sao_Paulo";
 
+// Erro HTTP que preserva o status e o código retornado pelo servidor (ex.: TOKEN_INVALIDO).
+class FetchError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(status: number, code: string | undefined, message: string) {
+    super(message);
+    this.name = "FetchError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 // Função de busca genérica
 const fetchData = async (url: string) => {
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
   });
   if (!response.ok) {
-    throw new Error('A resposta da rede não foi bem-sucedida');
+    // Sessão inválida: o handler global limpa as credenciais e volta para o login.
+    if (await handleAuthFailure(response)) {
+      return new Promise<never>(() => {});
+    }
+    const body = await response.json().catch(() => null);
+    throw new FetchError(response.status, body?.code, body?.message || 'A resposta da rede não foi bem-sucedida');
   }
   return response.json();
 };
@@ -120,9 +139,17 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
     dentistId?: string;
   } | null>(null);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [lastLoadError, setLastLoadError] = useState<string | null>(null);
 
   // --- TODAS AS CHAMADAS useQuery CORRIGIDAS ---
-  const { data: appointments = [], isLoading: appointmentsLoading } = useQuery<Appointment[]>({
+  const {
+    data: appointments = [],
+    isFetched: appointmentsFetched,
+    error: appointmentsError,
+    dataUpdatedAt: appointmentsDataUpdatedAt,
+    isFetching: appointmentsFetching,
+    refetch: refetchAppointments,
+  } = useQuery<Appointment[]>({
     queryKey: ["/api/appointments"],
     queryFn: ({ queryKey }) => fetchData(queryKey[0] as string),
     refetchInterval: 3_000,
@@ -145,7 +172,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
     selectedDentistRef.current = selectedDentist;
   }, [selectedDentist]);
 
-  const { data: patientsResponse, isLoading: patientsLoading } = useQuery<PaginatedPatientsResponse>({
+  const { data: patientsResponse, isFetched: patientsFetched, error: patientsError } = useQuery<PaginatedPatientsResponse>({
     queryKey: ["/api/patients", { page: 1, pageSize: 5000 }], // Pega todos para o seletor
     queryFn: ({ queryKey }) => {
       const [_key, params] = queryKey as [string, { page: number; pageSize: number }];
@@ -157,6 +184,14 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
     },
   });
   const patients = patientsResponse?.data || [];
+
+  // Guarda a última falha de carga da agenda: `error` volta para null durante cada refetch,
+  // e sem este latch a tela de erro piscaria junto com o polling.
+  useEffect(() => {
+    if (appointmentsError) {
+      setLastLoadError(appointmentsError.message);
+    }
+  }, [appointmentsError]);
 
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -172,6 +207,7 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
       if (!response.ok) {
+        if (await handleAuthFailure(response)) return new Promise<never>(() => {});
         const errorData = await response.json().catch(() => ({ message: 'Falha ao excluir agendamento' }));
         throw new Error(errorData.message || 'Falha ao excluir agendamento');
       }
@@ -355,10 +391,27 @@ export default function CalendarView({ className = "" }: CalendarViewProps) {
           </div>
         </CardHeader>
         <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
-          {(appointmentsLoading || patientsLoading) ? (
+          {/* isFetched trava em true após a primeira tentativa (sucesso ou erro). Com isLoading
+              a tela piscava em loop: a cada refetch com falha o React Query volta o status para
+              "pending" enquanto a query não tem dados. */}
+          {!appointmentsFetched || !patientsFetched ? (
             <div className="h-96 flex items-center justify-center text-gray-500">
               <CalendarIcon className="h-8 w-8 mr-2 animate-spin" />
               Carregando agenda...
+            </div>
+          ) : appointmentsDataUpdatedAt === 0 ? (
+            <div className="h-96 flex flex-col items-center justify-center gap-3 px-4 text-center text-gray-500">
+              <XCircle className="h-8 w-8 text-red-500" />
+              <p>Não foi possível carregar a agenda.</p>
+              {lastLoadError && <p className="text-xs text-gray-400">{lastLoadError}</p>}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={appointmentsFetching}
+                onClick={() => refetchAppointments()}
+              >
+                {appointmentsFetching ? "Verificando..." : "Tentar novamente"}
+              </Button>
             </div>
           ) : (
             <ScheduleXCalendar calendarApp={calendar} customComponents={scheduleXCustomComponents} />

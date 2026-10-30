@@ -1,3 +1,5 @@
+import { handleAuthFailure } from "./session";
+
 const API_BASE = '';
 
 // Get auth token from localStorage
@@ -29,6 +31,9 @@ export const apiRequest = async (
   });
 
   if (!response.ok) {
+    if (await handleAuthFailure(response)) {
+      return new Promise<never>(() => {});
+    }
     const errorText = await response.text();
     throw new Error(`${response.status}: ${errorText}`);
   }
@@ -58,6 +63,9 @@ export const uploadFiles = async (
   });
 
   if (!response.ok) {
+    if (await handleAuthFailure(response)) {
+      return new Promise<never>(() => {});
+    }
     const errorText = await response.text();
     throw new Error(`${response.status}: ${errorText}`);
   }

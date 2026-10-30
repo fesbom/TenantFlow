@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Appointment, Patient } from "@/types";
 import { ProtectedImage } from "@/components/ui/protected-image";
+import { handleAuthFailure } from "@/lib/session";
 
 interface DashboardStats {
   activePatients: number;
@@ -73,7 +74,10 @@ export default function Dashboard() {
       const response = await fetch(`/api/dashboard/weekly-attendances?start=${toIso(weekStart)}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
-      if (!response.ok) throw new Error("Falha ao carregar atendimentos");
+      if (!response.ok) {
+        if (await handleAuthFailure(response)) return new Promise<never>(() => {});
+        throw new Error("Falha ao carregar atendimentos");
+      }
       return response.json();
     },
   });
@@ -117,6 +121,7 @@ export default function Dashboard() {
       });
 
       if (!response.ok) {
+        if (await handleAuthFailure(response)) return new Promise<never>(() => {});
         // Se a resposta não for bem-sucedida, lançamos um erro
         throw new Error("A resposta da rede não foi bem-sucedida");
       }

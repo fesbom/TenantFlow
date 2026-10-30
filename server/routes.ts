@@ -27,9 +27,10 @@ import {
   treatmentMovements,
   clinics,
   whatsappConversations,
+  whatsappMessages,
   communicationLogs,
 } from "@shared/schema";
-import { eq, and, or, isNotNull, sql, inArray } from "drizzle-orm";
+import { eq, and, or, isNotNull, sql, inArray, desc } from "drizzle-orm";
 import { upload, uploadCSV, uploadPatientPhoto } from "./middleware/upload";
 import {
   sendEmail,
@@ -54,6 +55,7 @@ import {
   insertWhatsappMessageSchema,
 } from "@shared/schema";
 import { processPatientMessage } from "./whatsappAI";
+import { generateClinicalSummary } from "./clinicalSummaryService";
 import { messageGuardrailService } from "./messageGuardrailService";
 import {
   createOrGetInstance,
@@ -306,6 +308,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Controles de comunicação automática e permissões por usuário (ver migrations/0015)
   await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS auto_communications_enabled boolean NOT NULL DEFAULT false`);
   await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS ai_attendance_enabled boolean NOT NULL DEFAULT true`);
+  // Resumo de IA na impressão da agenda (ver migrations/0017_ai_print_summary_toggle.sql)
+  await db.execute(sql`ALTER TABLE clinics ADD COLUMN IF NOT EXISTS ai_print_summary_enabled boolean NOT NULL DEFAULT true`);
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_access jsonb NOT NULL DEFAULT '{}'::jsonb`);
   await db.execute(sql`ALTER TABLE communication_reasons ADD COLUMN IF NOT EXISTS send_mode text NOT NULL DEFAULT 'manual'`);
   registerPatientCommunicationRoutes(app);
@@ -1440,6 +1444,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(patient);
       } catch (error) {
         console.error("Get patient error:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // Resumo clínico técnico gerado por IA (tratamentos, movimentações e WhatsApp)
+  app.get(
+    "/api/patients/:id/clinical-summary",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const clinicId = req.user!.clinicId;
+        const patientId = req.params.id;
+        const patient = await storage.getPatientById(patientId, clinicId);
+        if (!patient) {
+          return res.status(404).json({ message: "Patient not found" });
+        }
+
+        // Contexto da consulta do dia (opcional)
+        let appointmentProcedure: string | null = null;
+        let appointmentDate: string | null = null;
+        const appointmentId =
+          typeof req.query.appointmentId === "string" ? req.query.appointmentId : null;
+        if (appointmentId) {
+          const appt = await storage.getAppointmentById(appointmentId, clinicId);
+          if (appt && appt.patientId === patientId) {
+            appointmentProcedure = appt.procedure ?? null;
+            appointmentDate = appt.scheduledDate
+              ? new Date(appt.scheduledDate).toLocaleDateString("pt-BR", {
+                  timeZone: "America/Sao_Paulo",
+                })
+              : null;
+          }
+        }
+
+        const treatmentsData = await storage.getTreatmentsByPatient(patientId, clinicId);
+        const dentistIds = Array.from(new Set(treatmentsData.map((t) => t.dentistId)));
+        const dentistRows = dentistIds.length
+          ? await db
+              .select({ id: users.id, fullName: users.fullName })
+              .from(users)
+              .where(and(inArray(users.id, dentistIds), eq(users.role, "dentist")))
+          : [];
+        const dentistNameById = new Map(dentistRows.map((d) => [d.id, d.fullName]));
+
+        const treatmentIds = treatmentsData.map((t) => t.id);
+        const [movementsData, budgetItemsData] = treatmentIds.length
+          ? await Promise.all([
+              db
+                .select()
+                .from(treatmentMovements)
+                .where(inArray(treatmentMovements.treatmentId, treatmentIds)),
+              db
+                .select()
+                .from(budgetItems)
+                .where(inArray(budgetItems.treatmentId, treatmentIds)),
+            ])
+          : [[], []];
+
+        const conversations = await db
+          .select()
+          .from(whatsappConversations)
+          .where(
+            and(
+              eq(whatsappConversations.patientId, patientId),
+              eq(whatsappConversations.clinicId, clinicId),
+            ),
+          );
+        const conversationIds = conversations.map((c) => c.id);
+        const whatsappData = conversationIds.length
+          ? await db
+              .select()
+              .from(whatsappMessages)
+              .where(
+                and(
+                  inArray(whatsappMessages.conversationId, conversationIds),
+                  eq(whatsappMessages.isSimulated, false),
+                ),
+              )
+              .orderBy(desc(whatsappMessages.createdAt))
+              .limit(60)
+          : [];
+
+        if (treatmentsData.length === 0 && whatsappData.length === 0) {
+          return res.json({ hasData: false, summary: null });
+        }
+
+        const summary = await generateClinicalSummary(
+          {
+            patientId,
+            patientName: patient.fullName,
+            appointmentProcedure,
+            appointmentDate,
+            treatments: treatmentsData.map((t) => ({
+              titulo: t.tituloTratamento,
+              situacao: t.situacaoTratamento,
+              dataInicio: t.dataInicio,
+              dentistName: dentistNameById.get(t.dentistId) ?? null,
+              movements: movementsData
+                .filter((m) => m.treatmentId === t.id)
+                .sort((a, b) => a.dataMovimentacao.localeCompare(b.dataMovimentacao))
+                .map((m) => ({
+                  data: m.dataMovimentacao,
+                  descricao: m.descricaoAtividade,
+                  regiao: m.region,
+                  dente: m.toothNumber,
+                })),
+              budgetItems: budgetItemsData
+                .filter((b) => b.treatmentId === t.id)
+                .map((b) => ({ descricao: b.descricaoOrcamento, valor: b.valorOrcamento })),
+            })),
+            whatsappMessages: whatsappData
+              .slice()
+              .reverse()
+              .map((m) => ({
+                sender: m.sender,
+                text: m.text,
+                createdAt: m.createdAt.toISOString(),
+              })),
+          },
+          clinicId,
+        );
+
+        res.json({ hasData: true, summary, generatedAt: new Date().toISOString() });
+      } catch (error) {
+        console.error("Clinical summary error:", error);
         res.status(500).json({ message: "Internal server error" });
       }
     },
@@ -5972,6 +6102,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const clinic = await storage.getClinicById(req.user!.clinicId);
         res.json({ enabled: clinic?.aiAttendanceEnabled ?? true });
       } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  // Resumo clínico por IA na impressão diária da agenda (liga/desliga por clínica)
+  app.get(
+    "/api/clinic/ai-print-summary",
+    authenticateToken,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const clinic = await storage.getClinicById(req.user!.clinicId);
+        res.json({ enabled: clinic?.aiPrintSummaryEnabled ?? true });
+      } catch (error) {
+        res.status(500).json({ message: "Internal server error" });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/clinic/ai-print-summary",
+    authenticateToken,
+    requireRole(["admin"]),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { enabled } = req.body;
+        if (typeof enabled !== "boolean") {
+          return res.status(400).json({ message: "Valor inválido." });
+        }
+        await db
+          .update(clinics)
+          .set({ aiPrintSummaryEnabled: enabled })
+          .where(eq(clinics.id, req.user!.clinicId));
+        res.json({ enabled });
+      } catch (error) {
+        console.error("AI print summary toggle error:", error);
         res.status(500).json({ message: "Internal server error" });
       }
     },

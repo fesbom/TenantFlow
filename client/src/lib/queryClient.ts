@@ -1,7 +1,13 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { handleAuthFailure, handleAuthFailureFromError } from "./session";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    // Sessão inválida (token expirado/revogado, usuário inativo, clínica suspensa):
+    // encerra a sessão e volta para o login em vez de deixar a tela em loop de falhas.
+    if (await handleAuthFailure(res)) {
+      return new Promise<never>(() => {});
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -69,4 +75,17 @@ export const queryClient = new QueryClient({
       retry: false,
     },
   },
+});
+
+// Rede de segurança global: qualquer query/mutação que falhe com erro de autenticação
+// (inclusive as que usam fetch próprio) derruba a sessão e volta para o login.
+queryClient.getQueryCache().subscribe((event) => {
+  if (event.type === "updated" && event.action.type === "error") {
+    handleAuthFailureFromError(event.action.error);
+  }
+});
+queryClient.getMutationCache().subscribe((event) => {
+  if (event.type === "updated" && event.action.type === "error") {
+    handleAuthFailureFromError(event.action.error);
+  }
 });

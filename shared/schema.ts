@@ -35,6 +35,8 @@ export const clinics = pgTable("clinics", {
   autoCommunicationsEnabled: boolean("auto_communications_enabled").default(false).notNull(),
   // Atendimento por IA no WhatsApp: quando desligado, novas conversas já entram como atendimento humano.
   aiAttendanceEnabled: boolean("ai_attendance_enabled").default(true).notNull(),
+  // Resumo clínico por IA na impressão diária da agenda: quando desligado, a opção nem aparece na tela de impressão.
+  aiPrintSummaryEnabled: boolean("ai_print_summary_enabled").default(true).notNull(),
   simulationUpdatedAt: timestamp("simulation_updated_at"),
   simulationUpdatedBy: varchar("simulation_updated_by"),
   status: text("status").default("active").notNull(), // active | suspended

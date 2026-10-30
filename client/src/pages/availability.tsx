@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { handleAuthFailure } from "@/lib/session";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import BusinessHoursCard from "@/components/business-hours-card";
@@ -171,6 +172,8 @@ export default function Availability() {
       const res = await fetch(`/api/availability/schedule/${selectedDentistId}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
+
+      if (!res.ok && (await handleAuthFailure(res))) return new Promise<never>(() => {});
       return res.json();
     },
     enabled: !!selectedDentistId,

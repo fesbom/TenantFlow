@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { handleAuthFailure } from "@/lib/session";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -263,6 +264,8 @@ export default function Support() {
       const res = await fetch(`${_key}?${sp}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
+
+      if (!res.ok && (await handleAuthFailure(res))) return new Promise<never>(() => {});
       return res.json();
     },
     enabled: showLinkModal,

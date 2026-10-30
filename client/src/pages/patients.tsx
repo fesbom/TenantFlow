@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/api";
+import { handleAuthFailure } from "@/lib/session";
 import PatientModal from "@/components/modals/patient-modal";
 import InvoiceCopyModal, { DEFAULT_INVOICE_FIELDS } from "@/components/modals/invoice-copy-modal";
 import { Patient, User as AppUser } from "@/types";
@@ -72,7 +73,10 @@ export default function Patients() {
       const response = await fetch("/api/users", {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
-      if (!response.ok) throw new Error("Não foi possível carregar os dentistas");
+      if (!response.ok) {
+        if (await handleAuthFailure(response)) return new Promise<never>(() => {});
+        throw new Error("Não foi possível carregar os dentistas");
+      }
       return response.json();
     },
   });
@@ -116,6 +120,7 @@ export default function Patients() {
       });
 
       if (!response.ok) {
+        if (await handleAuthFailure(response)) return new Promise<never>(() => {});
         throw new Error('A resposta da rede não foi bem-sucedida');
       }
       return response.json();
@@ -134,7 +139,10 @@ export default function Patients() {
       const res = await fetch("/api/clinic/invoice-fields", {
         headers: { Authorization: `Bearer ${localStorage.getItem("dental_token")}` },
       });
-      if (!res.ok) return { fields: DEFAULT_INVOICE_FIELDS };
+      if (!res.ok) {
+        if (await handleAuthFailure(res)) return new Promise<never>(() => {});
+        return { fields: DEFAULT_INVOICE_FIELDS };
+      }
       return res.json();
     },
   });
